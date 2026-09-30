@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Green'Up Link</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .svg-icon { width: 120px; height: 120px; transition: all 0.3s ease; }
+        
+        /* États Voiture */
+        .car-grey { fill: #94a3b8; }
+        .car-white { fill: #f8fafc; stroke: #94a3b8; stroke-width: 2px; }
+        .car-orange { fill: #f97316; }
+        .car-green { fill: #22c55e; animation: pulseGlow 2s infinite; }
+        .car-green-solid { fill: #22c55e; filter: drop-shadow(0 0 4px #22c55e); }
+        
+        /* États Borne */
+        .charger-default { fill: #334155; }
+        .charger-grey { fill: #cbd5e1; }
+        .charger-orange { fill: #f97316; }
+        .charger-red { fill: #ef4444; }
+
+        /* Linky */
+        .linky-box { 
+            width: 56px; height: 64px; border-radius: 8px; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+            transition: all 0.3s ease; position: relative; cursor: pointer;
+        }
+        .linky-connected { 
+            background: linear-gradient(135deg, #16a34a, #22c55e); color: white;
+            box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+        }
+        .linky-disconnected { 
+            background: #cbd5e1; color: #64748b;
+        }
+        .linky-led { 
+            width: 6px; height: 6px; border-radius: 50%; margin-bottom: 3px;
+        }
+        .linky-led-on { background: #bbf7d0; box-shadow: 0 0 4px #4ade80; }
+        .linky-led-off { background: #94a3b8; }
+
+        @keyframes pulseGlow {
+            0% { filter: drop-shadow(0 0 2px #22c55e); opacity: 0.8; }
+            50% { filter: drop-shadow(0 0 10px #22c55e); opacity: 1; }
+            100% { filter: drop-shadow(0 0 2px #22c55e); opacity: 0.8; }
+        }
+
+        .disabled-card { opacity: 0.5; pointer-events: none; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen p-6">
+    <div class="max-w-4xl mx-auto space-y-6">
+        <header class="text-center py-4">
+            <h1 class="text-3xl font-bold text-slate-800">Green'Up Link</h1>
+            <p class="text-slate-500">Interface de contrôle locale</p>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Panneau Visuel -->
+            <div class="bg-white rounded-xl shadow-sm p-8 flex flex-col items-center justify-center space-y-8 border border-slate-100">
+                <div class="flex items-center space-x-4">
+                    <!-- Linky Meter -->
+                    <div class="flex flex-col items-center justify-start mt-6">
+                        <div id="linkyBox" class="linky-box linky-disconnected group" onclick="refreshTic()">
+                            <div class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-white cursor-pointer" title="Rafraîchir (Requis: Borne Libre)">
+                                <svg id="linkyRefreshIcon" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                            </div>
+                            <div id="linkyLed" class="linky-led linky-led-off mt-1"></div>
+                            <span class="mt-1">LINKY</span>
+                        </div>
+                        <div class="h-8 flex items-start justify-center mt-2">
+                            <span id="linkyLabel" class="text-xs text-center text-slate-400 font-medium leading-tight px-2">—</span>
+                        </div>
+                    </div>
+
+                    <!-- Fil Linky → Borne -->
+                    <div class="w-6 h-0.5 bg-slate-300 rounded"></div>
+
+                    <!-- SVG Borne -->
+                    <div class="flex flex-col items-center">
+                        <svg id="svgCharger" class="svg-icon charger-default" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm2 4v2h6V6H9zm0 4v2h6v-2H9zm0 4v2h6v-2H9z"/>
+                        </svg>
+                        <span class="mt-2 font-medium text-slate-600">Borne</span>
+                    </div>
+
+                    <!-- SVG Câble (Borne → Voiture) -->
+                    <div class="w-12 h-1 bg-slate-300 rounded" id="svgCable"></div>
+
+                    <!-- SVG Voiture -->
+                    <div class="flex flex-col items-center">
+                        <svg id="svgCar" class="svg-icon car-grey" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>
+                        </svg>
+                        <span class="mt-2 font-medium text-slate-600">Véhicule</span>
+                    </div>
+                </div>
+                
+                <div class="text-center">
+                    <span class="text-sm text-slate-400 uppercase tracking-wide">État Actuel</span>
+                    <h2 id="lblState" class="text-2xl font-bold text-slate-800">--</h2>
+                    <p id="lblError" class="text-red-500 text-sm mt-1 font-medium"></p>
+                </div>
+            </div>
+
+            <!-- Panneau Télémétrie -->
+            <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-100 flex flex-col justify-center">
+                <h3 class="text-lg font-semibold text-slate-700 mb-4 border-b pb-2">Mesures en temps réel</h3>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-500">Tension</span>
+                        <span id="valVoltage" class="font-mono text-xl font-bold">-- V</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-500">Courant</span>
+                        <span id="valCurrent" class="font-mono text-xl font-bold">-- A</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-500">Puissance</span>
+                        <span id="valPower" class="font-mono text-xl font-bold">-- W</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-slate-500">Énergie</span>
+                        <span id="valEnergy" class="font-mono text-xl font-bold text-blue-600">-- Wh</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panneau Contrôles -->
+            <div id="controlsPanel" class="bg-white rounded-xl shadow-sm p-6 border border-slate-100 md:col-span-2">
+                <h3 class="text-lg font-semibold text-slate-700 mb-6">Contrôle de Charge</h3>
+                
+                <div class="flex flex-col md:flex-row items-center gap-8">
+                    <!-- Slider Courant -->
+                    <div class="flex-1 w-full">
+                        <div class="flex justify-between mb-2">
+                            <label class="font-medium text-slate-600">Limite de Courant</label>
+                            <span id="lblSlider" class="font-bold text-blue-600">16 A</span>
+                        </div>
+                        <input type="range" id="currentSlider" min="10" max="32" value="16" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex justify-between text-xs text-slate-400 mt-1">
+                            <span>10A</span>
+                            <span>32A</span>
+                        </div>
+                    </div>
+
+                    <!-- Boutons d'Action -->
+                    <div class="flex gap-4">
+                        <button id="btnStart" class="px-6 py-3 bg-green-500 hover:bg-green-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow transition-colors">
+                            ▶ Démarrer
+                        </button>
+                        <button id="btnStop" class="px-6 py-3 bg-red-500 hover:bg-red-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow transition-colors">
+                            ⏹ Arrêter
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const svgCharger = document.getElementById('svgCharger');
+        const svgCar = document.getElementById('svgCar');
+        const svgCable = document.getElementById('svgCable');
+        const lblState = document.getElementById('lblState');
+        const lblError = document.getElementById('lblError');
+        
+        const valVoltage = document.getElementById('valVoltage');
+        const valCurrent = document.getElementById('valCurrent');
+        const valPower = document.getElementById('valPower');
+        const valEnergy = document.getElementById('valEnergy');
+        
+        const slider = document.getElementById('currentSlider');
+        const lblSlider = document.getElementById('lblSlider');
+        const btnStart = document.getElementById('btnStart');
+        const btnStop = document.getElementById('btnStop');
+        const controlsPanel = document.getElementById('controlsPanel');
+        const linkyBox = document.getElementById('linkyBox');
+        const linkyLed = document.getElementById('linkyLed');
+        const linkyLabel = document.getElementById('linkyLabel');
+
+        let isActionPending = false;
+        let lastReportedState = "";
+
+        const linkyRefreshIcon = document.getElementById('linkyRefreshIcon');
+
+        // Met à jour l'indicateur Linky
+        function updateLinky(ticMode) {
+            linkyBox.className = 'linky-box group';
+            linkyLed.className = 'linky-led';
+            linkyRefreshIcon.classList.remove('animate-spin');
+            
+            switch(ticMode) {
+                case '9600':
+                    linkyBox.classList.add('linky-connected');
+                    linkyLed.classList.add('linky-led-on');
+                    linkyLabel.innerText = 'Standard';
+                    linkyLabel.className = 'text-xs text-center font-semibold text-green-600 leading-tight px-2';
+                    break;
+                case '1200':
+                    linkyBox.classList.add('linky-connected');
+                    linkyLed.classList.add('linky-led-on');
+                    linkyLabel.innerText = 'Historique';
+                    linkyLabel.className = 'text-xs text-center font-semibold text-green-600 leading-tight px-2';
+                    break;
+                case '0':
+                    linkyBox.classList.add('linky-disconnected');
+                    linkyLed.classList.add('linky-led-off');
+                    linkyLabel.innerText = 'Non présent';
+                    linkyLabel.className = 'text-xs text-center text-slate-400 leading-tight px-2';
+                    break;
+                case 'detecting':
+                    linkyBox.classList.add('linky-disconnected');
+                    linkyLed.classList.add('linky-led-off');
+                    linkyLabel.innerText = 'Détection...';
+                    linkyLabel.className = 'text-xs text-center text-blue-500 font-medium animate-pulse leading-tight px-2';
+                    linkyRefreshIcon.classList.add('animate-spin');
+                    break;
+                default: // "" = pas encore détecté
+                    linkyBox.classList.add('linky-disconnected');
+                    linkyLed.classList.add('linky-led-off');
+                    linkyLabel.innerText = '...';
+                    linkyLabel.className = 'text-xs text-center text-slate-400 leading-tight px-2';
+                    break;
+            }
+        }
+
+        async function refreshTic() {
+            if (lastReportedState !== 'A') {
+                alert("La détection du TIC n'est possible que lorsque la borne est libre (Statut A).");
+                return;
+            }
+            if (isActionPending) return;
+            
+            // Set UI immediately to detecting
+            updateLinky('detecting');
+            sendPostAction('/api/tic/refresh');
+        }
+
+        // Met à jour les visuels en fonction du State (A à V) et de la fin de charge
+        function updateVisuals(state, isChargeComplete) {
+            // Reset toutes les classes
+            svgCharger.className = 'svg-icon';
+            svgCar.className = 'svg-icon';
+            svgCable.className = 'w-16 h-1 rounded';
+            let stateLabel = `Statut: ${state}`;
+            
+            let startEnabled = false;
+            let stopEnabled = false;
+
+            switch(state) {
+                case 'A': // Déconnecté ou véhicule branché mais coupé via T2CNOK
+                    svgCharger.classList.add('charger-grey');
+                    svgCar.classList.add('car-grey');
+                    svgCable.classList.add('bg-slate-300');
+                    stateLabel = "Libre / Coupé (A)";
+                    startEnabled = true; // T2COK doit être possible même en A
+                    break;
+                case 'B': // Branché, attente autorisation
+                    svgCharger.classList.add('charger-default');
+                    svgCar.classList.add('car-white');
+                    svgCable.classList.add('bg-slate-400');
+                    stateLabel = "Véhicule Branché (B)";
+                    startEnabled = true;
+                    break;
+                case 'C': // Borne prête, en attente du véhicule
+                    svgCharger.classList.add('charger-orange');
+                    svgCar.classList.add('car-orange');
+                    svgCable.classList.add('bg-orange-400');
+                    stateLabel = "En attente du véhicule (C)";
+                    stopEnabled = true;
+                    break;
+                case 'D': // En charge (ventilation non requise)
+                case 'E': // En charge (ventilation requise)
+                    svgCharger.classList.add('charger-default');
+                    svgCar.classList.add('car-green');
+                    svgCable.classList.add('bg-green-500');
+                    stateLabel = "⚡ En Charge (" + state + ")";
+                    stopEnabled = true;
+                    break;
+                case 'K': // Attente autorisation borne
+                case 'O': // Attente autorisation borne (variante)
+                    svgCharger.classList.add('charger-orange');
+                    svgCar.classList.add('car-white');
+                    svgCable.classList.add('bg-orange-300');
+                    stateLabel = "Attente d'autorisation (" + state + ")";
+                    startEnabled = true;
+                    break;
+                case 'L': // Débranché physiquement
+                    svgCharger.classList.add('charger-default');
+                    svgCar.classList.add('car-grey');
+                    svgCable.classList.add('bg-slate-200');
+                    stateLabel = "Débranché (L)";
+                    break;
+                case 'M': // Stop manuel (bouton physique)
+                    svgCharger.classList.add('charger-grey');
+                    svgCar.classList.add('car-white');
+                    svgCable.classList.add('bg-slate-300');
+                    stateLabel = "Arrêt Manuel (M)";
+                    startEnabled = true;
+                    break;
+                case 'F': case 'G': case 'H': 
+                case 'R': case 'S': case 'T': 
+                case 'U': case 'V':
+                    svgCharger.classList.add('charger-red');
+                    svgCar.classList.add('car-orange');
+                    svgCable.classList.add('bg-red-400');
+                    stateLabel = "⛔ ERREUR (" + state + ")";
+                    break;
+                default:
+                    svgCharger.classList.add('charger-default');
+                    svgCar.classList.add('car-grey');
+                    svgCable.classList.add('bg-slate-300');
+                    if (state === "") stateLabel = "En attente de la borne...";
+                    break;
+            }
+
+            // Surcharge visuelle si la charge est déclarée terminée par la borne
+            if (isChargeComplete && state !== 'A' && state !== 'L') {
+                svgCar.className = 'svg-icon car-green-solid';
+                svgCable.className = 'w-16 h-1 rounded bg-green-400';
+                stateLabel = "Charge Terminée 🔋";
+                stopEnabled = true; // Permettre de stopper même après charge complète
+            }
+
+            lblState.innerText = stateLabel;
+            
+            if (!isActionPending) {
+                btnStart.disabled = !startEnabled;
+                btnStop.disabled = !stopEnabled;
+            }
+        }
+
+        let isDraggingSlider = false;
+
+        // Fetch des données de télémétrie
+        async function fetchTelemetry() {
+            try {
+                const response = await fetch('/api/telemetry');
+                const data = await response.json();
+                
+                valVoltage.innerText = data.voltage.toFixed(1) + " V";
+                valCurrent.innerText = data.current.toFixed(1) + " A";
+                valPower.innerText = (data.power).toFixed(0) + " W";
+                valEnergy.innerText = (data.energy).toFixed(0) + " Wh";
+                
+                if (data.error_code && data.error_code !== "0000" && data.error_code !== "") {
+                    lblError.innerText = "Code Erreur : " + data.error_code;
+                } else {
+                    lblError.innerText = "";
+                }
+
+                // Mise à jour de la limite de courant (si on ne touche pas au curseur)
+                if (data.limit_amps && !isDraggingSlider && !isActionPending) {
+                    slider.value = data.limit_amps;
+                    lblSlider.innerText = data.limit_amps + " A";
+                }
+
+                lastReportedState = data.state;
+                updateLinky(data.tic_mode);
+                updateVisuals(data.state, data.charge_complete);
+                
+            } catch (err) {
+                console.error("Erreur de polling", err);
+            }
+        }
+
+        // --- Actions Utilisateur ---
+
+        function lockControls() {
+            isActionPending = true;
+            controlsPanel.classList.add('disabled-card');
+            btnStart.disabled = true;
+            btnStop.disabled = true;
+        }
+
+        function unlockControls() {
+            isActionPending = false;
+            controlsPanel.classList.remove('disabled-card');
+            updateVisuals(lastReportedState); // Restore correct button states
+        }
+
+        // Requête générique avec lock
+        async function sendPostAction(url) {
+            lockControls();
+            try {
+                await fetch(url, { method: 'POST' });
+            } catch (err) {
+                console.error(err);
+            }
+            // Anti-rejeu + attente prise en compte par la borne
+            setTimeout(() => {
+                fetchTelemetry().then(unlockControls);
+            }, 1000);
+        }
+
+        // Events
+        btnStart.addEventListener('click', () => sendPostAction('/api/charge/start'));
+        btnStop.addEventListener('click', () => sendPostAction('/api/charge/stop'));
+        
+        // Gestion de l'état de drag du curseur pour éviter les conflits avec le polling
+        slider.addEventListener('mousedown', () => isDraggingSlider = true);
+        slider.addEventListener('mouseup', () => isDraggingSlider = false);
+        slider.addEventListener('touchstart', () => isDraggingSlider = true);
+        slider.addEventListener('touchend', () => isDraggingSlider = false);
+
+        // Slider interactif (UI instantanée)
+        slider.addEventListener('input', (e) => {
+            lblSlider.innerText = e.target.value + " A";
+        });
+
+        // Envoi au relâchement du slider
+        slider.addEventListener('change', (e) => {
+            sendPostAction('/api/current/' + e.target.value);
+        });
+
+        // Boucle principale
+        setInterval(fetchTelemetry, 2000);
+        fetchTelemetry(); // Appel initial
+    </script>
+</body>
+</html>
