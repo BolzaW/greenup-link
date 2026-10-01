@@ -29,7 +29,7 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
                 // Demande des infos de base avec délais pour ne pas saturer le buffer RX
                 let init_cmds = [
                     "SoftwareVersion?", "HardwareVersion?", "SerialNumber?",
-                    "Reference?", "WeekYearProduction?", "State?", "FM?", "CC?", "E?",
+                    "Reference?", "WeekYearProduction?", "State?", "FM?", "CC?", "E?", "BT?",
                 ];
                 for cmd in &init_cmds {
                     let full = format!("{}\r", cmd);
@@ -127,6 +127,11 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
     } else if line.starts_with("WeekYearProduction:") {
         if let Ok(mut info) = state.info.lock() {
             info.week_year_production = line.replace("WeekYearProduction:", "");
+        }
+    } else if line.starts_with("BT:") {
+        let val = line.replace("BT:", "");
+        if let Ok(mut info) = state.info.lock() {
+            info.bluetooth_enabled = Some(val == "1");
         }
     } 
     // --- MISE À JOUR DE LA TÉLÉMÉTRIE ---

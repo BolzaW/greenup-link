@@ -19,7 +19,13 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/charge/stop", post(stop_charge))
         .route("/api/command", post(send_raw_command))
         .route("/api/tic/refresh", post(refresh_tic))
+        .route("/api/bluetooth", post(set_bluetooth))
         .with_state(state)
+}
+
+#[derive(serde::Deserialize)]
+pub struct BluetoothPayload {
+    pub enabled: bool,
 }
 
 /// GET /
@@ -128,5 +134,25 @@ async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Détection TIC lancée"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
+    }
+}
+
+/// POST /api/bluetooth
+async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<BluetoothPayload>) -> impl IntoResponse {
+    let cmd = if payload.enabled { "BT:1\r" } else { "BT:0\r" };
+    let log_msg = if payload.enabled { "🔵 Activation" } else { "⚪ Désactivation" };
+    
+    logger::log("API", &format!("{} Bluetooth demandée", log_msg));
+    
+    if state.serial_tx.send(cmd.to_string()).await.is_ok() {
+        (
+            StatusCode::OK,
+            Json(json!({"status": "success", "message": format!("Bluetooth {} avec succès", if payload.enabled { "activé" } else { "désactivé" })}))
+        )
+    } else {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Erreur de communication série"}))
+        )
     }
 }
