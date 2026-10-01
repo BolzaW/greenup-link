@@ -40,6 +40,7 @@ pub struct BoardInfo {
     pub serial_number: String,
     pub reference: String,
     pub week_year_production: String,
+    pub bluetooth_enabled: Option<bool>,
 }
 
 pub struct AppState {

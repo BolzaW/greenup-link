@@ -42,7 +42,7 @@ async fn main() {
     logger::log("SYS", &format!("🌍 Serveur Web démarré : http://{}", addr));
     logger::log("SYS", "   - GET  /api/info, /api/telemetry");
     logger::log("SYS", "   - POST /api/charge/start, /api/charge/stop, /api/current/:amps");
-    logger::log("SYS", "   - POST /api/tic/refresh, /api/command");
+    logger::log("SYS", "   - POST /api/tic/refresh, /api/bluetooth");
     
     let listener = tokio::net::TcpListener::bind(addr).await.expect("Impossible de lier le port 8080");
     axum::serve(listener, router).await.expect("Erreur fatale du serveur web");

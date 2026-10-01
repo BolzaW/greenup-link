@@ -58,3 +58,12 @@ Ces commandes gèrent l'interaction avec le badge de l'utilisateur ou la supervi
 
 ---
 *Note pour les tests : Dans le terminal cli_greenup-link.ps1, pas besoin de taper le `\r`, le programme l'ajoute automatiquement à l'appuie sur la touche Entrée.*
+
+## 📻 5. Gestion du module Bluetooth (BLE)
+La borne possède un module Bluetooth intégré (utilisé par l'application smartphone). Il peut être activé ou désactivé pour éviter les conflits d'ordres avec le Raspberry Pi.
+
+| Commande (TX) | Réponse (RX) | Explication |
+| :--- | :--- | :--- |
+| `BT?` | `BT:1` ou `BT:0` | Demande l'état actuel du module Bluetooth (1 = Allumé, 0 = Éteint). |
+| `BTOK` | `BT:1` | Ordonne l'allumage du module Bluetooth. |
+| `BTNOK`| `BT:0` | Ordonne l'extinction du module Bluetooth. |
