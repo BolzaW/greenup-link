@@ -41,6 +41,16 @@
         .linky-led-on { background: #bbf7d0; box-shadow: 0 0 4px #4ade80; }
         .linky-led-off { background: #94a3b8; }
 
+        /* Bluetooth Box */
+        .bt-box { 
+            width: 48px; height: 48px; border-radius: 8px; 
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.3s ease; cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .bt-on { background: #eff6ff; color: #3b82f6; border: 2px solid #bfdbfe; }
+        .bt-off { background: #f1f5f9; color: #94a3b8; border: 2px solid #e2e8f0; }
+
         @keyframes pulseGlow {
             0% { filter: drop-shadow(0 0 2px #22c55e); opacity: 0.8; }
             50% { filter: drop-shadow(0 0 10px #22c55e); opacity: 1; }
@@ -95,6 +105,14 @@
                             <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>
                         </svg>
                         <span class="mt-2 font-medium text-slate-600">Véhicule</span>
+                    </div>
+
+                    <!-- Module Bluetooth -->
+                    <div class="flex flex-col items-center justify-start mt-8 ml-8">
+                        <div id="btBox" class="bt-box bt-off" onclick="toggleBluetooth()" title="Activer/Désactiver le Bluetooth">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7l10 10-5 5V2l5 5-10 10"></path></svg>
+                        </div>
+                        <span class="mt-2 text-xs font-bold text-slate-400">BLE</span>
                     </div>
                 </div>
                 
@@ -227,6 +245,37 @@
             }
         }
 
+        async function toggleBluetooth() {
+            const btBox = document.getElementById('btBox');
+            // Check current visual state to determine desired action
+            const isCurrentlyOn = btBox.classList.contains('bt-on');
+            const desiredState = !isCurrentlyOn;
+            
+            // Optimistic update
+            btBox.className = desiredState ? 'bt-box bt-on' : 'bt-box bt-off';
+
+            try {
+                const response = await fetch('/api/bluetooth', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: desiredState })
+                });
+                
+                if (!response.ok) {
+                    const data = await response.json();
+                    alert("Erreur: " + data.error);
+                    // Revert visually if error
+                    btBox.className = isCurrentlyOn ? 'bt-box bt-on' : 'bt-box bt-off';
+                }
+                
+                // Fetch info to confirm actual state
+                fetchInfo();
+            } catch (error) {
+                console.error(error);
+                btBox.className = isCurrentlyOn ? 'bt-box bt-on' : 'bt-box bt-off';
+            }
+        }
+
         async function refreshTic() {
             if (lastReportedState !== 'A') {
                 alert("La détection du TIC n'est possible que lorsque la borne est libre (Statut A).");
@@ -237,6 +286,21 @@
             // Set UI immediately to detecting
             updateLinky('detecting');
             sendPostAction('/api/tic/refresh');
+        }
+
+        async function fetchInfo() {
+            try {
+                const response = await fetch('/api/info');
+                const info = await response.json();
+                const btBox = document.getElementById('btBox');
+                if (info.bluetooth_enabled === true) {
+                    btBox.className = 'bt-box bt-on';
+                } else if (info.bluetooth_enabled === false) {
+                    btBox.className = 'bt-box bt-off';
+                }
+            } catch (err) {
+                console.error("Erreur de récupération des infos", err);
+            }
         }
 
         // Met à jour les visuels en fonction du State (A à V) et de la fin de charge
@@ -419,6 +483,7 @@
         // Boucle principale
         setInterval(fetchTelemetry, 2000);
         fetchTelemetry(); // Appel initial
+        fetchInfo(); // Appel initial infos
     </script>
 </body>
 </html>
