@@ -138,6 +138,13 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
     else if line.starts_with("State:") {
         if let Ok(mut tel) = state.telemetry.lock() {
             let state_val = line.replace("State:", "");
+            
+            // Si on démarre une nouvelle session de charge, on réinitialise le compteur d'énergie
+            if (state_val == "D" || state_val == "E") && (tel.state != "D" && tel.state != "E") {
+                tel.energy = 0.0;
+                tel.last_power_update = Some(std::time::Instant::now());
+            }
+            
             tel.state = state_val.clone();
             if state_val == "A" || state_val == "L" {
                 tel.charge_complete = false;
@@ -190,8 +197,19 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         let clean_val = line.replace("CCI:", "");
         if let Ok(val) = clean_val.parse::<f32>() {
             if let Ok(mut tel) = state.telemetry.lock() {
+                let previous_power = tel.power;
                 tel.current = val;
                 tel.power = tel.voltage * tel.current;
+                
+                let now = std::time::Instant::now();
+                if let Some(last_time) = tel.last_power_update {
+                    let elapsed_hours = last_time.elapsed().as_secs_f32() / 3600.0;
+                    if tel.state == "D" || tel.state == "E" {
+                        let energy_wh = ((previous_power + tel.power) / 2.0) * elapsed_hours;
+                        tel.energy += energy_wh;
+                    }
+                }
+                tel.last_power_update = Some(now);
             }
         }
     } else if line.starts_with("CC:") {
