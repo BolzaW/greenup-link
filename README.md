@@ -55,16 +55,17 @@ Le projet a été développé sous Windows 11 en utilisant le sous-système Linu
 
 > **ATTENTION :** Sauvegardez l'image (clone de la carte SD) officielle Legrand avant toute manipulation afin de pouvoir revenir en arrière en cas de problème.
 
-### 1. Obtenir l'accès SSH (Hack USB)
-L'interface d'origine ne permet pas l'accès SSH. Il faut exploiter le processus de mise à jour par clé USB pour forcer l'activation du service :
-1. Préparez une clé USB formatée en FAT32.
-2. Créez à la racine de la clé le script de mise à jour reconnu par le système Legrand.
-3. Insérez les commandes suivantes dans ce script pour activer et démarrer le service SSH :
-   ```bash
-   systemctl enable ssh
-   systemctl start ssh
-   ```
-4. Insérez la clé USB dans le Raspberry Pi de la borne (sous tension) et laissez le script s'exécuter.
+### 1. Obtenir l'accès SSH (Modification de la carte SD)
+Le Raspberry Pi 3 intégré utilise une installation classique (non chiffrée) mais le port SSH est fermé et le mot de passe par défaut a été modifié par Legrand. Il faut donc intervenir directement sur la carte SD :
+
+1. Démontez la borne (hors tension) pour récupérer la carte SD du Raspberry Pi et lisez-la sur votre ordinateur.
+2. **Activer le SSH** : Créez simplement un fichier vide nommé `ssh` (sans extension) à la racine de la partition `boot`.
+3. **Réinitialiser le mot de passe** : L'utilisateur `pi` existe mais son mot de passe est inconnu.
+   - Sur votre ordinateur (sous Linux ou WSL), générez le hash d'un nouveau mot de passe avec la commande : `mkpasswd -m sha-512`
+   - Ouvrez la partition principale (rootfs) de la carte SD et éditez le fichier `/etc/shadow`.
+   - Repérez la ligne commençant par `pi:` (ex: `pi:<hash-inconnu>:18508:0:99999:7:::`) et remplacez le hash existant par celui que vous venez de générer.
+4. Remettez la carte SD dans le Raspberry Pi et mettez la borne sous tension.
+5. Vous pouvez désormais vous connecter en SSH : `ssh pi@<ip_de_la_borne>` avec le mot de passe que vous avez choisi. L'utilisateur `pi` possède les droits administrateur (sudo).
 
 ### 2. Sécurisation de l'accès SSH
 Une fois connecté au Raspberry Pi en SSH, il est impératif de le sécuriser.
