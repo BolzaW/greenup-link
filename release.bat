@@ -30,10 +30,12 @@ copy "scripts\stop_legrand.sh" "release_pkg\scripts\" >nul
 copy "cli-greenup-link.ps1" "release_pkg\" >nul
 copy "README.md" "release_pkg\" >nul
 
-REM 4. Creation de l'archive ZIP via PowerShell
+REM 4. Creation de l'archive ZIP via l'utilitaire natif tar (Windows 10+)
 echo [3/3] Creation de l'archive ZIP (greenup-link-v0.0.1.zip)...
 if exist "greenup-link-v0.0.1.zip" del "greenup-link-v0.0.1.zip"
-powershell -Command "Compress-Archive -Path 'release_pkg\*' -DestinationPath 'greenup-link-v0.0.1.zip'"
+cd release_pkg
+tar -a -c -f ..\greenup-link-v0.0.1.zip *
+cd ..
 
 REM 5. Nettoyage
 rmdir /S /Q "release_pkg"
