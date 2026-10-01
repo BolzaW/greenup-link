@@ -42,7 +42,7 @@ Ces commandes contrôlent directement la délivrance du courant.
 | `2PCOK` / `2PCNOK` | Autorise (`OK`) ou Bloque (`NOK`) la charge sur la prise **Domestique** (2 Pins). |
 | `T2FOK` / `T2FNOK` | **Force** la charge sur la prise Type 2 (contournement des sécurités ou du planning ?). |
 | `2PFOK` / `2PFNOK` | **Force** la charge sur la prise domestique. |
-| `SOK` / `SNOK` | **Suspend** : Autorise la mise en pause (`OK`) ou annule la pause (`NOK`) de la charge. |
+| `SOK` / `SNOK` | **Sleep (Veille)** : `SOK` force la borne à entrer en mode veille profonde (État `Y`, LEDs éteintes avec flash lent, réponse `Slp:1`). Ce mode n'est atteignable que depuis l'état `A`. `SNOK` réveille la borne (`Slp:0`, État `A`). |
 | `Unlock` | Ordonne le **déverrouillage physique** du câble (si la borne a un verrouillage de la prise Type 2). |
 
 ## 💳 4. Gestion OCPP / RFID
