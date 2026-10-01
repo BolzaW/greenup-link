@@ -55,7 +55,12 @@ Le projet a été développé sous Windows 11 en utilisant le sous-système Linu
 
 > **ATTENTION :** Sauvegardez l'image (clone de la carte SD) officielle Legrand avant toute manipulation afin de pouvoir revenir en arrière en cas de problème.
 
-### 1. Obtenir l'accès SSH (Modification de la carte SD)
+> ⚠️ **Important :** L'installation physique du Raspberry Pi dans la borne doit impérativement se faire **hors tension**.
+
+### 1. Initialisation du kit legrand
+Suivez la **[documentation officielle Legrand](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** pour initialiser le Raspberry Pi sur votre réseau.
+   
+### 2. Obtenir l'accès SSH (Modification de la carte SD)
 Le Raspberry Pi 3 intégré utilise une installation classique (non chiffrée) mais le port SSH est fermé et le mot de passe par défaut a été modifié par Legrand. Il faut donc intervenir directement sur la carte SD :
 
 1. Démontez la borne (hors tension) pour récupérer la carte SD du Raspberry Pi et lisez-la sur votre ordinateur.
@@ -67,7 +72,7 @@ Le Raspberry Pi 3 intégré utilise une installation classique (non chiffrée) m
 4. Remettez la carte SD dans le Raspberry Pi et mettez la borne sous tension.
 5. Vous pouvez désormais vous connecter en SSH : `ssh pi@<ip_de_la_borne>` avec le mot de passe que vous avez choisi. L'utilisateur `pi` possède les droits administrateur (sudo).
 
-### 2. Sécurisation de l'accès SSH
+### 3. Sécurisation de l'accès SSH
 Une fois connecté au Raspberry Pi en SSH, il est impératif de le sécuriser.
 🚨 **NOTE DE SÉCURITÉ :** Le Raspberry Pi tourne sur un vieil OS avec de nombreuses failles connues. Ne l'exposez **JAMAIS** sur internet (pas de redirection de port sur votre box).
 
@@ -78,55 +83,56 @@ Une fois connecté au Raspberry Pi en SSH, il est impératif de le sécuriser.
 2. **Sécurisez l'accès par échange de clé publique** :
    Depuis votre PC, envoyez votre clé publique (si vous n'en avez pas, générez-la avec `ssh-keygen`) :
    ```bash
-   ssh-copy-id root@192.168.1.xxx
+   ssh-copy-id pi@192.168.1.xxx
    ```
-3. (Optionnel) Désactivez l'authentification par mot de passe dans `/etc/ssh/sshd_config` (`PasswordAuthentication no`).
+   > ⚠️ **Attention :** Avant de désactiver la connexion par mot de passe, vérifier que la connexion par clé fonctionne, autrement vous perdrez l'accès ssh et il faudra de nouveau démonter la carte micro SD
 
-### 3. Préparation matérielle et logicielle
-1. Suivez la **[documentation officielle Legrand](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** pour initialiser le Raspberry Pi sur votre réseau.
-   > ⚠️ **Important :** L'installation physique du Raspberry Pi dans la borne doit impérativement se faire **hors tension**.
+3. Désactivez l'authentification par mot de passe dans `/etc/ssh/sshd_config` (`PasswordAuthentication no`), et l'authentifcation root (`PermitRootLogin no`).
 
-2. **Neutralisation des sécurités Legrand** : 
+4. **Neutralisation des sécurités Legrand** : 
    Le logiciel d'origine intègre un script de "destruction" d'urgence (`DeletAll.sh`) qui efface tout le logiciel si les adresses MAC réseau ne correspondent pas à celles attendues par Legrand.
    - Éditez le fichier : `nano ~/Desktop/DeletAll.sh`
    - Ajoutez la commande `exit 0` sur la deuxième ligne (juste après le `#!/bin/bash`).
    - Retirez les droits d'exécution : `chmod -x ~/Desktop/DeletAll.sh`
 
 ### 4. Installation de Green'Up Link
-1. Transférez le binaire compilé (`greenup-link`) vers la borne via SCP. Depuis votre PC :
+1. Transférez le binaire compilé (`greenup-link`) et les scripts vers la borne via SCP. Depuis votre PC :
    ```bash
-   scp target/armv7-unknown-linux-gnueabihf/debug/greenup-link root@192.168.1.xxx:/root/Desktop/
+   scp target/armv7-unknown-linux-gnueabihf/debug/greenup-link pi@192.168.1.xxx:~/Desktop/rust
+   scp scripts/* pi@192.168.1.xxx:~/Desktop/rust
    ```
-2. Arrêtez les services Legrand actuels en exécutant le script `stop` d'origine (situé sur le bureau).
+2. Arrêtez les services Legrand actuels en exécutant le script `stop`.
 3. **(Optionnel mais recommandé) Désactivez le démarrage automatique** du logiciel Legrand d'origine. Si vous ne le faites pas, le logiciel officiel redémarrera à chaque reboot de la borne :
    ```bash
-   update-rc.d -f CommunicationArduinoRasp remove
+   sudo update-rc.d -f CommunicationArduinoRasp remove
    ```
 
 ### 5. Lancement automatique de Green'Up Link au boot
 Pour lancer l'application automatiquement, créez un service Systemd :
-1. Créez le fichier de service : `nano /etc/systemd/system/greenup-link.service`
-2. Collez-y cette configuration (à adapter selon le chemin de votre exécutable) :
+1. Créez le fichier de service (nécessite les droits sudo) : `sudo nano /etc/systemd/system/greenup-link.service`
+2. Collez-y cette configuration :
    ```ini
    [Unit]
    Description=GreenUp Link Service
    After=network.target
 
    [Service]
-   ExecStart=/root/Desktop/greenup-link
-   WorkingDirectory=/root/Desktop/
+   ExecStart=/home/pi/Desktop/rust/greenup-link
+   WorkingDirectory=/home/pi/Desktop/rust/
    StandardOutput=inherit
    StandardError=inherit
    Restart=always
-   User=root
+   User=pi
+   Group=dialout
 
    [Install]
    WantedBy=multi-user.target
    ```
+   *(Note : `Group=dialout` est souvent nécessaire pour que l'utilisateur `pi` puisse lire le port série USB sans droits root).*
 3. Activez et démarrez le service :
    ```bash
-   systemctl enable greenup-link
-   systemctl start greenup-link
+   sudo systemctl enable greenup-link
+   sudo systemctl start greenup-link
    ```
 
 ### 6. Utilisation
