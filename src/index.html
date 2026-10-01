@@ -89,7 +89,7 @@
         </div>
         <div>
             <h1 class="text-2xl font-bold tracking-tight text-white leading-none">Green'Up <span class="text-sky-400">Link</span></h1>
-            <span class="text-xs text-slate-500">Interface de contrôle locale</span>
+            <span class="text-xs text-slate-500">Interface de contrôle locale <span id="lblLinkVersion"></span></span>
         </div>
     </div>
     
@@ -415,6 +415,10 @@
             if (info.serial_number) line2.push(`SN: ${info.serial_number}`);
             if (info.week_year_production) line2.push(`Prod: ${info.week_year_production}`);
             subInfo.innerText = line2.length > 0 ? line2.join(' | ') : '';
+            
+            if (info.link_version) {
+                document.getElementById('lblLinkVersion').innerText = `v${info.link_version}`;
+            }
             
         } catch (err) {
             console.error("Erreur infos", err);
