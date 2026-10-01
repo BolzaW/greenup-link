@@ -139,7 +139,7 @@ async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// POST /api/bluetooth
 async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<BluetoothPayload>) -> impl IntoResponse {
-    let cmd = if payload.enabled { "BT:1\r" } else { "BT:0\r" };
+    let cmd = if payload.enabled { "BTOK\r" } else { "BTNOK\r" };
     let log_msg = if payload.enabled { "🔵 Activation" } else { "⚪ Désactivation" };
     
     logger::log("API", &format!("{} Bluetooth demandée", log_msg));
