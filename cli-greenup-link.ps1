@@ -15,7 +15,7 @@ function Show-Menu {
     Write-Host "3. Démarrer la charge (T2COK)"
     Write-Host "4. Stopper la charge (T2CNOK)"
     Write-Host "5. Définir la limite de courant (10A - 32A)"
-    Write-Host "6. Envoyer une commande brute (ex: State?)"
+    Write-Host "6. Activer/Désactiver le module Bluetooth"
     Write-Host "0. Quitter"
     Write-Host "=================================================" -ForegroundColor Cyan
 }
@@ -53,8 +53,18 @@ while ($true) {
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
             "6" {
-                Write-Host "`n--- MODE COMMANDE INTERACTIF ---" -ForegroundColor Cyan
-                Write-Host "Tapez 'exit', 'quit' ou laissez vide pour revenir au menu." -ForegroundColor Gray
+                $state = Read-Host "Voulez-vous activer le Bluetooth ? (O/N)"
+                $isEnabled = $state -match "^[OoYy]"
+                $body = @{ enabled = $isEnabled } | ConvertTo-Json
+                Write-Host "`n[POST] $BASE_URL/api/bluetooth..." -ForegroundColor Yellow
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/bluetooth" -Method Post -Body $body -ContentType "application/json"
+                $response | ConvertTo-Json | Write-Host -ForegroundColor Green
+            }
+            "COMMAND" {
+                Write-Host "`n--- ATTENTION: MODE COMMANDE DIRECTE ---" -ForegroundColor Red
+                Write-Host "Vous écrivez directement sur le bus série de la borne." -ForegroundColor Red
+                Write-Host "N'envoyez pas de commandes inconnues sous peine de risquer de corrompre ou bloquer le matériel !" -ForegroundColor Red
+                Write-Host "Tapez 'exit', 'quit' ou laissez vide pour revenir au menu sécurisé." -ForegroundColor Gray
                 
                 while ($true) {
                     $cmd = Read-Host "`nPS> Commande brute"
