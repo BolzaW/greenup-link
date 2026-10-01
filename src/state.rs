@@ -44,6 +44,7 @@ pub struct BoardInfo {
     pub reference: String,
     pub week_year_production: String,
     pub bluetooth_enabled: Option<bool>,
+    pub link_version: String,
 }
 
 pub struct AppState {

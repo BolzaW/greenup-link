@@ -1,6 +1,6 @@
 [package]
 name = "greenup-link"
-version = "0.0.1"
+version = "0.1.0-SNAPSHOT"
 edition = "2021"
 
 [dependencies]

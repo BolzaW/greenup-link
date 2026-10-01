@@ -1,4 +1,4 @@
-# Green'Up Link v0.0.1
+# Green'Up Link
 
 > **Disclaimer :** Green'Up Link is an independent, community-developed project and is not affiliated with, sponsored or endorsed by Legrand. "Green'Up" and "Legrand" are trademarks of their respective owners.
 

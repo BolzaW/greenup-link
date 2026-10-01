@@ -11,18 +11,20 @@ use state::{AppState, BoardInfo, Telemetry};
 async fn main() {
     logger::init();
 
+    let pkg_version = env!("CARGO_PKG_VERSION");
+    
     logger::log("SYS", "===================================================");
-    logger::log("SYS", "               GREEN'UP LINK v0.0.1                ");
+    logger::log("SYS", &format!("               GREEN'UP LINK v{:<15}     ", pkg_version));
     logger::log("SYS", "===================================================");
 
-    // Canal de communication asynchrone : de l'API web vers le thread Série
-    // On met un buffer de 32 commandes (largement suffisant)
     let (tx, rx) = mpsc::channel::<String>(32);
 
-    // Initialisation de la mémoire partagée (Thread-safe)
+    let mut initial_info = BoardInfo::default();
+    initial_info.link_version = pkg_version.to_string();
+
     let app_state = Arc::new(AppState {
         telemetry: Mutex::new(Telemetry::default()),
-        info: Mutex::new(BoardInfo::default()),
+        info: Mutex::new(initial_info),
         serial_tx: tx,
         tic_test_zero_count: Mutex::new(0),
     });
