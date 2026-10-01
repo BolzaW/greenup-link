@@ -95,7 +95,23 @@ Cette documentation décrit les points de terminaison (endpoints) exposés par l
   }
   ```
 
-### 7. Envoyer une commande brute (Debug/Avancé)
+### 7. Activer / Désactiver le Bluetooth
+- **URL** : `/api/bluetooth`
+- **Méthode** : `POST`
+- **Body (JSON)** : 
+  ```json
+  { "enabled": true }
+  ```
+- **Description** : Permet d'allumer (`enabled: true`) ou d'éteindre (`enabled: false`) le module Bluetooth intégré à la borne en envoyant `BT:1` ou `BT:0`. Très utile pour éviter que l'application smartphone Legrand ne vienne écraser les consignes de la domotique.
+- **Réponse type** :
+  ```json
+  {
+    "status": "success",
+    "message": "Bluetooth désactivé avec succès"
+  }
+  ```
+
+### 8. Envoyer une commande brute (Debug/Avancé)
 - **URL** : `/api/command`
 - **Méthode** : `POST`
 - **Body (Texte brut)** : `La commande à envoyer (ex: State?)`
