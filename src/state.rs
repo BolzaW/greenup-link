@@ -14,6 +14,8 @@ pub struct Telemetry {
     pub limit_amps: u32,
     pub charge_complete: bool,
     pub tic_mode: String, // "": inconnu, "0": non présent, "1200": historique, "9600": standard
+    #[serde(skip)]
+    pub last_power_update: Option<std::time::Instant>,
 }
 
 impl Default for Telemetry {
@@ -29,6 +31,7 @@ impl Default for Telemetry {
             limit_amps: 16, // 16A par défaut
             charge_complete: false,
             tic_mode: String::new(),
+            last_power_update: None,
         }
     }
 }

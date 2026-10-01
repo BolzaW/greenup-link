@@ -1,487 +1,671 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Green'Up Link</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        .svg-icon { width: 120px; height: 120px; transition: all 0.3s ease; }
+        body { 
+            background-color: #0f172a; 
+            color: #f8fafc; 
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+        }
         
-        /* États Voiture */
-        .car-grey { fill: #94a3b8; }
-        .car-white { fill: #f8fafc; stroke: #94a3b8; stroke-width: 2px; }
-        .car-orange { fill: #f97316; }
-        .car-green { fill: #22c55e; animation: pulseGlow 2s infinite; }
-        .car-green-solid { fill: #22c55e; filter: drop-shadow(0 0 4px #22c55e); }
+        /* Energy flow animation */
+        @keyframes dash {
+            to { stroke-dashoffset: -20; }
+        }
+        @keyframes dashReverse {
+            to { stroke-dashoffset: 20; }
+        }
+        .anim-flow {
+            stroke-dasharray: 10;
+            animation: dash 1s linear infinite;
+        }
+        .anim-flow-linky {
+            stroke-dasharray: 10;
+            animation: dash 1s linear infinite;
+        }
         
-        /* États Borne */
-        .charger-default { fill: #334155; }
-        .charger-grey { fill: #cbd5e1; }
-        .charger-orange { fill: #f97316; }
-        .charger-red { fill: #ef4444; }
-
-        /* Linky */
-        .linky-box { 
-            width: 56px; height: 64px; border-radius: 8px; 
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
-            transition: all 0.3s ease; position: relative; cursor: pointer;
+        /* Glow effects */
+        .glow-text { text-shadow: 0 0 12px rgba(52, 211, 153, 0.6); }
+        .glow-charging { filter: drop-shadow(0 0 12px rgba(16, 185, 129, 0.6)); }
+        .glow-linky { filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.6)); }
+        
+        /* Modern Range Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
         }
-        .linky-connected { 
-            background: linear-gradient(135deg, #16a34a, #22c55e); color: white;
-            box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px; width: 20px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 0 10px rgba(56,189,248,0.5);
+            transition: transform 0.1s;
         }
-        .linky-disconnected { 
-            background: #cbd5e1; color: #64748b;
+        input[type=range]::-webkit-slider-thumb:active {
+            transform: scale(1.2);
         }
-        .linky-led { 
-            width: 6px; height: 6px; border-radius: 50%; margin-bottom: 3px;
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px;
+            cursor: pointer;
+            background: #334155;
+            border-radius: 2px;
         }
-        .linky-led-on { background: #bbf7d0; box-shadow: 0 0 4px #4ade80; }
-        .linky-led-off { background: #94a3b8; }
-
-        /* Bluetooth Box */
-        .bt-box { 
-            width: 48px; height: 48px; border-radius: 8px; 
-            display: flex; align-items: center; justify-content: center;
-            transition: all 0.3s ease; cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        
+        /* Toggle Switch Custom Styling */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #38bdf8;
         }
-        .bt-on { background: #eff6ff; color: #3b82f6; border: 2px solid #bfdbfe; }
-        .bt-off { background: #f1f5f9; color: #94a3b8; border: 2px solid #e2e8f0; }
-
-        @keyframes pulseGlow {
-            0% { filter: drop-shadow(0 0 2px #22c55e); opacity: 0.8; }
-            50% { filter: drop-shadow(0 0 10px #22c55e); opacity: 1; }
-            100% { filter: drop-shadow(0 0 2px #22c55e); opacity: 0.8; }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #38bdf8;
+            box-shadow: 0 0 10px rgba(56,189,248,0.4);
         }
-
-        .disabled-card { opacity: 0.5; pointer-events: none; }
+        .toggle-checkbox {
+            right: 4px; z-index: 1;
+            border-color: #475569;
+            top: 2px;
+            width: 20px; height: 20px;
+        }
+        .toggle-label {
+            width: 48px;
+        }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen p-6">
-    <div class="max-w-4xl mx-auto space-y-6">
-        <header class="text-center py-4">
-            <h1 class="text-3xl font-bold text-slate-800">Green'Up Link</h1>
-            <p class="text-slate-500">Interface de contrôle locale</p>
-        </header>
+<body class="min-h-screen flex flex-col p-4 md:p-8 selection:bg-sky-500/30">
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- Panneau Visuel -->
-            <div class="bg-white rounded-xl shadow-sm p-8 flex flex-col items-center justify-center space-y-8 border border-slate-100">
-                <div class="flex items-center space-x-4">
-                    <!-- Linky Meter -->
-                    <div class="flex flex-col items-center justify-start mt-6">
-                        <div id="linkyBox" class="linky-box linky-disconnected group" onclick="refreshTic()">
-                            <div class="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity text-white cursor-pointer" title="Rafraîchir (Requis: Borne Libre)">
-                                <svg id="linkyRefreshIcon" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+<!-- Top Header -->
+<header class="max-w-6xl mx-auto w-full flex flex-col md:flex-row justify-between items-start md:items-center mb-8 border-b border-slate-800 pb-4 gap-4">
+    <div class="flex items-center space-x-3">
+        <div class="p-2 bg-slate-800 rounded-lg shadow-inner">
+            <svg class="w-6 h-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+        </div>
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-white leading-none">Green'Up <span class="text-sky-400">Link</span></h1>
+            <span class="text-xs text-slate-500">Interface de contrôle locale</span>
+        </div>
+    </div>
+    
+    <div class="flex items-center gap-6">
+        <!-- Bluetooth Toggle Widget -->
+        <div class="flex flex-col items-center justify-center pt-1 px-4 rounded-xl border border-transparent">
+            <div class="flex items-center space-x-2 mb-1">
+                <svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7l10 10-5 5V2l5 5-10 10"></path></svg>
+                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Module BLE</span>
+            </div>
+            <div class="relative inline-block align-middle select-none transition duration-200 ease-in w-[48px] opacity-80 hover:opacity-100">
+                <input type="checkbox" name="toggle" id="btToggle" onclick="toggleBluetooth()" class="toggle-checkbox absolute block rounded-full bg-slate-200 border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
+                <label for="btToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-800 cursor-pointer transition-colors duration-200 ease-in-out border border-slate-700"></label>
+            </div>
+        </div>
+
+        <!-- Board Info -->
+        <div class="text-xs text-slate-400 flex flex-col items-end bg-slate-900/50 p-2 px-3 rounded-lg border border-slate-800 shadow-inner">
+            <div id="boardInfo" class="font-mono text-[11px] text-slate-300">...</div>
+            <div id="subInfo" class="opacity-60 font-mono text-[10px] mt-1">...</div>
+        </div>
+    </div>
+</header>
+
+<main class="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
+    
+    <!-- LEFT COLUMN : Visualization -->
+    <div class="lg:col-span-7 flex flex-col h-full">
+        <!-- The Visualizer -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-8 shadow-xl relative overflow-hidden flex flex-col justify-center flex-1 min-h-[380px]">
+            <!-- Subtle Grid Background Pattern -->
+            <div class="absolute inset-0 opacity-[0.02] bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:24px_24px]"></div>
+            
+            <div class="relative z-10 w-full flex flex-col mx-auto mt-2 mb-4">
+                
+                <!-- 12-Column Grid Layout for perfect responsive wire routing without overlapping -->
+                <div class="grid grid-cols-12 gap-y-4 w-full max-w-2xl mx-auto relative z-20">
+                    
+                    <!-- TOP ROW -->
+                    
+                    <!-- Linky (Cols 1-2) -->
+                    <div class="col-span-3 md:col-span-2 flex flex-col items-center pt-4">
+                        <div id="linkyBox" class="relative group cursor-pointer transition-transform hover:scale-105 z-20" onclick="refreshTic()" title="Forcer l'actualisation du mode TIC">
+                            <div class="w-14 h-14 md:w-16 md:h-16 rounded-xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center transition-all duration-300 shadow-inner" id="linkyContainer">
+                                <svg class="w-6 h-6 md:w-8 md:h-8 text-slate-600 transition-colors" id="linkyIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                                </svg>
                             </div>
-                            <div id="linkyLed" class="linky-led linky-led-off mt-1"></div>
-                            <span class="mt-1">LINKY</span>
+                            <div class="absolute -top-1 -right-1 w-3 h-3 md:w-4 md:h-4 rounded-full bg-slate-700 border-2 border-slate-900 transition-colors" id="linkyLed"></div>
                         </div>
-                        <div class="h-8 flex items-start justify-center mt-2">
-                            <span id="linkyLabel" class="text-xs text-center text-slate-400 font-medium leading-tight px-2">—</span>
-                        </div>
+                        <span class="mt-4 text-[10px] font-bold tracking-wide text-slate-400 uppercase text-center w-full">LINKY</span>
                     </div>
 
-                    <!-- Fil Linky → Borne -->
-                    <div class="w-6 h-0.5 bg-slate-300 rounded"></div>
-
-                    <!-- SVG Borne -->
-                    <div class="relative flex flex-col items-center mt-8">
-                        <div class="absolute -top-10 flex flex-col items-center">
-                            <div id="btBox" class="bt-box bt-off scale-75 shadow-sm" onclick="toggleBluetooth()" title="Activer/Désactiver le Bluetooth">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7l10 10-5 5V2l5 5-10 10"></path></svg>
-                            </div>
-                            <span class="text-[9px] font-bold text-slate-400 -mt-1">BLE</span>
-                        </div>
-                        <svg id="svgCharger" class="svg-icon charger-default" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm2 4v2h6V6H9zm0 4v2h6v-2H9zm0 4v2h6v-2H9z"/>
+                    <!-- Wire 1: Linky to Charger (Cols 3-5) -->
+                    <div class="col-span-3 md:col-span-4 flex flex-col items-center justify-center relative z-10 px-2">
+                        <svg class="w-full h-8 overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 20">
+                            <path d="M0,10 L100,10" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="6 6" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+                            <path id="animWireLinky" d="M0,10 L100,10" fill="none" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" class="anim-flow-linky opacity-0 transition-opacity duration-500" vector-effect="non-scaling-stroke" />
                         </svg>
-                        <span class="mt-2 font-medium text-slate-600">Borne</span>
+                        <span id="linkyLabel" class="absolute top-[60%] text-[8px] md:text-[9px] font-bold tracking-wide text-sky-500 uppercase text-center whitespace-nowrap opacity-0 transition-opacity">--</span>
                     </div>
 
-                    <!-- SVG Câble (Borne → Voiture) -->
-                    <div class="w-12 h-1 bg-slate-300 rounded" id="svgCable"></div>
+                    <!-- Charger (Cols 6-8) -->
+                    <div class="col-span-3 flex flex-col items-center relative z-20">
+                        <div class="w-16 h-24 md:w-20 md:h-28 rounded-2xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center relative transition-all duration-500 shadow-2xl" id="chargerBox">
+                            <svg class="w-8 h-8 md:w-10 md:h-10 text-slate-600 transition-colors duration-500" id="chargerIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            <div class="w-6 h-1 md:w-8 md:h-1.5 rounded-full bg-slate-700 mt-4 transition-all duration-500" id="chargerLed"></div>
+                        </div>
+                        <span class="mt-4 text-[10px] font-bold tracking-wide text-slate-300 uppercase text-center w-full">Green'Up</span>
+                    </div>
 
-                    <!-- SVG Voiture -->
-                    <div class="flex flex-col items-center mt-8">
-                        <svg id="svgCar" class="svg-icon car-grey" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>
+                    <!-- Wire 2: Top Loop (Cols 9-12) -->
+                    <div class="col-span-3 relative z-10 pointer-events-none min-h-[100px]">
+                        <svg class="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
+                            <!-- Starts left-center (inside charger cell), arcs to bottom-right -->
+                            <path d="M -15 45 C 80 45 100 45 100 100" fill="none" stroke="#1e293b" stroke-width="5" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+                            <path id="animWire1" d="M -15 45 C 80 45 100 45 100 100" fill="none" stroke="#10b981" stroke-width="5" stroke-linecap="round" class="anim-flow opacity-0 transition-opacity duration-500" vector-effect="non-scaling-stroke" />
                         </svg>
-                        <span class="mt-2 font-medium text-slate-600">Véhicule</span>
                     </div>
+
+                    <!-- BOTTOM ROW -->
+
+                    <!-- Car (Cols 1-9) -->
+                    <div class="col-span-9 flex justify-end items-end relative z-20 pr-4 mt-8">
+                        <div class="w-full max-w-[400px] flex items-center justify-center relative transition-transform duration-500" id="carBox">
+                            <!-- Custom Sedan EV Side Profile SVG from user -->
+                            <svg class="w-full h-full text-slate-700 transition-all duration-500 drop-shadow-2xl" id="carIcon" viewBox="0 0 1280 671" fill="currentColor">
+                                <defs>
+                                    <linearGradient id="waveGradient" y1="0%" y2="0%">
+                                        <animate id="carAnimWave1" attributeName="x1" from="65%" to="-60%" dur="10s" repeatCount="indefinite" />
+                                        <animate id="carAnimWave2" attributeName="x2" from="125%" to="0%" dur="10s" repeatCount="indefinite" />
+                                        <stop offset="0%" stop-color="#065f46" />
+                                        <stop offset="48%" stop-color="#065f46" />
+                                        <stop offset="50%" stop-color="#34d399" />
+                                        <stop offset="80%" stop-color="#059669" />
+                                        <stop offset="100%" stop-color="#065f46" />
+                                    </linearGradient>
+                                </defs>
+                                <g transform="translate(0.000000,671.000000) scale(0.100000,-0.100000)" stroke="none">
+                                    <path d="M8680 4669 c-1171 -47 -2223 -163 -2675 -295 -202 -58 -569 -246 -920 -469 -88 -56 -176 -110 -195 -120 -19 -9 -48 -30 -65 -45 -16 -15 -70 -54 -120 -87 l-90 -60 -207 -17 c-253 -20 -777 -85 -1028 -127 -685 -113 -995 -208 -1157 -353 -32 -29 -84 -71 -115 -94 -64 -47 -64 -48 -72 -177 -9 -141 -12 -152 -55 -162 -26 -7 -36 -14 -34 -27 1 -11 -11 -30 -26 -45 -20 -19 -31 -43 -40 -85 -6 -33 -22 -78 -36 -101 -21 -36 -23 -46 -13 -72 9 -23 6 -57 -12 -164 -27 -160 -27 -185 -2 -218 10 -14 19 -41 20 -59 0 -18 6 -40 13 -48 9 -11 9 -17 -1 -29 -8 -10 -11 -31 -7 -60 4 -26 3 -45 -3 -45 -15 0 -36 -51 -39 -92 -2 -47 34 -128 87 -195 37 -46 50 -54 109 -72 130 -38 321 -62 863 -107 41 -3 85 -13 98 -21 86 -54 286 -97 531 -113 211 -15 345 1 442 50 35 18 67 19 591 20 568 0 746 7 1288 56 106 10 185 13 187 8 12 -36 100 -152 162 -215 122 -122 199 -157 413 -189 290 -42 567 -52 673 -25 184 48 364 225 478 468 l42 89 50 -6 c35 -4 103 4 220 25 94 16 424 72 735 124 942 158 1255 212 1474 256 158 32 211 39 214 30 2 -7 26 -45 53 -85 47 -71 96 -114 151 -135 46 -17 234 -32 410 -33 163 0 168 0 212 26 108 63 190 221 232 445 15 78 21 91 63 141 71 81 117 153 141 218 38 99 52 371 27 482 -9 36 -18 97 -22 135 -17 178 -77 455 -107 492 -6 7 -83 48 -172 91 -207 101 -307 164 -530 332 -99 75 -215 159 -256 187 -155 103 -398 252 -475 291 -258 128 -531 213 -825 256 -92 14 -429 38 -470 34 -8 0 -103 -5 -210 -9z"/>
+                                </g>
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Wire 3: Bottom Loop (Cols 10-12) -->
+                    <div class="col-span-3 relative z-10 pointer-events-none min-h-[100px] mt-8">
+                        <svg class="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
+                            <!-- Starts top-right, arcs to bottom-left (into the car's charge port) -->
+                            <path d="M 100 0 C 100 65 50 65 -15 65" fill="none" stroke="#1e293b" stroke-width="5" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+                            <path id="animWire2" d="M 100 0 C 100 65 50 65 -15 65" fill="none" stroke="#10b981" stroke-width="5" stroke-linecap="round" class="anim-flow opacity-0 transition-opacity duration-500" vector-effect="non-scaling-stroke" />
+                        </svg>
+                    </div>
+
                 </div>
                 
-                <div class="text-center">
-                    <span class="text-sm text-slate-400 uppercase tracking-wide">État Actuel</span>
-                    <h2 id="lblState" class="text-2xl font-bold text-slate-800">--</h2>
-                    <p id="lblError" class="text-red-500 text-sm mt-1 font-medium"></p>
-                </div>
             </div>
 
-            <!-- Panneau Télémétrie -->
-            <div class="bg-white rounded-xl shadow-sm p-6 border border-slate-100 flex flex-col justify-center">
-                <h3 class="text-lg font-semibold text-slate-700 mb-4 border-b pb-2">Mesures en temps réel</h3>
-                <div class="space-y-4">
-                    <div class="flex justify-between items-center">
-                        <span class="text-slate-500">Tension</span>
-                        <span id="valVoltage" class="font-mono text-xl font-bold">-- V</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-slate-500">Courant</span>
-                        <span id="valCurrent" class="font-mono text-xl font-bold">-- A</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-slate-500">Puissance</span>
-                        <span id="valPower" class="font-mono text-xl font-bold">-- W</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <span class="text-slate-500">Énergie</span>
-                        <span id="valEnergy" class="font-mono text-xl font-bold text-blue-600">-- Wh</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Panneau Contrôles -->
-            <div id="controlsPanel" class="bg-white rounded-xl shadow-sm p-6 border border-slate-100 md:col-span-2">
-                <h3 class="text-lg font-semibold text-slate-700 mb-6">Contrôle de Charge</h3>
-                
-                <div class="flex flex-col md:flex-row items-center gap-8">
-                    <!-- Slider Courant -->
-                    <div class="flex-1 w-full">
-                        <div class="flex justify-between mb-2">
-                            <label class="font-medium text-slate-600">Limite de Courant</label>
-                            <span id="lblSlider" class="font-bold text-blue-600">16 A</span>
-                        </div>
-                        <input type="range" id="currentSlider" min="10" max="32" value="16" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer">
-                        <div class="flex justify-between text-xs text-slate-400 mt-1">
-                            <span>10A</span>
-                            <span>32A</span>
-                        </div>
-                    </div>
-
-                    <!-- Boutons d'Action -->
-                    <div class="flex gap-4">
-                        <button id="btnStart" class="px-6 py-3 bg-green-500 hover:bg-green-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow transition-colors">
-                            ▶ Démarrer
-                        </button>
-                        <button id="btnStop" class="px-6 py-3 bg-red-500 hover:bg-red-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-lg shadow transition-colors">
-                            ⏹ Arrêter
-                        </button>
-                    </div>
-                </div>
+            <!-- Discrete State Label at the bottom of the visualizer -->
+            <div class="mt-auto pt-2 text-center relative z-30">
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">État système</span>
+                <div id="lblState" class="text-sm font-semibold text-slate-300">Recherche de la borne...</div>
+                <div id="lblError" class="text-rose-500 text-xs mt-1 font-medium h-4"></div>
             </div>
         </div>
     </div>
 
-    <script>
-        const svgCharger = document.getElementById('svgCharger');
-        const svgCar = document.getElementById('svgCar');
-        const svgCable = document.getElementById('svgCable');
-        const lblState = document.getElementById('lblState');
-        const lblError = document.getElementById('lblError');
+    <!-- RIGHT COLUMN : Data & Controls -->
+    <div class="lg:col-span-5 flex flex-col gap-6">
         
-        const valVoltage = document.getElementById('valVoltage');
-        const valCurrent = document.getElementById('valCurrent');
-        const valPower = document.getElementById('valPower');
-        const valEnergy = document.getElementById('valEnergy');
+        <!-- Telemetry Grid -->
+        <div class="grid grid-cols-2 gap-4">
+            <!-- Tension -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-center">
+                <div class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    Tension
+                </div>
+                <div class="flex items-baseline space-x-1">
+                    <span id="valVoltage" class="text-3xl font-extrabold text-white font-mono tracking-tight">--</span>
+                    <span class="text-slate-500 font-semibold">V</span>
+                </div>
+            </div>
+            <!-- Courant -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-center">
+                <div class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    Courant
+                </div>
+                <div class="flex items-baseline space-x-1">
+                    <span id="valCurrent" class="text-3xl font-extrabold text-white font-mono tracking-tight">--</span>
+                    <span class="text-slate-500 font-semibold">A</span>
+                </div>
+            </div>
+            <!-- Puissance -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-center relative overflow-hidden group">
+                <div class="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2 relative z-10">
+                    <svg class="w-4 h-4 text-emerald-500/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
+                    Puissance
+                </div>
+                <div class="flex items-baseline space-x-1 relative z-10">
+                    <span id="valPower" class="text-3xl font-extrabold text-emerald-400 font-mono tracking-tight glow-text transition-all duration-300">--</span>
+                    <span class="text-emerald-600 font-semibold">W</span>
+                </div>
+            </div>
+            <!-- Energie -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-center relative overflow-hidden group">
+                <div class="absolute inset-0 bg-sky-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2 relative z-10">
+                    <svg class="w-4 h-4 text-sky-500/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    Énergie
+                </div>
+                <div class="flex items-baseline space-x-1 relative z-10">
+                    <span id="valEnergy" class="text-3xl font-extrabold text-sky-400 font-mono tracking-tight transition-all duration-300">--</span>
+                    <span class="text-sky-600 font-semibold">Wh</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Panel -->
+        <div id="controlsPanel" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex-1 flex flex-col justify-between transition-opacity duration-300 min-h-[220px]">
+            <div>
+                <h3 class="text-sm font-bold text-slate-300 uppercase tracking-widest mb-6">Paramètres de charge</h3>
+
+                <!-- Slider -->
+                <div class="mb-8 bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                    <div class="flex justify-between items-end mb-4">
+                        <label class="text-xs font-bold text-slate-400 uppercase tracking-wide">Consigne de Courant</label>
+                        <div class="bg-sky-500/10 px-3 py-1 rounded border border-sky-500/20">
+                            <span id="lblSlider" class="font-bold text-sky-400 font-mono text-sm">16 A</span>
+                        </div>
+                    </div>
+                    <input type="range" id="currentSlider" min="10" max="32" step="1" value="16">
+                    <div class="flex justify-between text-[10px] font-bold text-slate-600 mt-3 font-mono">
+                        <span>MIN 10A</span>
+                        <span>MAX 32A</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex gap-4 mt-auto">
+                <button id="btnStart" class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-bold py-4 rounded-xl transition-all active:scale-95 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    DÉMARRER
+                </button>
+                <button id="btnStop" class="flex-1 bg-rose-500 hover:bg-rose-400 text-white font-bold py-4 rounded-xl transition-all active:scale-95 shadow-[0_0_20px_rgba(244,63,94,0.2)] hover:shadow-[0_0_25px_rgba(244,63,94,0.4)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
+                    ARRÊTER
+                </button>
+            </div>
+        </div>
         
-        const slider = document.getElementById('currentSlider');
-        const lblSlider = document.getElementById('lblSlider');
-        const btnStart = document.getElementById('btnStart');
-        const btnStop = document.getElementById('btnStop');
-        const controlsPanel = document.getElementById('controlsPanel');
-        const linkyBox = document.getElementById('linkyBox');
-        const linkyLed = document.getElementById('linkyLed');
-        const linkyLabel = document.getElementById('linkyLabel');
+    </div>
+</main>
 
-        let isActionPending = false;
-        let lastReportedState = "";
+<script>
+    // Elements
+    const lblState = document.getElementById('lblState');
+    const lblError = document.getElementById('lblError');
+    const valVoltage = document.getElementById('valVoltage');
+    const valCurrent = document.getElementById('valCurrent');
+    const valPower = document.getElementById('valPower');
+    const valEnergy = document.getElementById('valEnergy');
+    const slider = document.getElementById('currentSlider');
+    const lblSlider = document.getElementById('lblSlider');
+    const btnStart = document.getElementById('btnStart');
+    const btnStop = document.getElementById('btnStop');
+    const controlsPanel = document.getElementById('controlsPanel');
+    
+    // Visualizer Elements
+    const chargerBox = document.getElementById('chargerBox');
+    const chargerIcon = document.getElementById('chargerIcon');
+    const chargerLed = document.getElementById('chargerLed');
+    const carIcon = document.getElementById('carIcon');
+    const carBox = document.getElementById('carBox');
+    
+    // Linky
+    const linkyBox = document.getElementById('linkyBox');
+    const linkyContainer = document.getElementById('linkyContainer');
+    const linkyLed = document.getElementById('linkyLed');
+    const linkyLabel = document.getElementById('linkyLabel');
+    const linkyIcon = document.getElementById('linkyIcon');
+    const animWireLinky = document.getElementById('animWireLinky');
+    
+    // Header & BT
+    const btToggle = document.getElementById('btToggle');
+    const boardInfo = document.getElementById('boardInfo');
+    const subInfo = document.getElementById('subInfo');
 
-        const linkyRefreshIcon = document.getElementById('linkyRefreshIcon');
+    let isActionPending = false;
+    let lastReportedState = "";
 
-        // Met à jour l'indicateur Linky
-        function updateLinky(ticMode) {
-            linkyBox.className = 'linky-box group';
-            linkyLed.className = 'linky-led';
-            linkyRefreshIcon.classList.remove('animate-spin');
-            
-            switch(ticMode) {
-                case '9600':
-                    linkyBox.classList.add('linky-connected');
-                    linkyLed.classList.add('linky-led-on');
-                    linkyLabel.innerText = 'Standard';
-                    linkyLabel.className = 'text-xs text-center font-semibold text-green-600 leading-tight px-2';
-                    break;
-                case '1200':
-                    linkyBox.classList.add('linky-connected');
-                    linkyLed.classList.add('linky-led-on');
-                    linkyLabel.innerText = 'Historique';
-                    linkyLabel.className = 'text-xs text-center font-semibold text-green-600 leading-tight px-2';
-                    break;
-                case '0':
-                    linkyBox.classList.add('linky-disconnected');
-                    linkyLed.classList.add('linky-led-off');
-                    linkyLabel.innerText = 'Non présent';
-                    linkyLabel.className = 'text-xs text-center text-slate-400 leading-tight px-2';
-                    break;
-                case 'detecting':
-                    linkyBox.classList.add('linky-disconnected');
-                    linkyLed.classList.add('linky-led-off');
-                    linkyLabel.innerText = 'Détection...';
-                    linkyLabel.className = 'text-xs text-center text-blue-500 font-medium animate-pulse leading-tight px-2';
-                    linkyRefreshIcon.classList.add('animate-spin');
-                    break;
-                default: // "" = pas encore détecté
-                    linkyBox.classList.add('linky-disconnected');
-                    linkyLed.classList.add('linky-led-off');
-                    linkyLabel.innerText = '...';
-                    linkyLabel.className = 'text-xs text-center text-slate-400 leading-tight px-2';
-                    break;
-            }
+    function updateLinky(ticMode) {
+        linkyBox.classList.remove('animate-pulse');
+        linkyLed.className = 'absolute -top-1 -right-1 w-3 h-3 md:w-4 md:h-4 rounded-full border-2 border-slate-900 bg-slate-700 transition-colors';
+        linkyIcon.className = 'w-6 h-6 md:w-8 md:h-8 text-slate-600 transition-colors';
+        linkyContainer.className = 'w-14 h-14 md:w-16 md:h-16 rounded-xl bg-slate-950 border-2 border-slate-800 flex items-center justify-center transition-all duration-300 shadow-inner';
+        
+        let labelText = "";
+        
+        switch(ticMode) {
+            case '9600':
+                linkyLed.classList.replace('bg-slate-700', 'bg-sky-500');
+                linkyLed.classList.add('shadow-[0_0_8px_rgba(14,165,233,0.8)]');
+                linkyIcon.classList.replace('text-slate-600', 'text-sky-400');
+                linkyContainer.classList.add('border-sky-500/30');
+                animWireLinky.classList.remove('opacity-0');
+                animWireLinky.style.animationDuration = '0.5s';
+                labelText = 'TIC Standard (9600 bauds)';
+                break;
+            case '1200':
+                linkyLed.classList.replace('bg-slate-700', 'bg-sky-500');
+                linkyLed.classList.add('shadow-[0_0_8px_rgba(14,165,233,0.8)]');
+                linkyIcon.classList.replace('text-slate-600', 'text-sky-400');
+                linkyContainer.classList.add('border-sky-500/30');
+                animWireLinky.classList.remove('opacity-0');
+                animWireLinky.style.animationDuration = '2.0s';
+                labelText = 'TIC Historique (1200 bauds)';
+                break;
+            case 'detecting':
+                linkyBox.classList.add('animate-pulse');
+                linkyIcon.classList.replace('text-slate-600', 'text-sky-400');
+                linkyContainer.classList.add('border-sky-500/50');
+                animWireLinky.classList.add('opacity-0');
+                labelText = 'Détection en cours...';
+                break;
+            case '0':
+                animWireLinky.classList.add('opacity-0');
+                labelText = 'TIC Non Connecté';
+                break;
+            default: 
+                animWireLinky.classList.add('opacity-0');
+                labelText = '--';
+                break;
         }
 
-        async function fetchInfo() {
-            try {
-                const response = await fetch('/api/info');
-                const info = await response.json();
-                const btBox = document.getElementById('btBox');
-                if (info.bluetooth_enabled === true) {
-                    btBox.className = 'bt-box bt-on scale-75 shadow-sm';
-                } else if (info.bluetooth_enabled === false) {
-                    btBox.className = 'bt-box bt-off scale-75 shadow-sm';
-                }
-            } catch (err) {
-                console.error("Erreur de récupération des infos", err);
-            }
+        if (labelText !== '--') {
+            linkyLabel.classList.remove('opacity-0');
+            linkyLabel.innerText = labelText;
+        } else {
+            linkyLabel.classList.add('opacity-0');
         }
+    }
 
-        async function toggleBluetooth() {
-            const btBox = document.getElementById('btBox');
-            // Check current visual state to determine desired action
-            const isCurrentlyOn = btBox.classList.contains('bt-on');
-            const desiredState = !isCurrentlyOn;
+    async function fetchInfo() {
+        try {
+            const response = await fetch('/api/info');
+            const info = await response.json();
             
-            // Optimistic update
-            btBox.className = desiredState ? 'bt-box bt-on scale-75 shadow-sm' : 'bt-box bt-off scale-75 shadow-sm';
-
-            try {
-                const response = await fetch('/api/bluetooth', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ enabled: desiredState })
-                });
-                
-                if (!response.ok) {
-                    const data = await response.json();
-                    alert("Erreur: " + data.error);
-                    // Revert visually if error
-                    btBox.className = isCurrentlyOn ? 'bt-box bt-on scale-75 shadow-sm' : 'bt-box bt-off scale-75 shadow-sm';
-                }
-                
-                // Fetch info to confirm actual state, with a small delay to allow serial loop to process
-                setTimeout(fetchInfo, 1000);
-            } catch (error) {
-                console.error(error);
-                btBox.className = isCurrentlyOn ? 'bt-box bt-on scale-75 shadow-sm' : 'bt-box bt-off scale-75 shadow-sm';
+            if (info.bluetooth_enabled !== null) {
+                btToggle.checked = info.bluetooth_enabled;
             }
+            
+            let line1 = [];
+            if (info.reference) line1.push(`Réf: ${info.reference}`);
+            if (info.hardware_version) line1.push(`HW: ${info.hardware_version}`);
+            if (info.software_version) line1.push(`SW: ${info.software_version}`);
+            boardInfo.innerText = line1.length > 0 ? line1.join(' | ') : 'Informations non disponibles';
+            
+            let line2 = [];
+            if (info.serial_number) line2.push(`SN: ${info.serial_number}`);
+            if (info.week_year_production) line2.push(`Prod: ${info.week_year_production}`);
+            subInfo.innerText = line2.length > 0 ? line2.join(' | ') : '';
+            
+        } catch (err) {
+            console.error("Erreur infos", err);
         }
+    }
 
-        async function refreshTic() {
-            if (lastReportedState !== 'A') {
-                alert("La détection du TIC n'est possible que lorsque la borne est libre (Statut A).");
-                return;
-            }
-            if (isActionPending) return;
+    async function toggleBluetooth() {
+        const desiredState = btToggle.checked;
+        try {
+            const response = await fetch('/api/bluetooth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: desiredState })
+            });
             
-            // Set UI immediately to detecting
-            updateLinky('detecting');
-            sendPostAction('/api/tic/refresh');
-        }
-
-        // Met à jour les visuels en fonction du State (A à V) et de la fin de charge
-        function updateVisuals(state, isChargeComplete) {
-            // Reset toutes les classes
-            svgCharger.className = 'svg-icon';
-            svgCar.className = 'svg-icon';
-            svgCable.className = 'w-16 h-1 rounded';
-            let stateLabel = `Statut: ${state}`;
-            
-            let startEnabled = false;
-            let stopEnabled = false;
-
-            switch(state) {
-                case 'A': // Déconnecté ou véhicule branché mais coupé via T2CNOK
-                    svgCharger.classList.add('charger-grey');
-                    svgCar.classList.add('car-grey');
-                    svgCable.classList.add('bg-slate-300');
-                    stateLabel = "Libre / Coupé (A)";
-                    startEnabled = true; // T2COK doit être possible même en A
-                    break;
-                case 'B': // Branché, attente autorisation
-                    svgCharger.classList.add('charger-default');
-                    svgCar.classList.add('car-white');
-                    svgCable.classList.add('bg-slate-400');
-                    stateLabel = "Véhicule Branché (B)";
-                    startEnabled = true;
-                    break;
-                case 'C': // Borne prête, en attente du véhicule
-                    svgCharger.classList.add('charger-orange');
-                    svgCar.classList.add('car-orange');
-                    svgCable.classList.add('bg-orange-400');
-                    stateLabel = "En attente du véhicule (C)";
-                    stopEnabled = true;
-                    break;
-                case 'D': // En charge (ventilation non requise)
-                case 'E': // En charge (ventilation requise)
-                    svgCharger.classList.add('charger-default');
-                    svgCar.classList.add('car-green');
-                    svgCable.classList.add('bg-green-500');
-                    stateLabel = "⚡ En Charge (" + state + ")";
-                    stopEnabled = true;
-                    break;
-                case 'K': // Attente autorisation borne
-                case 'O': // Attente autorisation borne (variante)
-                    svgCharger.classList.add('charger-orange');
-                    svgCar.classList.add('car-white');
-                    svgCable.classList.add('bg-orange-300');
-                    stateLabel = "Attente d'autorisation (" + state + ")";
-                    startEnabled = true;
-                    break;
-                case 'L': // Débranché physiquement
-                    svgCharger.classList.add('charger-default');
-                    svgCar.classList.add('car-grey');
-                    svgCable.classList.add('bg-slate-200');
-                    stateLabel = "Débranché (L)";
-                    break;
-                case 'M': // Stop manuel (bouton physique)
-                    svgCharger.classList.add('charger-grey');
-                    svgCar.classList.add('car-white');
-                    svgCable.classList.add('bg-slate-300');
-                    stateLabel = "Arrêt Manuel (M)";
-                    startEnabled = true;
-                    break;
-                case 'F': case 'G': case 'H': 
-                case 'R': case 'S': case 'T': 
-                case 'U': case 'V':
-                    svgCharger.classList.add('charger-red');
-                    svgCar.classList.add('car-orange');
-                    svgCable.classList.add('bg-red-400');
-                    stateLabel = "⛔ ERREUR (" + state + ")";
-                    break;
-                default:
-                    svgCharger.classList.add('charger-default');
-                    svgCar.classList.add('car-grey');
-                    svgCable.classList.add('bg-slate-300');
-                    if (state === "") stateLabel = "En attente de la borne...";
-                    break;
-            }
-
-            // Surcharge visuelle si la charge est déclarée terminée par la borne
-            if (isChargeComplete && state !== 'A' && state !== 'L') {
-                svgCar.className = 'svg-icon car-green-solid';
-                svgCable.className = 'w-16 h-1 rounded bg-green-400';
-                stateLabel = "Charge Terminée 🔋";
-                stopEnabled = true; // Permettre de stopper même après charge complète
-            }
-
-            lblState.innerText = stateLabel;
-            
-            if (!isActionPending) {
-                btnStart.disabled = !startEnabled;
-                btnStop.disabled = !stopEnabled;
-            }
-        }
-
-        let isDraggingSlider = false;
-
-        // Fetch des données de télémétrie
-        async function fetchTelemetry() {
-            try {
-                const response = await fetch('/api/telemetry');
+            if (!response.ok) {
                 const data = await response.json();
-                
-                valVoltage.innerText = data.voltage.toFixed(1) + " V";
-                valCurrent.innerText = data.current.toFixed(1) + " A";
-                valPower.innerText = (data.power).toFixed(0) + " W";
-                valEnergy.innerText = (data.energy).toFixed(0) + " Wh";
-                
-                if (data.error_code && data.error_code !== "0000" && data.error_code !== "") {
-                    lblError.innerText = "Code Erreur : " + data.error_code;
-                } else {
-                    lblError.innerText = "";
-                }
-
-                // Mise à jour de la limite de courant (si on ne touche pas au curseur)
-                if (data.limit_amps && !isDraggingSlider && !isActionPending) {
-                    slider.value = data.limit_amps;
-                    lblSlider.innerText = data.limit_amps + " A";
-                }
-
-                lastReportedState = data.state;
-                updateLinky(data.tic_mode);
-                updateVisuals(data.state, data.charge_complete);
-                
-            } catch (err) {
-                console.error("Erreur de polling", err);
+                alert("Erreur: " + data.error);
+                btToggle.checked = !desiredState;
             }
+            setTimeout(fetchInfo, 1000);
+        } catch (error) {
+            console.error(error);
+            btToggle.checked = !desiredState;
         }
+    }
 
-        // --- Actions Utilisateur ---
-
-        function lockControls() {
-            isActionPending = true;
-            controlsPanel.classList.add('disabled-card');
-            btnStart.disabled = true;
-            btnStop.disabled = true;
+    async function refreshTic() {
+        if (lastReportedState !== 'A') {
+            alert("La borne doit être à l'état A (Libre) pour lancer une détection TIC.");
+            return;
         }
-
-        function unlockControls() {
-            isActionPending = false;
-            controlsPanel.classList.remove('disabled-card');
-            updateVisuals(lastReportedState); // Restore correct button states
+        try {
+            await fetch('/api/tic/refresh', { method: 'POST' });
+        } catch (err) {
+            console.error(err);
         }
+    }
 
-        // Requête générique avec lock
-        async function sendPostAction(url) {
-            lockControls();
-            try {
-                await fetch(url, { method: 'POST' });
-            } catch (err) {
-                console.error(err);
-            }
-            // Anti-rejeu + attente prise en compte par la borne
-            setTimeout(() => {
-                fetchTelemetry().then(unlockControls);
-            }, 1000);
+    function updateVisuals(state, isChargeComplete, currentAmps) {
+        let amps = Math.max(0, Math.min(32, currentAmps || 0));
+        let speed = (8.0 - (amps * (6.5 / 33.0))) / 6.0;
+        // Sécurité vitale : si speed atteint 0 (à 32A, 8 - 8 = 0), l'animation freeze. On force un minimum vital.
+        speed = Math.max(0.1, speed);
+
+        if (state === window.lastVisualState && 
+            isChargeComplete === window.lastChargeComplete && 
+            typeof window.lastAppliedSpeed !== 'undefined' && Math.abs(speed - window.lastAppliedSpeed) < 0.05) {
+            // No significant visual change, avoid DOM thrashing that causes animation saccades
+            return;
         }
-
-        // Events
-        btnStart.addEventListener('click', () => sendPostAction('/api/charge/start'));
-        btnStop.addEventListener('click', () => sendPostAction('/api/charge/stop'));
         
-        // Gestion de l'état de drag du curseur pour éviter les conflits avec le polling
-        slider.addEventListener('mousedown', () => isDraggingSlider = true);
-        slider.addEventListener('mouseup', () => isDraggingSlider = false);
-        slider.addEventListener('touchstart', () => isDraggingSlider = true);
-        slider.addEventListener('touchend', () => isDraggingSlider = false);
+        window.lastVisualState = state;
+        window.lastChargeComplete = isChargeComplete;
+        window.lastAppliedSpeed = speed;
 
-        // Slider interactif (UI instantanée)
-        slider.addEventListener('input', (e) => {
-            lblSlider.innerText = e.target.value + " A";
-        });
+        // Reset base styles
+        chargerBox.className = 'w-16 h-24 md:w-20 md:h-28 rounded-2xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center relative z-10 transition-all duration-500 shadow-2xl';
+        chargerIcon.className = 'w-8 h-8 md:w-10 md:h-10 text-slate-600 transition-colors duration-500';
+        chargerLed.className = 'w-6 h-1 md:w-8 md:h-1.5 rounded-full bg-slate-700 mt-4 transition-all duration-500';
+        carIcon.className = 'w-full h-full text-slate-700 transition-all duration-500 drop-shadow-2xl';
+        carBox.classList.remove('scale-105');
+        const animWire1 = document.getElementById('animWire1');
+        const animWire2 = document.getElementById('animWire2');
+        if (animWire1) { animWire1.classList.add('opacity-0'); animWire1.classList.remove('anim-flow'); }
+        if (animWire2) { animWire2.classList.add('opacity-0'); animWire2.classList.remove('anim-flow'); }
+        carIcon.style.fill = ''; // Reset fill to currentColor
+        carIcon.classList.remove('animate-pulse');
+        
+        let stateLabel = state;
+        let startEnabled = false;
+        let stopEnabled = false;
 
-        // Envoi au relâchement du slider
-        slider.addEventListener('change', (e) => {
-            sendPostAction('/api/current/' + e.target.value);
-        });
+        switch(state) {
+            case 'A':
+                stateLabel = "Libre / Prêt (A)";
+                startEnabled = true;
+                break;
+            case 'B':
+                stateLabel = "Prise Branchée (B)";
+                startEnabled = true;
+                carIcon.classList.replace('text-slate-700', 'text-sky-500');
+                if(animWire1) animWire1.classList.remove('opacity-0');
+                if(animWire2) animWire2.classList.remove('opacity-0');
+                break;
+            case 'C':
+                stateLabel = "Attente du véhicule (C)";
+                stopEnabled = true;
+                carIcon.classList.replace('text-slate-700', 'text-sky-500');
+                carIcon.classList.add('animate-pulse');
+                if(animWire1) animWire1.classList.remove('opacity-0');
+                if(animWire2) animWire2.classList.remove('opacity-0');
+                break;
+            case 'D': case 'E':
+                stateLabel = state === 'E' ? "Charge en cours (E)" : "Charge en cours (D)";
+                stopEnabled = true;
+                // Charger Glow
+                chargerBox.classList.add('border-emerald-500/50', 'shadow-[0_0_30px_rgba(16,185,129,0.15)]');
+                chargerIcon.classList.replace('text-slate-600', 'text-emerald-400');
+                chargerLed.classList.replace('bg-slate-700', 'bg-emerald-400');
+                chargerLed.classList.add('shadow-[0_0_12px_rgba(16,185,129,1)]');
+                // Car Wave Gradient
+                carIcon.classList.replace('text-slate-700', 'text-emerald-500');
+                carIcon.style.fill = 'url(#waveGradient)';
+                carBox.classList.add('scale-105');
+                // Wire flow activation & speed
+                if (animWire1) { animWire1.classList.remove('opacity-0'); animWire1.classList.add('anim-flow'); }
+                if (animWire2) { animWire2.classList.remove('opacity-0'); animWire2.classList.add('anim-flow'); }
+                
+                const dur = speed.toFixed(2) + 's';
+                if (animWire1) {
+                    animWire1.style.animation = 'none';
+                    void animWire1.offsetHeight;
+                    animWire1.style.animation = '';
+                    animWire1.style.animationDuration = dur;
+                }
+                if (animWire2) {
+                    animWire2.style.animation = 'none';
+                    void animWire2.offsetHeight;
+                    animWire2.style.animation = '';
+                    animWire2.style.animationDuration = dur;
+                }
+                
+                const carAnimWave1 = document.getElementById('carAnimWave1');
+                const carAnimWave2 = document.getElementById('carAnimWave2');
+                const carDur = (speed * 6.25).toFixed(2) + 's';
+                if (carAnimWave1) {
+                    carAnimWave1.setAttribute('dur', carDur);
+                    if (typeof carAnimWave1.beginElement === 'function') carAnimWave1.beginElement();
+                }
+                if (carAnimWave2) {
+                    carAnimWave2.setAttribute('dur', carDur);
+                    if (typeof carAnimWave2.beginElement === 'function') carAnimWave2.beginElement();
+                }
+                break;
+            case 'W': case 'M':
+                stateLabel = state === 'W' ? "Arrêt en cours (W)" : "Arrêt terminé (M)";
+                carIcon.classList.replace('text-slate-700', 'text-emerald-800');
+                if(animWire1) animWire1.classList.remove('opacity-0');
+                if(animWire2) animWire2.classList.remove('opacity-0');
+                break;
+            case 'Y':
+                stateLabel = "Veille Profonde (Y)";
+                startEnabled = true;
+                chargerBox.classList.add('opacity-30');
+                break;
+            case 'F': case 'G': case 'H': 
+            case 'R': case 'S': case 'T': 
+            case 'U': case 'V':
+                stateLabel = "⛔ ERREUR (" + state + ")";
+                chargerBox.classList.add('border-rose-500/50');
+                chargerIcon.classList.replace('text-slate-600', 'text-rose-500');
+                chargerLed.classList.replace('bg-slate-700', 'bg-rose-500');
+                carIcon.classList.replace('text-slate-700', 'text-rose-400');
+                if(chargePort) chargePort.classList.replace('fill-slate-900', 'fill-rose-400');
+                break;
+            default:
+                if (state === "") stateLabel = "En attente...";
+                break;
+        }
 
-        // Boucle principale
-        setInterval(fetchTelemetry, 2000);
-        fetchTelemetry(); // Appel initial
-        fetchInfo(); // Appel initial infos
-    </script>
+        if (isChargeComplete && state !== 'A' && state !== 'L') {
+            carIcon.classList.replace('text-slate-700', 'text-emerald-500');
+            carIcon.classList.replace('text-sky-500', 'text-emerald-500');
+            stateLabel = "Charge Terminée 🔋";
+            stopEnabled = true;
+        }
+
+        lblState.innerText = stateLabel;
+        
+        if (!isActionPending) {
+            btnStart.disabled = !startEnabled;
+            btnStop.disabled = !stopEnabled;
+        }
+    }
+
+    let isDraggingSlider = false;
+
+    async function fetchTelemetry() {
+        try {
+            const response = await fetch('/api/telemetry');
+            const data = await response.json();
+            
+            valVoltage.innerText = data.voltage.toFixed(1);
+            valCurrent.innerText = data.current.toFixed(1);
+            valPower.innerText = (data.power).toFixed(0);
+            valEnergy.innerText = (data.energy).toFixed(0);
+            
+            if (data.error_code && data.error_code !== "0000" && data.error_code !== "") {
+                lblError.innerText = "Code Hardware : " + data.error_code;
+            } else {
+                lblError.innerText = "";
+            }
+
+            if (data.limit_amps && !isDraggingSlider && !isActionPending) {
+                slider.value = data.limit_amps;
+                lblSlider.innerText = data.limit_amps + " A";
+            }
+
+            lastReportedState = data.state;
+            updateLinky(data.tic_mode);
+            updateVisuals(data.state, data.charge_complete, data.current);
+            
+        } catch (err) {
+            console.error("Erreur polling", err);
+            lblState.innerText = "Hors Ligne";
+            lblState.classList.add('text-rose-500');
+        }
+    }
+
+    function lockControls() {
+        isActionPending = true;
+        controlsPanel.classList.add('opacity-50', 'pointer-events-none');
+    }
+
+    function unlockControls() {
+        isActionPending = false;
+        controlsPanel.classList.remove('opacity-50', 'pointer-events-none');
+        // Let polling restore state properly
+    }
+
+    async function sendPostAction(url) {
+        lockControls();
+        try {
+            await fetch(url, { method: 'POST' });
+        } catch (err) {
+            console.error(err);
+        }
+        setTimeout(() => {
+            fetchTelemetry().then(unlockControls);
+        }, 1000);
+    }
+
+    btnStart.addEventListener('click', () => sendPostAction('/api/charge/start'));
+    btnStop.addEventListener('click', () => sendPostAction('/api/charge/stop'));
+    
+    slider.addEventListener('mousedown', () => isDraggingSlider = true);
+    slider.addEventListener('mouseup', () => isDraggingSlider = false);
+    slider.addEventListener('touchstart', () => isDraggingSlider = true);
+    slider.addEventListener('touchend', () => isDraggingSlider = false);
+
+    slider.addEventListener('input', (e) => {
+        lblSlider.innerText = e.target.value + " A";
+    });
+    slider.addEventListener('change', (e) => {
+        sendPostAction('/api/current/' + e.target.value);
+    });
+
+    setInterval(fetchTelemetry, 2000);
+    fetchTelemetry(); 
+    fetchInfo(); 
+</script>
 </body>
 </html>
