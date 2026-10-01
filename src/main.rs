@@ -1,4 +1,5 @@
 mod api;
+pub mod flash;
 pub mod logger;
 mod serial;
 mod state;
@@ -25,6 +26,7 @@ async fn main() {
         info: Mutex::new(BoardInfo::default()),
         serial_tx: tx,
         tic_test_zero_count: Mutex::new(0),
+        flash_state: Mutex::new(flash::FlashState::default()),
     });
 
     // 1. Démarrer le daemon de communication Série
@@ -43,6 +45,8 @@ async fn main() {
     logger::log("SYS", "   - GET  /api/info, /api/telemetry");
     logger::log("SYS", "   - POST /api/charge/start, /api/charge/stop, /api/current/:amps");
     logger::log("SYS", "   - POST /api/tic/refresh, /api/command");
+    logger::log("SYS", "   - GET  /api/flash/status, /api/flash/firmwares ⚠️ EXPÉRIMENTAL");
+    logger::log("SYS", "   - POST /api/flash/prepare, /api/flash/execute, /api/flash/upload ⚠️ EXPÉRIMENTAL");
     
     let listener = tokio::net::TcpListener::bind(addr).await.expect("Impossible de lier le port 8080");
     axum::serve(listener, router).await.expect("Erreur fatale du serveur web");

@@ -1,3 +1,4 @@
+use crate::flash::FlashState;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -48,6 +49,8 @@ pub struct AppState {
     // Canal utilisé par l'API pour envoyer des commandes au thread Série
     pub serial_tx: mpsc::Sender<String>,
     pub tic_test_zero_count: Mutex<u32>,
+    // État du flash firmware (expérimental)
+    pub flash_state: Mutex<FlashState>,
 }
 
 // On définit un type plus court pour faciliter l'usage dans Axum
