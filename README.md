@@ -122,13 +122,11 @@ Pour lancer l'application automatiquement, créez un service Systemd :
    StandardOutput=inherit
    StandardError=inherit
    Restart=always
-   User=pi
-   Group=dialout
+   User=root
 
    [Install]
    WantedBy=multi-user.target
    ```
-   *(Note : `Group=dialout` est souvent nécessaire pour que l'utilisateur `pi` puisse lire le port série USB sans droits root).*
 3. Activez et démarrez le service :
    ```bash
    sudo systemctl enable greenup-link
