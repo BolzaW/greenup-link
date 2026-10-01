@@ -12,7 +12,7 @@ mkdir "release_pkg"
 
 REM 2. Compilation en mode RELEASE via WSL
 echo [1/3] Compilation en cours (WSL - Cargo Zigbuild Release)...
-wsl -d Ubuntu -e bash -c "cd '/mnt/c/Users/rapha/Desktop/Maj borne legrand/retro_ingenierie/legrand/greenup-link' && PATH=/usr/local/bin:$PATH ~/.cargo/bin/cargo zigbuild --release --target armv7-unknown-linux-gnueabihf.2.24"
+wsl -d Ubuntu -e bash -c "PATH=/usr/local/bin:$PATH ~/.cargo/bin/cargo zigbuild --release --target armv7-unknown-linux-gnueabihf.2.24"
 
 if %errorlevel% neq 0 (
     echo.

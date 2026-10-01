@@ -6,7 +6,7 @@ echo.
 
 REM Utilisation de cargo-zigbuild. 
 REM On force PATH=/usr/local/bin:$PATH pour que cargo-zigbuild trouve bien le zig Linux et non une commande Windows.
-wsl -d Ubuntu -e bash -c "cd '/mnt/c/Users/rapha/Desktop/Maj borne legrand/retro_ingenierie/legrand/greenup-link' && PATH=/usr/local/bin:$PATH ~/.cargo/bin/cargo zigbuild --target armv7-unknown-linux-gnueabihf.2.24"
+wsl -d Ubuntu -e bash -c "PATH=/usr/local/bin:$PATH ~/.cargo/bin/cargo zigbuild --target armv7-unknown-linux-gnueabihf.2.24"
 
 echo.
 echo ====================================================
