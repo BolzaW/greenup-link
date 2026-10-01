@@ -1,6 +1,7 @@
 # Protocole Série - Carte de Puissance Legrand GreenUp
 
-Ce document recense les commandes ASCII identifiées dans le code source Java d'origine (principalement dans `ComPortUSB.java`). 
+Ce document recense les commandes ASCII utilisées pour communiquer avec la carte de puissance. 
+Ces commandes ont été déduites d'activités de rétro-ingénierie et de décompilation des logiciels d'origine (.jar) et du firmware (.hex).
 Toutes ces commandes doivent être envoyées à la carte de puissance suivies d'un caractère "Retour Chariot" (Carriage Return), c'est-à-dire `\r` (code ASCII 0x0D).
 
 ## 🔌 1. Initialisation & Système
@@ -56,4 +57,4 @@ Ces commandes gèrent l'interaction avec le badge de l'utilisateur ou la supervi
 | `OCPPCTO:XXX` | Connection Time Out : Règle le délai d'expiration (timeout) de connexion. |
 
 ---
-*Note pour les tests : Dans le terminal interactif Rust, tu n'as pas besoin de taper le `\r`, le programme l'ajoute automatiquement quand tu appuies sur la touche Entrée.*
+*Note pour les tests : Dans le terminal cli_greenup-link.ps1, pas besoin de taper le `\r`, le programme l'ajoute automatiquement à l'appuie sur la touche Entrée.*
