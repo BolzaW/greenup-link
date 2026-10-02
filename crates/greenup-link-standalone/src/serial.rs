@@ -24,6 +24,8 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
                 // --- SÉQUENCE D'INITIALISATION ---
                 // On interroge la borne pour récupérer les infos fixes (pour l'IHM) et l'état courant
                 let init_commands = [
+                    "RaspberryPiModeOK\r",
+                    "TICTM:1\r",
                     "SoftwareVersion?\r",
                     "HardwareVersion?\r",
                     "SerialNumber?\r",
