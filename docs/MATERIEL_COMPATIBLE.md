@@ -30,5 +30,3 @@ Ce tableau liste les différentes bornes matérielles Legrand compatibles (basé
 | Green’up Premium 3,7–4,6 kW T2 + schuko (Sans Disjoncteur) | **0 590 70** | 3,7 kW | 4,6 kW | Monophasé | 1 | 1 |
 | Green’up Premium 3,7–7,4 kW T2 + schuko (Sans Disjoncteur) | **0 590 71** | 3,7 kW | 7,4 kW | Monophasé | 1 | 1 |
 
-
-*(Note : L'orthographe officielle de la prise standard européenne est "Schuko", souvent écrit "shucko" dans les documentations).*
