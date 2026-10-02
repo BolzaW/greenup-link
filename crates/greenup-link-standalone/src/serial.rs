@@ -21,6 +21,25 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
             Ok(mut port) => {
                 logger::log("SERIE", &format!("Port {} ouvert avec succès", port_name));
 
+                // --- SÉQUENCE D'INITIALISATION ---
+                // On interroge la borne pour récupérer les infos fixes (pour l'IHM) et l'état courant
+                let init_commands = [
+                    "SoftwareVersion?\r",
+                    "HardwareVersion?\r",
+                    "SerialNumber?\r",
+                    "Reference?\r",
+                    "WeekYearProduction?\r",
+                    "BT?\r",
+                    "FM?\r",
+                    "State?\r",
+                ];
+                for cmd in init_commands.iter() {
+                    if let Err(e) = port.write_all(cmd.as_bytes()) {
+                        logger::log("SERIE", &format!("⚠️ Erreur d'envoi init: {:?}", e));
+                    }
+                    std::thread::sleep(Duration::from_millis(20)); // Petit délai pour laisser le temps à l'ATmega
+                }
+
                 let mut read_buf = [0u8; 1024];
                 let mut line_buffer = String::new();
 
