@@ -160,7 +160,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
     } else if line.starts_with("FM:") {
         let fm_val = line.replace("FM:", "");
-        if fm_val != "1" && fm_val != "1F" {
+        if fm_val != "1" {
             logger::log("SERIE", &format!("⚠️ Mode FM détecté = {}, forçage en FM:1", fm_val));
             let _ = state.serial_tx.try_send("FM:1\r".to_string());
         }

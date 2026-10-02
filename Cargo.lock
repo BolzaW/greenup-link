@@ -218,7 +218,7 @@ dependencies = [
 
 [[package]]
 name = "greenup-link"
-version = "0.0.1"
+version = "0.1.0-SNAPSHOT"
 dependencies = [
  "axum",
  "chrono",
