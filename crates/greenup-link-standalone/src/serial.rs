@@ -24,8 +24,7 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
                 // --- SÉQUENCE D'INITIALISATION ---
                 // On interroge la borne pour récupérer les infos fixes (pour l'IHM) et l'état courant
                 let init_commands = [
-                    "RaspberryPiModeOK\r",
-                    "TICTM:1\r",
+                    "RaspberryPiModeOK\r",                    
                     "SoftwareVersion?\r",
                     "HardwareVersion?\r",
                     "SerialNumber?\r",
@@ -34,12 +33,13 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
                     "BT?\r",
                     "FM?\r",
                     "State?\r",
+                    "TICTM:1\r",
                 ];
                 for cmd in init_commands.iter() {
                     if let Err(e) = port.write_all(cmd.as_bytes()) {
                         logger::log("SERIE", &format!("⚠️ Erreur d'envoi init: {:?}", e));
                     }
-                    std::thread::sleep(Duration::from_millis(20)); // Petit délai pour laisser le temps à l'ATmega
+                    std::thread::sleep(Duration::from_millis(150)); // Petit délai pour laisser le temps à l'ATmega
                 }
 
                 let mut read_buf = [0u8; 1024];
@@ -145,14 +145,14 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if val != "0" {
                 logger::log("SERIE", &format!("🔌 TIC détecté : {} baud", val));
                 if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = val; }
-                let _ = state.serial_tx.try_send("TICTM:0\r".to_string());
+                // On ne renvoie plus TICTM:0, on laisse la borne remonter ses trames de test
             } else {
                 if let Ok(mut count) = state.tic_test_zero_count.lock() {
                     *count += 1;
                     if *count >= TICTM_MAX_ZEROS {
                         logger::log("SERIE", "🔌 TIC non détecté (absent)");
                         if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "0".to_string(); }
-                        let _ = state.serial_tx.try_send("TICTM:0\r".to_string());
+                        // Idem, on ne force plus l'arrêt du mode test pour l'instant
                     }
                 }
             }
