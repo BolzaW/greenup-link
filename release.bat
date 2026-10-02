@@ -2,7 +2,7 @@
 setlocal
 
 echo ====================================================
-echo   Generation de la Release Green'Up Link v0.0.1
+echo   Generation de la Release Green'Up Link v0.1.0
 echo ====================================================
 echo.
 
@@ -23,7 +23,7 @@ if %errorlevel% neq 0 (
 
 REM 3. Copie des fichiers dans le dossier de release
 echo [2/3] Preparation des fichiers...
-copy "target\armv7-unknown-linux-gnueabihf\release\greenup-link" "release_pkg\greenup-link" >nul
+copy "target\armv7-unknown-linux-gnueabihf\release\greenup-link-standalone" "release_pkg\greenup-link-standalone" >nul
 mkdir "release_pkg\scripts"
 copy "scripts\start_legrand.sh" "release_pkg\scripts\" >nul
 copy "scripts\stop_legrand.sh" "release_pkg\scripts\" >nul
@@ -31,10 +31,10 @@ copy "cli-greenup-link.ps1" "release_pkg\" >nul
 copy "README.md" "release_pkg\" >nul
 
 REM 4. Creation de l'archive ZIP via l'utilitaire natif tar (Windows 10+)
-echo [3/3] Creation de l'archive ZIP (greenup-link-v0.0.1.zip)...
-if exist "greenup-link-v0.0.1.zip" del "greenup-link-v0.0.1.zip"
+echo [3/3] Creation de l'archive ZIP (greenup-link-standalone-v0.1.0.zip)...
+if exist "greenup-link-standalone-v0.1.0.zip" del "greenup-link-standalone-v0.1.0.zip"
 cd release_pkg
-tar -a -c -f ..\greenup-link-v0.0.1.zip *
+tar -a -c -f ..\greenup-link-standalone-v0.1.0.zip *
 cd ..
 
 REM 5. Nettoyage
@@ -43,7 +43,6 @@ rmdir /S /Q "release_pkg"
 echo.
 echo ====================================================
 echo SUCCESS ! Release terminee avec succes.
-echo L'archive greenup-link-v0.0.1.zip est prete a etre 
-echo publiee sur la page Releases de GitHub !
+echo L'archive greenup-link-standalone-v0.1.0.zip est prete !
 echo ====================================================
 pause
