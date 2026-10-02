@@ -1,10 +1,10 @@
-use crate::logger;
 use crate::state::SharedState;
+use crate::logger;
 use std::io::{Read, Write};
 use std::time::Duration;
 use tokio::sync::mpsc;
+use greenup_protocol::{parse_line, ProtocolEvent};
 
-/// Nombre max de TICTestB:0 avant de conclure que le TIC est absent
 const TICTM_MAX_ZEROS: u32 = 5;
 
 pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
@@ -19,35 +19,7 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
             .open()
         {
             Ok(mut port) => {
-                logger::log("SERIE", "✅ Port ouvert. Envoi de la séquence d'initialisation...");
-                
-                // Trame magique
-                let _ = port.write_all(b"RaspberryPiModeOK\r");
-                logger::log("SERIE_TX", "RaspberryPiModeOK");
-                std::thread::sleep(Duration::from_millis(200));
-
-                // Demande des infos de base avec délais pour ne pas saturer le buffer RX
-                let init_cmds = [
-                    "SoftwareVersion?", "HardwareVersion?", "SerialNumber?",
-                    "Reference?", "WeekYearProduction?", "State?", "FM?", "CC?", "E?", "BT?",
-                ];
-                for cmd in &init_cmds {
-                    let full = format!("{}\r", cmd);
-                    let _ = port.write_all(full.as_bytes());
-                    logger::log("SERIE_TX", cmd);
-                    std::thread::sleep(Duration::from_millis(150));
-                }
-
-                // Séquence de détection TIC : on envoie TICTM:1 et on attend TICTestB:XXXX
-                if let Ok(mut count) = state.tic_test_zero_count.lock() {
-                    *count = 0;
-                }
-                if let Ok(mut tel) = state.telemetry.lock() {
-                    tel.tic_mode = "detecting".to_string(); // Indicateur pour l'IHM
-                }
-                let _ = port.write_all(b"TICTM:1\r");
-                logger::log("SERIE_TX", "TICTM:1 (début détection TIC)");
-                std::thread::sleep(Duration::from_millis(150));
+                logger::log("SERIE", &format!("Port {} ouvert avec succès", port_name));
 
                 let mut read_buf = [0u8; 1024];
                 let mut line_buffer = String::new();
@@ -58,7 +30,7 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
                         let trimmed = cmd.trim().to_string();
                         logger::log("SERIE_TX", &trimmed);
                         if let Err(e) = port.write_all(cmd.as_bytes()) {
-                            logger::log("SERIE", &format!("❌ Erreur d'envoi: {:?}", e));
+                            logger::log("SERIE", &format!("⚠️ Erreur d'envoi: {:?}", e));
                         }
                     }
 
@@ -81,7 +53,7 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
                         Ok(_) => {}
                         Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {}
                         Err(e) => {
-                            logger::log("SERIE", &format!("❌ Erreur de lecture : {:?}. Reconnexion...", e));
+                            logger::log("SERIE", &format!("⚠️ Erreur de lecture : {:?}. Reconnexion...", e));
                             break;
                         }
                     }
@@ -97,110 +69,85 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
 
 // Fonction qui analyse chaque ligne venant de la carte et met à jour la mémoire partagée
 fn parse_incoming_line(line: &str, state: &SharedState) {
-    // Log de chaque ligne reçue
     logger::log("SERIE_RX", line);
 
-    // --- RÉPONSE AUTOMATIQUE (WATCHDOG/PING) ---
-    if line.starts_with("RaspberryPi?") {
-        logger::log("SERIE", "🤝 Ping matériel détecté, envoi de RaspberryPiModeOK");
-        let _ = state.serial_tx.try_send("RaspberryPiModeOK\r".to_string());
-        return;
-    }
+    let event = parse_line(line);
 
-    // --- MISE À JOUR DES INFOS FIXES ---
-    if line.starts_with("SoftwareVersion:") {
-        if let Ok(mut info) = state.info.lock() {
-            info.software_version = line.replace("SoftwareVersion:", "");
+    match event {
+        ProtocolEvent::Ping => {
+            logger::log("SERIE", "🤝 Ping matériel détecté, envoi de RaspberryPiModeOK");
+            let _ = state.serial_tx.try_send("RaspberryPiModeOK\r".to_string());
         }
-    } else if line.starts_with("HardwareVersion:") {
-        if let Ok(mut info) = state.info.lock() {
-            info.hardware_version = line.replace("HardwareVersion:", "");
+        ProtocolEvent::SoftwareVersion(v) => {
+            if let Ok(mut info) = state.info.lock() { info.software_version = v; }
         }
-    } else if line.starts_with("SerialNumber:") {
-        if let Ok(mut info) = state.info.lock() {
-            info.serial_number = line.replace("SerialNumber:", "");
+        ProtocolEvent::HardwareVersion(v) => {
+            if let Ok(mut info) = state.info.lock() { info.hardware_version = v; }
         }
-    } else if line.starts_with("Reference:") {
-        if let Ok(mut info) = state.info.lock() {
-            info.reference = line.replace("Reference:", "");
+        ProtocolEvent::SerialNumber(v) => {
+            if let Ok(mut info) = state.info.lock() { info.serial_number = v; }
         }
-    } else if line.starts_with("WeekYearProduction:") {
-        if let Ok(mut info) = state.info.lock() {
-            info.week_year_production = line.replace("WeekYearProduction:", "");
+        ProtocolEvent::Reference(v) => {
+            if let Ok(mut info) = state.info.lock() { info.reference = v; }
         }
-    } else if line.starts_with("BT:") {
-        let val = line.replace("BT:", "");
-        if let Ok(mut info) = state.info.lock() {
-            info.bluetooth_enabled = Some(val == "1");
+        ProtocolEvent::WeekYearProduction(v) => {
+            if let Ok(mut info) = state.info.lock() { info.week_year_production = v; }
         }
-    } 
-    // --- MISE À JOUR DE LA TÉLÉMÉTRIE ---
-    else if line.starts_with("State:") {
-        if let Ok(mut tel) = state.telemetry.lock() {
-            let state_val = line.replace("State:", "");
-            
-            // Si on démarre une nouvelle session de charge, on réinitialise le compteur d'énergie
-            if (state_val == "D" || state_val == "E") && (tel.state != "D" && tel.state != "E") {
-                tel.energy = 0.0;
-                tel.last_power_update = Some(std::time::Instant::now());
-            }
-            
-            tel.state = state_val.clone();
-            if state_val == "A" || state_val == "L" {
-                tel.charge_complete = false;
-            }
+        ProtocolEvent::BluetoothState(enabled) => {
+            if let Ok(mut info) = state.info.lock() { info.bluetooth_enabled = Some(enabled); }
         }
-    } else if line.starts_with("E:") {
-        if let Ok(mut tel) = state.telemetry.lock() {
-            tel.error_code = line.replace("E:", "");
-        }
-    } else if line.starts_with("FCS:") {
-        if let Ok(mut tel) = state.telemetry.lock() {
-            tel.charge_complete = true;
-        }
-    } else if line.starts_with("FM:") {
-        let fm_val = line.replace("FM:", "");
-        if fm_val != "1" {
-            logger::log("SERIE", &format!("⚠️ Mode FM détecté = {}, forçage en FM:1", fm_val));
-            let _ = state.serial_tx.try_send("FM:1\r".to_string());
-        }
-    } else if line.starts_with("TICTestB:") {
-        let val = line.replace("TICTestB:", "");
-        if val != "0" {
-            logger::log("SERIE", &format!("🔌 TIC détecté : {} baud", val));
+        ProtocolEvent::StateChange(state_val) => {
             if let Ok(mut tel) = state.telemetry.lock() {
-                tel.tic_mode = val;
-            }
-            let _ = state.serial_tx.try_send("TICTM:0\r".to_string());
-        } else {
-            if let Ok(mut count) = state.tic_test_zero_count.lock() {
-                *count += 1;
-                if *count >= TICTM_MAX_ZEROS {
-                    logger::log("SERIE", "🔌 TIC non détecté (absent)");
-                    if let Ok(mut tel) = state.telemetry.lock() {
-                        tel.tic_mode = "0".to_string();
-                    }
-                    let _ = state.serial_tx.try_send("TICTM:0\r".to_string());
+                if (state_val == "D" || state_val == "E") && (tel.state != "D" && tel.state != "E") {
+                    tel.energy = 0.0;
+                    tel.last_power_update = Some(std::time::Instant::now());
+                }
+                tel.state = state_val.clone();
+                if state_val == "A" || state_val == "L" {
+                    tel.charge_complete = false;
                 }
             }
         }
-    } else if line.starts_with("TICTestC:") {
-        // Just logged, nothing to do.
-    } else if line.starts_with("Volt:") {
-        if let Ok(val) = line.replace("Volt:", "").parse::<f32>() {
+        ProtocolEvent::ErrorChange(e) => {
+            if let Ok(mut tel) = state.telemetry.lock() { tel.error_code = e; }
+        }
+        ProtocolEvent::ChargeComplete => {
+            if let Ok(mut tel) = state.telemetry.lock() { tel.charge_complete = true; }
+        }
+        ProtocolEvent::FmMode(fm_val) => {
+            if fm_val != "1" {
+                logger::log("SERIE", &format!("⚠️ Mode FM détecté = {}, forçage en FM:1", fm_val));
+                let _ = state.serial_tx.try_send("FM:1\r".to_string());
+            }
+        }
+        ProtocolEvent::TicTestBaud(val) => {
+            if val != "0" {
+                logger::log("SERIE", &format!("🔌 TIC détecté : {} baud", val));
+                if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = val; }
+                let _ = state.serial_tx.try_send("TICTM:0\r".to_string());
+            } else {
+                if let Ok(mut count) = state.tic_test_zero_count.lock() {
+                    *count += 1;
+                    if *count >= TICTM_MAX_ZEROS {
+                        logger::log("SERIE", "🔌 TIC non détecté (absent)");
+                        if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "0".to_string(); }
+                        let _ = state.serial_tx.try_send("TICTM:0\r".to_string());
+                    }
+                }
+            }
+        }
+        ProtocolEvent::TicTestInit => {}
+        ProtocolEvent::Voltage(v) => {
             if let Ok(mut tel) = state.telemetry.lock() {
-                tel.voltage = val;
+                tel.voltage = v;
                 tel.power = tel.voltage * tel.current;
             }
         }
-    } else if line.starts_with("CCI:") {
-        let clean_val = line.replace("CCI:", "");
-        if let Ok(val) = clean_val.parse::<f32>() {
+        ProtocolEvent::Current(c) => {
             if let Ok(mut tel) = state.telemetry.lock() {
                 let previous_power = tel.power;
-                tel.current = val;
+                tel.current = c;
                 tel.power = tel.voltage * tel.current;
-                
                 let now = std::time::Instant::now();
                 if let Some(last_time) = tel.last_power_update {
                     let elapsed_hours = last_time.elapsed().as_secs_f32() / 3600.0;
@@ -212,24 +159,15 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                 tel.last_power_update = Some(now);
             }
         }
-    } else if line.starts_with("CC:") {
-        let clean_val = line.replace("CC:", "");
-        if let Ok(val) = clean_val.parse::<u32>() {
-            if let Ok(mut tel) = state.telemetry.lock() {
-                tel.limit_amps = val;
-            }
+        ProtocolEvent::LimitAmps(limit) => {
+            if let Ok(mut tel) = state.telemetry.lock() { tel.limit_amps = limit; }
         }
-    } else if line.starts_with("Ener:") {
-        if let Ok(val) = line.replace("Ener:", "").parse::<f32>() {
-            if let Ok(mut tel) = state.telemetry.lock() {
-                tel.energy = val;
-            }
+        ProtocolEvent::Energy(e) => {
+            if let Ok(mut tel) = state.telemetry.lock() { tel.energy = e; }
         }
-    } else if line.starts_with("Freq:") {
-        if let Ok(val) = line.replace("Freq:", "").parse::<f32>() {
-            if let Ok(mut tel) = state.telemetry.lock() {
-                tel.frequency = val;
-            }
+        ProtocolEvent::Frequency(f) => {
+            if let Ok(mut tel) = state.telemetry.lock() { tel.frequency = f; }
         }
+        ProtocolEvent::Unknown(_) => {}
     }
 }
