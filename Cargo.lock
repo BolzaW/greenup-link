@@ -222,10 +222,19 @@ version = "0.1.0-SNAPSHOT"
 dependencies = [
  "axum",
  "chrono",
+ "greenup-protocol",
  "serde",
  "serde_json",
  "serialport",
  "tokio",
+]
+
+[[package]]
+name = "greenup-protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

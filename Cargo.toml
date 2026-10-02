@@ -1,5 +1,6 @@
 [workspace]
 members = [
-    "crates/greenup-link-standalone"
+    "crates/greenup-link-standalone",
+    "crates/greenup-protocol"
 ]
 resolver = "2"
