@@ -8,6 +8,7 @@ use axum::{
 use serde_json::json;
 use crate::logger;
 use crate::state::SharedState;
+use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
 
 pub fn build_router(state: SharedState) -> Router {
     Router::new()
@@ -47,18 +48,23 @@ async fn get_telemetry(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// POST /api/current/:amps
 async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) -> impl IntoResponse {
-    if amps < 10 || amps > 32 {
-        logger::log("API", &format!("⛔ Rejet courant hors limites: {}A", amps));
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "Le courant doit être obligatoirement compris entre 10 et 32 Ampères"})),
-        );
-    }
+    let cmd = match u8::try_from(amps).ok().map(Command::set_current_limit) {
+        Some(Ok(cmd)) => cmd,
+        _ => {
+            logger::log("API", &format!("⛔ Rejet courant hors limites: {}A", amps));
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!(
+                    "Le courant doit être obligatoirement compris entre {} et {} Ampères",
+                    MIN_CURRENT_AMPS, MAX_CURRENT_AMPS
+                )})),
+            );
+        }
+    };
 
-    let cmd = format!("CC:{:02}\r", amps);
     logger::log("API", &format!("⚡ Modification limite courant → {}A", amps));
     
-    if state.serial_tx.send(cmd).await.is_ok() {
+    if state.serial_tx.send(cmd.encode()).await.is_ok() {
         (
             StatusCode::OK,
             Json(json!({
@@ -77,7 +83,7 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
 /// POST /api/charge/start
 async fn start_charge(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("API", "▶ Demande de démarrage de charge (T2COK)");
-    if state.serial_tx.send("T2COK\r".to_string()).await.is_ok() {
+    if state.serial_tx.send(Command::AuthorizeType2(true).encode()).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Charge autorisée (Type 2)"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
@@ -87,7 +93,7 @@ async fn start_charge(State(state): State<SharedState>) -> impl IntoResponse {
 /// POST /api/charge/stop
 async fn stop_charge(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("API", "⏹ Demande d'arrêt de charge (T2CNOK)");
-    if state.serial_tx.send("T2CNOK\r".to_string()).await.is_ok() {
+    if state.serial_tx.send(Command::AuthorizeType2(false).encode()).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Charge stoppée (Type 2)"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
@@ -130,7 +136,7 @@ async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
         tel.tic_mode = "detecting".to_string(); // Indicateur pour l'IHM
     }
 
-    if state.serial_tx.send("TICTM:1\r".to_string()).await.is_ok() {
+    if state.serial_tx.send(Command::SetTicTestMode(true).encode()).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Détection TIC lancée"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
@@ -139,12 +145,12 @@ async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// POST /api/bluetooth
 async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<BluetoothPayload>) -> impl IntoResponse {
-    let cmd = if payload.enabled { "BTOK\r" } else { "BTNOK\r" };
+    let cmd = Command::SetBluetooth(payload.enabled);
     let log_msg = if payload.enabled { "🔵 Activation" } else { "⚪ Désactivation" };
     
     logger::log("API", &format!("{} Bluetooth demandée", log_msg));
     
-    if state.serial_tx.send(cmd.to_string()).await.is_ok() {
+    if state.serial_tx.send(cmd.encode()).await.is_ok() {
         (
             StatusCode::OK,
             Json(json!({"status": "success", "message": format!("Bluetooth {} avec succès", if payload.enabled { "activé" } else { "désactivé" })}))

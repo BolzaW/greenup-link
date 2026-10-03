@@ -3,7 +3,7 @@ use crate::logger;
 use std::io::{Read, Write};
 use std::time::Duration;
 use tokio::sync::mpsc;
-use greenup_protocol::{parse_line, ProtocolEvent};
+use greenup_protocol::{parse_line, Command, FunctioningMode, ProtocolEvent};
 
 const TICTM_MAX_ZEROS: u32 = 5;
 
@@ -22,19 +22,15 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
                 logger::log("SERIE", "✅ Port ouvert. Envoi de la séquence d'initialisation...");
 
                 // Trame magique
-                let _ = port.write_all(b"RaspberryPiModeOK\r");
-                logger::log("SERIE_TX", "RaspberryPiModeOK");
+                let hello = Command::RaspberryPiModeOk;
+                let _ = port.write_all(hello.encode().as_bytes());
+                logger::log("SERIE_TX", &hello.as_frame());
                 std::thread::sleep(Duration::from_millis(200));
 
                 // Demande des infos de base avec délais pour ne pas saturer le buffer RX
-                let init_cmds = [
-                    "SoftwareVersion?", "HardwareVersion?", "SerialNumber?",
-                    "Reference?", "WeekYearProduction?", "State?", "FM?", "CC?", "E?", "BT?",
-                ];
-                for cmd in &init_cmds {
-                    let full = format!("{}\r", cmd);
-                    let _ = port.write_all(full.as_bytes());
-                    logger::log("SERIE_TX", cmd);
+                for cmd in Command::startup_queries() {
+                    let _ = port.write_all(cmd.encode().as_bytes());
+                    logger::log("SERIE_TX", &cmd.as_frame());
                     std::thread::sleep(Duration::from_millis(150));
                 }
 
@@ -45,8 +41,9 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
                 if let Ok(mut tel) = state.telemetry.lock() {
                     tel.tic_mode = "detecting".to_string(); // Indicateur pour l'IHM
                 }
-                let _ = port.write_all(b"TICTM:1\r");
-                logger::log("SERIE_TX", "TICTM:1 (début détection TIC)");
+                let tic = Command::SetTicTestMode(true);
+                let _ = port.write_all(tic.encode().as_bytes());
+                logger::log("SERIE_TX", &format!("{} (début détection TIC)", tic));
                 std::thread::sleep(Duration::from_millis(150));
 
                 let mut read_buf = [0u8; 1024];
@@ -104,7 +101,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
     match event {
         ProtocolEvent::Ping => {
             logger::log("SERIE", "🤝 Ping matériel détecté, envoi de RaspberryPiModeOK");
-            let _ = state.serial_tx.try_send("RaspberryPiModeOK\r".to_string());
+            let _ = state.serial_tx.try_send(Command::RaspberryPiModeOk.encode());
         }
         ProtocolEvent::SoftwareVersion(v) => {
             if let Ok(mut info) = state.info.lock() { info.software_version = v; }
@@ -143,9 +140,11 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut tel) = state.telemetry.lock() { tel.charge_complete = true; }
         }
         ProtocolEvent::FmMode(fm_val) => {
-            if fm_val != "1" {
+            if FunctioningMode::from_code(&fm_val) != Some(FunctioningMode::DirectCharge) {
                 logger::log("SERIE", &format!("⚠️ Mode FM détecté = {}, forçage en FM:1", fm_val));
-                let _ = state.serial_tx.try_send("FM:1\r".to_string());
+                let _ = state.serial_tx.try_send(
+                    Command::SetFunctioningMode(FunctioningMode::DirectCharge).encode(),
+                );
             }
         }
         ProtocolEvent::TicTestBaud(val) => {
