@@ -19,28 +19,35 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
             .open()
         {
             Ok(mut port) => {
-                logger::log("SERIE", &format!("Port {} ouvert avec succès", port_name));
+                logger::log("SERIE", "✅ Port ouvert. Envoi de la séquence d'initialisation...");
 
-                // --- SÉQUENCE D'INITIALISATION ---
-                // On interroge la borne pour récupérer les infos fixes (pour l'IHM) et l'état courant
-                let init_commands = [
-                    "RaspberryPiModeOK\r",                    
-                    "SoftwareVersion?\r",
-                    "HardwareVersion?\r",
-                    "SerialNumber?\r",
-                    "Reference?\r",
-                    "WeekYearProduction?\r",
-                    "BT?\r",
-                    "FM?\r",
-                    "State?\r",
-                    "TICTM:1\r",
+                // Trame magique
+                let _ = port.write_all(b"RaspberryPiModeOK\r");
+                logger::log("SERIE_TX", "RaspberryPiModeOK");
+                std::thread::sleep(Duration::from_millis(200));
+
+                // Demande des infos de base avec délais pour ne pas saturer le buffer RX
+                let init_cmds = [
+                    "SoftwareVersion?", "HardwareVersion?", "SerialNumber?",
+                    "Reference?", "WeekYearProduction?", "State?", "FM?", "CC?", "E?", "BT?",
                 ];
-                for cmd in init_commands.iter() {
-                    if let Err(e) = port.write_all(cmd.as_bytes()) {
-                        logger::log("SERIE", &format!("⚠️ Erreur d'envoi init: {:?}", e));
-                    }
-                    std::thread::sleep(Duration::from_millis(150)); // Petit délai pour laisser le temps à l'ATmega
+                for cmd in &init_cmds {
+                    let full = format!("{}\r", cmd);
+                    let _ = port.write_all(full.as_bytes());
+                    logger::log("SERIE_TX", cmd);
+                    std::thread::sleep(Duration::from_millis(150));
                 }
+
+                // Séquence de détection TIC : on envoie TICTM:1 et on attend TICTestB:XXXX
+                if let Ok(mut count) = state.tic_test_zero_count.lock() {
+                    *count = 0;
+                }
+                if let Ok(mut tel) = state.telemetry.lock() {
+                    tel.tic_mode = "detecting".to_string(); // Indicateur pour l'IHM
+                }
+                let _ = port.write_all(b"TICTM:1\r");
+                logger::log("SERIE_TX", "TICTM:1 (début détection TIC)");
+                std::thread::sleep(Duration::from_millis(150));
 
                 let mut read_buf = [0u8; 1024];
                 let mut line_buffer = String::new();
