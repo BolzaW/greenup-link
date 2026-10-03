@@ -113,7 +113,16 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut info) = state.info.lock() { info.serial_number = v; }
         }
         ProtocolEvent::Reference(v) => {
-            if let Ok(mut info) = state.info.lock() { info.reference = v; }
+            if let Ok(mut info) = state.info.lock() {
+                let spec = greenup_protocol::ModelSpec::from_reference(&v);
+                if !spec.is_known {
+                    logger::log("SERIE", &format!("⚠️ Référence inconnue ({}), on assume un modèle de base (Mono 4.6kW)", v));
+                } else {
+                    logger::log("SERIE", &format!("ℹ️ Modèle identifié : {}", spec.name));
+                }
+                info.reference = v;
+                info.spec = Some(spec);
+            }
         }
         ProtocolEvent::WeekYearProduction(v) => {
             if let Ok(mut info) = state.info.lock() { info.week_year_production = v; }
