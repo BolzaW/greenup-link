@@ -7,87 +7,109 @@ use greenup_protocol::{parse_line, Command, FunctioningMode, ProtocolEvent};
 
 const TICTM_MAX_ZEROS: u32 = 5;
 
-pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
+
+#[cfg(not(feature = "tcp-mock"))]
+fn try_connect() -> Option<Box<dyn serialport::SerialPort>> {
     let port_name = "/dev/ttyUSB0";
     let baud_rate = 115200;
+    crate::logger::log("SERIE", &format!("Tentative d'ouverture de {}...", port_name));
+    match serialport::new(port_name, baud_rate)
+        .timeout(std::time::Duration::from_millis(50))
+        .open()
+    {
+        Ok(p) => Some(p),
+        Err(e) => {
+            crate::logger::log("SERIE", &format!("Erreur ouverture {}: {:?}", port_name, e));
+            None
+        }
+    }
+}
 
+#[cfg(feature = "tcp-mock")]
+fn try_connect() -> Option<std::net::TcpStream> {
+    crate::logger::log("SERIE", "Tentative de connexion TCP au simulateur (127.0.0.1:8080)...");
+    match std::net::TcpStream::connect("127.0.0.1:8080") {
+        Ok(stream) => {
+            let _ = stream.set_read_timeout(Some(std::time::Duration::from_millis(50)));
+            Some(stream)
+        }
+        Err(e) => {
+            crate::logger::log("SERIE", &format!("Erreur connexion TCP: {:?}", e));
+            None
+        }
+    }
+}
+
+pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
     loop {
-        logger::log("SERIE", &format!("Tentative d'ouverture de {}...", port_name));
-        
-        match serialport::new(port_name, baud_rate)
-            .timeout(Duration::from_millis(50))
-            .open()
-        {
-            Ok(mut port) => {
-                logger::log("SERIE", "✅ Port ouvert. Envoi de la séquence d'initialisation...");
+        if let Some(mut port) = try_connect() {
+            logger::log("SERIE", "🔌 Port ouvert / Connecté TCP. Envoi de la séquence d'initialisation...");
 
-                // Trame magique
-                let hello = Command::RaspberryPiModeOk;
-                let _ = port.write_all(hello.encode().as_bytes());
-                logger::log("SERIE_TX", &hello.as_frame());
-                std::thread::sleep(Duration::from_millis(200));
+            // Trame magique
+            let hello = Command::RaspberryPiModeOk;
+            let _ = port.write_all(hello.encode().as_bytes());
+            logger::log("SERIE_TX", &hello.as_frame());
+            std::thread::sleep(Duration::from_millis(200));
 
-                // Demande des infos de base avec délais pour ne pas saturer le buffer RX
-                for cmd in Command::startup_queries() {
-                    let _ = port.write_all(cmd.encode().as_bytes());
-                    logger::log("SERIE_TX", &cmd.as_frame());
-                    std::thread::sleep(Duration::from_millis(150));
-                }
-
-                // Séquence de détection TIC : on envoie TICTM:1 et on attend TICTestB:XXXX
-                if let Ok(mut count) = state.tic_test_zero_count.lock() {
-                    *count = 0;
-                }
-                if let Ok(mut tel) = state.telemetry.lock() {
-                    tel.tic_mode = "detecting".to_string(); // Indicateur pour l'IHM
-                }
-                let tic = Command::SetTicTestMode(true);
-                let _ = port.write_all(tic.encode().as_bytes());
-                logger::log("SERIE_TX", &format!("{} (début détection TIC)", tic));
+            // Demande des infos de base avec délais pour ne pas saturer le buffer RX
+            for cmd in Command::startup_queries() {
+                let _ = port.write_all(cmd.encode().as_bytes());
+                logger::log("SERIE_TX", &cmd.as_frame());
                 std::thread::sleep(Duration::from_millis(150));
+            }
 
-                let mut read_buf = [0u8; 1024];
-                let mut line_buffer = String::new();
+            // Détection du module TIC
+            if let Ok(mut count) = state.tic_test_zero_count.lock() {
+                *count = 0;
+            }
+            if let Ok(mut tel) = state.telemetry.lock() {
+                tel.tic_mode = "detecting".to_string(); // Indicateur pour l'IHM
+            }
+            let tic = Command::SetTicTestMode(true);
+            let _ = port.write_all(tic.encode().as_bytes());
+            logger::log("SERIE_TX", &format!("{} (début détection TIC)", tic.as_frame()));
+            std::thread::sleep(Duration::from_millis(150));
 
-                loop {
-                    // 1. Lire s'il y a des commandes HTTP en attente d'envoi vers la borne
-                    while let Ok(cmd) = rx.try_recv() {
-                        let trimmed = cmd.trim().to_string();
-                        logger::log("SERIE_TX", &trimmed);
-                        if let Err(e) = port.write_all(cmd.as_bytes()) {
-                            logger::log("SERIE", &format!("⚠️ Erreur d'envoi: {:?}", e));
-                        }
+            let mut read_buf = [0u8; 1024];
+            let mut line_buffer = String::new();
+
+            loop {
+                // 1. Lire s'il y a des commandes HTTP en attente d'envoi vers la borne
+                while let Ok(cmd) = rx.try_recv() {
+                    let trimmed = cmd.trim().to_string();
+                    logger::log("SERIE_TX", &trimmed);
+                    if let Err(e) = port.write_all(cmd.as_bytes()) {
+                        logger::log("SERIE", &format!("⚠️ Erreur d'envoi: {:?}", e));
                     }
+                }
 
-                    // 2. Écouter la borne
-                    match port.read(&mut read_buf) {
-                        Ok(bytes_read) if bytes_read > 0 => {
-                            if let Ok(text) = std::str::from_utf8(&read_buf[..bytes_read]) {
-                                line_buffer.push_str(text);
+                // 2. Écouter la borne
+                match port.read(&mut read_buf) {
+                    Ok(bytes_read) if bytes_read > 0 => {
+                        if let Ok(text) = std::str::from_utf8(&read_buf[..bytes_read]) {
+                            line_buffer.push_str(text);
+                            
+                            while let Some(pos) = line_buffer.find('\n') {
+                                let line = line_buffer[..pos].trim_end_matches('\r').to_string();
+                                line_buffer = line_buffer[pos + 1..].to_string();
                                 
-                                while let Some(pos) = line_buffer.find('\n') {
-                                    let line = line_buffer[..pos].trim_end_matches('\r').to_string();
-                                    line_buffer = line_buffer[pos + 1..].to_string();
-                                    
-                                    if !line.is_empty() {
-                                        parse_incoming_line(&line, &state);
-                                    }
+                                if !line.is_empty() {
+                                    parse_incoming_line(&line, &state);
                                 }
                             }
                         }
-                        Ok(_) => {}
-                        Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {}
-                        Err(e) => {
-                            logger::log("SERIE", &format!("⚠️ Erreur de lecture : {:?}. Reconnexion...", e));
-                            break;
-                        }
+                    }
+                    Ok(_) => {}
+                    Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut || e.kind() == std::io::ErrorKind::WouldBlock => {}
+                    Err(e) => {
+                        logger::log("SERIE", &format!("⚠️ Erreur de lecture : {:?}. Reconnexion...", e));
+                        break;
                     }
                 }
             }
-            Err(e) => {
-                logger::log("SERIE", &format!("Impossible d'ouvrir {}: {:?}. Réessai dans 5s...", port_name, e));
-                std::thread::sleep(Duration::from_secs(5));
-            }
+        } else {
+            logger::log("SERIE", "En attente de connexion...");
+            std::thread::sleep(Duration::from_secs(5));
         }
     }
 }
@@ -207,3 +229,4 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::Unknown(_) => {}
     }
 }
+
