@@ -1,0 +1,8 @@
+[package]
+name = "greenup-simulator"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+greenup-protocol = { version = "0.1.0", path = "../greenup-protocol" }
+tokio = { version = "1.53.2", features = ["full"] }
