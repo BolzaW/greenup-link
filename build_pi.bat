@@ -11,6 +11,7 @@ echo.
 echo ====================================================
 echo Compilation terminee !
 echo Le fichier a envoyer sur le Raspberry se trouve ici :
-echo target\armv7-unknown-linux-gnueabihf\debug\greenup-link-standalone
+echo target\armv7-unknown-linux-gnueabihf\debug\greenup-link
 echo ====================================================
 pause
+
