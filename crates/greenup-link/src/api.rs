@@ -6,8 +6,8 @@ use axum::{
     Json, Router,
 };
 use serde_json::json;
-use crate::logger;
-use crate::state::SharedState;
+use greenup_driver::logger;
+use greenup_driver::SharedState;
 use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
 
 pub fn build_router(state: SharedState) -> Router {
@@ -162,3 +162,4 @@ async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<Blu
         )
     }
 }
+

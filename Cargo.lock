@@ -217,11 +217,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "greenup-link-standalone"
+name = "greenup-driver"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "greenup-protocol",
+ "serde",
+ "serialport",
+ "tokio",
+]
+
+[[package]]
+name = "greenup-everest"
+version = "0.1.0"
+
+[[package]]
+name = "greenup-link"
 version = "0.1.0-SNAPSHOT"
 dependencies = [
  "axum",
  "chrono",
+ "greenup-driver",
  "greenup-protocol",
  "serde",
  "serde_json",
@@ -375,6 +391,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
 
 [[package]]
+name = "libudev"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78b324152da65df7bb95acfcaab55e3097ceaab02fb19b228a9eb74d55f135e0"
+dependencies = [
+ "libc",
+ "libudev-sys",
+]
+
+[[package]]
+name = "libudev-sys"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c8469b4a23b962c1396b9b451dda50ef5b283e8dd309d69033475fa9b334324"
+dependencies = [
+ "libc",
+ "pkg-config",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -487,6 +523,12 @@ name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+
+[[package]]
+name = "pkg-config"
+version = "0.3.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "proc-macro2"
@@ -610,6 +652,7 @@ dependencies = [
  "core-foundation",
  "core-foundation-sys",
  "io-kit-sys",
+ "libudev",
  "mach2",
  "nix",
  "scopeguard",
@@ -705,9 +748,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.53.1"
+version = "1.53.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
+checksum = "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044"
 dependencies = [
  "bytes",
  "libc",

@@ -1,0 +1,11 @@
+[package]
+name = "greenup-driver"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chrono = "0.4.45"
+greenup-protocol = { version = "0.1.0", path = "../greenup-protocol" }
+serde = { version = "1.0.229", features = ["derive"] }
+serialport = "4.10.1"
+tokio = { version = "1.53.2", features = ["full"] }

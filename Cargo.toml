@@ -1,6 +1,7 @@
 [workspace]
-members = [
-    "crates/greenup-link-standalone",
+members = ["crates/greenup-driver", "crates/greenup-everest",
+    "crates/greenup-link",
     "crates/greenup-protocol"
 ]
 resolver = "2"
+
