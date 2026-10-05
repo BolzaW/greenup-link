@@ -130,6 +130,12 @@ async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
     
     // Reset du compteur et state
     
+    // Activation de la détection automatique du TIC (le driver se chargera d'envoyer TICTM:0)
+    if let Ok(mut tic) = state.tic_detection.lock() {
+        tic.is_active = true;
+        tic.zero_count = 0;
+    }
+
     if let Ok(mut tel) = state.telemetry.lock() {
         tel.tic_mode = "detecting".to_string(); // Indicateur pour l'IHM
     }
