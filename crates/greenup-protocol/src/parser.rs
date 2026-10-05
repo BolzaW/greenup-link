@@ -18,6 +18,7 @@ pub enum ProtocolEvent {
     LimitAmps(u32),
     Energy(f32),
     Frequency(f32),
+    CommandNotUnderstood(String),
     Unknown(String),
 }
 
@@ -79,6 +80,8 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         } else {
             ProtocolEvent::Unknown(line.to_string())
         }
+    } else if let Some(cmd) = line.strip_prefix("Default:") {
+        ProtocolEvent::CommandNotUnderstood(cmd.trim().to_string())
     } else {
         ProtocolEvent::Unknown(line.to_string())
     }
