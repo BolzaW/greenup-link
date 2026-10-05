@@ -26,7 +26,7 @@ async fn main() {
         telemetry: Mutex::new(Telemetry::default()),
         info: Mutex::new(initial_info),
         serial_tx: tx,
-        tic_test_zero_count: Mutex::new(0),
+        tic_detection: Mutex::new(greenup_driver::state::TicDetectionState::default()),
     });
 
     // 1. Démarrer le daemon de communication Série

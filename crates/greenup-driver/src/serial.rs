@@ -35,9 +35,7 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
                 }
 
                 // Séquence de détection TIC : on envoie TICTM:1 et on attend TICTestB:XXXX
-                if let Ok(mut count) = state.tic_test_zero_count.lock() {
-                    *count = 0;
-                }
+                if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
                 if let Ok(mut tel) = state.telemetry.lock() {
                     tel.tic_mode = "detecting".to_string(); // Indicateur pour l'IHM
                 }
@@ -156,20 +154,34 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                 );
             }
         }
-        ProtocolEvent::TicTestBaud(val) => {
+                ProtocolEvent::TicTestBaud(val) => {
+            let mut should_stop_test = false;
+            if let Ok(mut tic) = state.tic_detection.lock() {
+                if tic.is_active {
+                    if val != "0" {
+                        should_stop_test = true;
+                        tic.is_active = false;
+                    } else {
+                        tic.zero_count += 1;
+                        if tic.zero_count >= TICTM_MAX_ZEROS {
+                            should_stop_test = true;
+                            tic.is_active = false;
+                        }
+                    }
+                }
+            }
+
             if val != "0" {
                 logger::log("SERIE", &format!("🔌 TIC détecté : {} baud", val));
                 if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = val; }
-                // On ne renvoie plus TICTM:0, on laisse la borne remonter ses trames de test
-            } else {
-                if let Ok(mut count) = state.tic_test_zero_count.lock() {
-                    *count += 1;
-                    if *count >= TICTM_MAX_ZEROS {
-                        logger::log("SERIE", "🔌 TIC non détecté (absent)");
-                        if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "0".to_string(); }
-                        // Idem, on ne force plus l'arrêt du mode test pour l'instant
-                    }
-                }
+            } else if should_stop_test {
+                logger::log("SERIE", "🔌 TIC non détecté (absent)");
+                if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "0".to_string(); }
+            }
+
+            if should_stop_test {
+                logger::log("SERIE", "Fin de la détection automatique du TIC, envoi de TICTM:0");
+                let _ = state.serial_tx.try_send(Command::SetTicTestMode(false).encode());
             }
         }
         ProtocolEvent::TicTestInit => {}

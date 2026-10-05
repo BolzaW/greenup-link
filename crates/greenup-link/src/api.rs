@@ -129,9 +129,7 @@ async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("API", "🔄 Demande manuelle de détection TIC (TICTM:1)");
     
     // Reset du compteur et state
-    if let Ok(mut count) = state.tic_test_zero_count.lock() {
-        *count = 0;
-    }
+    
     if let Ok(mut tel) = state.telemetry.lock() {
         tel.tic_mode = "detecting".to_string(); // Indicateur pour l'IHM
     }
