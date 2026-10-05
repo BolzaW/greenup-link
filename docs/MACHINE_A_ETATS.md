@@ -10,11 +10,11 @@ Cette sémantique a été établie avec certitude par rétro-ingénierie du firm
 | État | Interprétation matérielle | Correspondance OCPP (selon l'ATmega) |
 |---|---|---|
 | **A** | Repos, aucun véhicule connecté | Available |
-| **B** | Prise **T2S** occupée, en attente d'autorisation | déclenche StartTransaction |
+| **B** | Prise **T2S** occupée, en attente d'autorisation | SuspendedEVSE déclenche StartTransaction |
 | **C** | T2S → charge suspendue côté véhicule | SuspendedEV |
 | **D** | T2S → **charge en cours** | Charging |
 | **E** | T2S → **charge en cours** (variante) | Charging |
-| **F** | Prise **domestique 2P+T** occupée, en attente | déclenche StartTransaction |
+| **F** | Prise **domestique 2P+T** occupée, en attente | SuspendedEVSE déclenche StartTransaction |
 | **G** | Domestique → **charge en cours** | Charging |
 | **H** | Domestique → **charge en cours** (variante) | Charging |
 | **I** | T2S → suspendu véhicule (variante) | SuspendedEV |
@@ -47,3 +47,6 @@ Si un évènement TIC (ex: passage en Heures Creuses) survient, l'ATmega passe e
 
 ### Quirk #2 : L'anomalie de OCPPStatus:SuspendedEVSE
 Lorsqu'on interroge l'état OCPP interne via OCPPPS? après que la **voiture** ait coupé la charge (passage transitoire par State:I puis retour à State:B), la borne a le défaut de répondre SuspendedEVSE au lieu de SuspendedEV. Le driver Rust devra parfois "corriger" ce diagnostic en mémorisant l'historique des états.
+
+### Quirk #3 : State:A forcé malgré un câble branché après arrêt local
+Si l'on force l'arrêt de la charge depuis la borne via la commande T2CNOK, la borne effectue sa séquence de clôture (passant par W puis M) et retombe ensuite à l'état A (Available). **Cependant, le câble côté véhicule est toujours physiquement branché.** Logiquement, la borne devrait retourner en état B (Prise occupée, en attente d'autorisation), mais elle se déclare complètement libre.
