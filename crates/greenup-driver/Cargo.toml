@@ -7,5 +7,6 @@ edition = "2024"
 chrono = "0.4.45"
 greenup-protocol = { version = "0.1.0", path = "../greenup-protocol" }
 serde = { version = "1.0.229", features = ["derive"] }
-serialport = "4.10.1"
+serialport = { version = "4.10.1", default-features = false }
 tokio = { version = "1.53.2", features = ["full"] }
+
