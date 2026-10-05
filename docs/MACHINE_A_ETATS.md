@@ -42,20 +42,3 @@ La borne dispose d'un module OCPP interne basique. Si l'on demande son statut vi
 * Lors d'une charge arrêtée par la **borne** : elle renvoie logiquement `SuspendedEVSE`.
 * Lors d'une charge arrêtée par la **voiture** (Passage par `State:I` puis `State:B`) : elle renvoie **aussi** `SuspendedEVSE`.
 *Impact :* C'est faux d'un point de vue OCPP, elle devrait renvoyer `SuspendedEV`. Le driver Rust devra inférer le bon statut OCPP en mémorisant si la charge s'est terminée par un passage en `State:I`.
-
----
-
-## 3. Le Résumé de Session (Session Wrap-up)
-
-Découverte majeure : lorsque la charge est coupée par la borne (via `T2CNOK`), le firmware de l'ATmega calcule et transmet lui-même un récapitulatif complet de la session.
-Ce récapitulatif est envoyé via la trame série juste après l'état `W` :
-
-```text
-[SERIE_RX] WT:0:22:12:CT:1:28:54:EVplug:5546.39:0.00:
-```
-
-* **`WT` (Wait Time)** : Temps passé branché sans charger (format `H:MM:SS` - ici 22 minutes).
-* **`CT` (Charge Time)** : Temps passé en charge active (format `H:MM:SS` - ici 1h 28m).
-* **`EVplug`** : Énergie totale délivrée par la prise pendant cette session, en **Wh** (ici 5546.39 Wh = 5.5 kWh). Le deuxième chiffre `0.00` est potentiellement une autre mesure d'énergie (injectée/Schuko ?).
-
-Cette trame permet de récupérer des données de facturation très précises sans avoir besoin de faire une intégration mathématique de puissance côté Raspberry Pi.
