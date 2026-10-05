@@ -216,6 +216,9 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::Frequency(f) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.frequency = f; }
         }
+        ProtocolEvent::CommandNotUnderstood(cmd) => {
+            logger::log("SERIE", &format!("⚠️ Commande non reconnue par la borne : {}", cmd));
+        }
         ProtocolEvent::Unknown(_) => {}
     }
 }
