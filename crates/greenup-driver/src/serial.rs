@@ -123,6 +123,10 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
 use crate::telemetry::Telemetry;
 
 fn update_iec_state(tel: &mut Telemetry) {
+    if tel.greenup_state == "V" {
+        tel.iec_state = Some("Faulted_F".to_string());
+        return;
+    }
     if tel.greenup_state == "R" || tel.greenup_state == "X" {
         tel.iec_state = Some("Error_E".to_string());
         return;
@@ -184,6 +188,9 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut info) = state.info.lock() { info.bluetooth_enabled = Some(enabled); }
         }
         ProtocolEvent::StateChange(state_val) => {
+            if state_val == "V" {
+                logger::log("SYS", "!!! ALERTE CRITIQUE : COUPURE DE COURANT DÉTECTÉE (State:V) - EXTINCTION IMMINENTE !!!");
+            }
             if let Ok(mut tel) = state.telemetry.lock() {
                 if (state_val == "D" || state_val == "E") && (tel.greenup_state != "D" && tel.greenup_state != "E") {
                     tel.energy = 0.0;
@@ -196,6 +203,9 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             }
         }
         ProtocolEvent::ErrorChange(e) => {
+            if e == "0012" {
+                logger::log("SYS", "!!! ALERTE CRITIQUE : DÉFAUT SOUS-TENSION (E:0012) - EXTINCTION IMMINENTE !!!");
+            }
             if let Ok(mut tel) = state.telemetry.lock() { tel.error_code = e; }
         }
         ProtocolEvent::ChargeComplete => {

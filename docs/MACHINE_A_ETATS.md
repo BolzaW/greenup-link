@@ -119,25 +119,26 @@ C'est la mécanique **parfaite** pour piloter les sessions de charge et de déle
 
 ### Mappage Standard EVCC / EVerest (Niveau 2)
 
-Pour exposer une machine à état propre et stable à un superviseur (comme EVCC ou EVerest), nous utilisons une couche d'abstraction (Niveau 2) qui traduit les états natifs Legrand en états standardisés : **A** (Débranché), **B** (Branché, en attente), **C** (En charge), **E** (Erreur).
+Pour exposer une machine à état propre et stable à un superviseur (comme EVCC ou EVerest), nous utilisons une couche d'abstraction (Niveau 2) qui traduit les états natifs Legrand en états standardisés de la norme IEC 61851 : **Disconnected_A**, **Connected_B**, **Charging_C**, **Error_E** (Défaut mineur/récupérable), et **Faulted_F** (Défaut matériel fatal).
 
 La logique choisie pour le code du driver `greenup-everest` est la suivante :
 
 **Cas Particulier (Borne verrouillée logiciellement) :**
 Si `T2C:0` : La borne est désactivée et sa machine à état est aveugle (`State` reste bloqué à `A`). L'état EVCC est déduit exclusivement de la tension du Control Pilot (`CP?`) :
-*   `CP:12` ➔ **A** (Débranché)
-*   `CP:9` ➔ **B** (Branché, suspendu)
+*   `CP:12` ➡️ **Disconnected_A**
+*   `CP:9` ➡️ **Connected_B**
+*   `CP:6` ➡️ **Charging_C**
 *(Note de conception : Le driver devra repasser `T2C:1` lorsqu'il voudra réautoriser la charge).*
 
 **Cas Nominal (T2C:1) :**
 La machine à état Legrand est cohérente et peut être traduite directement :
-*   `State:A` (Repos) ➔ **A**
-*   `State:L` (Débranchement) ➔ **A** *(transitionne automatiquement vers A)*
-*   `State:B` (Connecté, attente borne/TIC) ➔ **B**
-*   `State:C` (Attente véhicule / Prêt) ➔ **B**
-*   `State:I` (Interrompu par EV) ➔ **B** *(attention, reboucle automatiquement vers A->B->C, mais reste logique B)*
-*   `State:W` (Arrêt en cours) ➔ **B**
-*   `State:M` (Arrêt manuel / via `SBNOK`) ➔ **B** *(état stable tant que le véhicule n'est pas débranché/rebranché, car le rebranchement repassera `SB:1` physiquement)*
-*   `State:D` / `State:E` (En charge) ➔ **C**
-*   `State:R` (Défaut) ➔ **E**
-*   `State:X` (Reboot) ➔ **E**
+*   `State:A` (Repos) ➡️ **Disconnected_A**
+*   `State:L` (Débranchement) ➡️ **Disconnected_A** *(transitionne automatiquement vers A)*
+*   `State:B` (Connecté, attente borne/TIC) ➡️ **Connected_B**
+*   `State:C` (Attente véhicule / Prêt) ➡️ **Connected_B**
+*   `State:I` (Interrompu par EV) ➡️ **Connected_B** *(attention, reboucle automatiquement vers A->B->C, mais reste logique B)*
+*   `State:W` (Arrêt en cours) ➡️ **Connected_B**
+*   `State:M` (Arrêt manuel / via `SBNOK`) ➡️ **Connected_B** *(état stable tant que le véhicule n'est pas débranché/rebranché)*
+*   `State:D` / `State:E` (En charge) ➡️ **Charging_C**
+*   `State:R` / `State:X` (Défaut / Reboot) ➡️ **Error_E**
+*   `State:V` (Coupure d'alimentation fatale) ➡️ **Faulted_F** *(survient avec E:0012 juste avant l'extinction)*
