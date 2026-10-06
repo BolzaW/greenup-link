@@ -39,12 +39,14 @@ async fn serve_ui() -> Html<&'static str> {
 
 /// GET /api/info
 async fn get_info(State(state): State<SharedState>) -> impl IntoResponse {
+    logger::log("API", "🔍 Demande GET /api/info");
     let info = state.info.lock().unwrap().clone();
     Json(info)
 }
 
 /// GET /api/telemetry
 async fn get_telemetry(State(state): State<SharedState>) -> impl IntoResponse {
+    logger::log("API", "📡 Demande GET /api/telemetry");
     let telemetry = state.telemetry.lock().unwrap().clone();
     Json(telemetry)
 }
