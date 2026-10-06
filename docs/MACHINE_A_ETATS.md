@@ -98,3 +98,11 @@ L'analyse des consignes de courant a mis en évidence deux failles matérielles 
 2. **Crash sous 6A** : La norme IEC 61851 impose un courant minimum de 6A. Si la borne reçoit une consigne strictement inférieure à 6A (comme `CC:05`, ou `0A` à cause du bug précédent), elle n'arrête pas proprement la charge. Le courant chute au minimum matériel (~6.8A), puis au bout de 8 secondes la borne panique. Elle émet le défaut `E:0010` (`State:R`), clôture la session, et **redémarre complètement** (`State:X`) !
 
 Le driver `greenup-everest` devra donc systématiquement formater ses consignes sur 2 chiffres (ex: `CC:06`). **De plus, bien que `CC:06` ne fasse pas crasher la borne, l'électronique de régulation est incapable de descendre physiquement sous ~6.8A.** Par sécurité et pour assurer une régulation saine, le driver devra imposer une limite logicielle basse stricte de **`7A`**.
+
+### Quirk #7 : L'interruption par `Unlock` et l'auto-validation du mode `FM:1`
+La commande `Unlock` permet de forcer proprement l'arrêt d'une charge en cours. Elle déclenche la séquence de fin (`State:W` -> Envoi du résumé -> `State:A`).
+Cependant, puisque le câble est physiquement toujours branché, la borne détecte immédiatement le contacteur (`SBF:1`) et repasse en `State:B`.
+
+**Le problème de l'auto-validation :**
+En mode `FM:1` (Direct Charge), la borne est programmée pour valider *automatiquement* l'état `B`. Sans intervention externe, elle passe de suite en `State:C` puis reprend la charge (`State:E`). Ce mode `FM:1` nous prive donc du contrôle de l'autorisation : la borne décide de charger d'elle-même.
+Pour implémenter une borne intelligente (Smart Charging) où le driver décide *quand* la charge doit démarrer, le mode `FM:1` n'est probablement pas adapté. Il faudra explorer d'autres modes (comme le mode OCPP `FM:6` ou l'activation de la gestion RFID) qui maintiennent la borne bloquée en `State:B` en attente d'une autorisation logicielle explicite.
