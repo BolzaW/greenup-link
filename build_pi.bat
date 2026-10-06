@@ -5,7 +5,7 @@ echo ====================================================
 echo.
 
 REM Utilisation de cargo-zigbuild pour compiler tous les binaires du workspace
-wsl -d Ubuntu -e bash -c "PATH=/usr/local/bin: ~/.cargo/bin/cargo zigbuild --target armv7-unknown-linux-gnueabihf.2.24"
+wsl -d Ubuntu -e bash -c "PATH=$PATH:~/.cargo/bin cargo zigbuild --target armv7-unknown-linux-gnueabihf.2.24"
 
 echo.
 echo ====================================================
