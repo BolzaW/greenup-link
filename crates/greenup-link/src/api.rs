@@ -108,7 +108,7 @@ async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         let is_state_a = {
             if let Ok(tel) = state.telemetry.lock() {
-                tel.state == "A"
+                tel.greenup_state == "A"
             } else {
                 false
             }
@@ -166,7 +166,7 @@ async fn send_raw_command(State(state): State<SharedState>, body: String) -> imp
 async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
     let state_val = {
         let tel = state.telemetry.lock().unwrap();
-        tel.state.clone()
+        tel.greenup_state.clone()
     };
 
     if state_val != "A" {
