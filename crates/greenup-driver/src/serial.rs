@@ -20,7 +20,7 @@ pub async fn trigger_init_sequence(state: &SharedState) {
 
 }
 
-pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, state: &SharedState) {
+pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, _state: &SharedState) {
     let hello = Command::RaspberryPiModeOk;
     let _ = port.write_all(hello.encode().as_bytes());
     logger::log("SERIE_TX", &hello.as_frame());
@@ -119,6 +119,33 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
 }
 
 // Fonction qui analyse chaque ligne venant de la carte et met à jour la mémoire partagée
+
+use greenup_protocol::models::Telemetry;
+
+fn update_iec_state(tel: &mut Telemetry) {
+    if tel.state == "R" || tel.state == "X" {
+        tel.iec_state = Some("Error_E".to_string());
+        return;
+    }
+
+    if let Some(false) = tel.t2c_enabled {
+        match tel.cp_voltage {
+            Some(12) => tel.iec_state = Some("Disconnected_A".to_string()),
+            Some(9) => tel.iec_state = Some("Connected_B".to_string()),
+            Some(6) => tel.iec_state = Some("Charging_C".to_string()),
+            _ => {}
+        }
+        return;
+    }
+
+    match tel.state.as_str() {
+        "A" | "L" => tel.iec_state = Some("Disconnected_A".to_string()),
+        "B" | "C" | "I" | "W" | "M" => tel.iec_state = Some("Connected_B".to_string()),
+        "D" | "E" => tel.iec_state = Some("Charging_C".to_string()),
+        _ => {}
+    }
+}
+
 fn parse_incoming_line(line: &str, state: &SharedState) {
     logger::log("SERIE_RX", line);
 
@@ -162,7 +189,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                     tel.energy = 0.0;
                     tel.last_power_update = Some(std::time::Instant::now());
                 }
-                tel.state = state_val.clone();
+                tel.state = state_val.clone(); update_iec_state(&mut tel);
                 if state_val == "A" || state_val == "L" {
                     tel.charge_complete = false;
                 }
@@ -242,13 +269,13 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut tel) = state.telemetry.lock() { tel.eliot_limit_amps = Some(limit); }
         }
         ProtocolEvent::CpVoltage(v) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.cp_voltage = Some(v); }
+            if let Ok(mut tel) = state.telemetry.lock() { tel.cp_voltage = Some(v); update_iec_state(&mut tel); }
         }
         ProtocolEvent::T2CEnabled(v) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.t2c_enabled = Some(v); }
+            if let Ok(mut tel) = state.telemetry.lock() { tel.t2c_enabled = Some(v); update_iec_state(&mut tel); }
         }
         ProtocolEvent::SbState(v) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.sb_state = Some(v); }
+            if let Ok(mut tel) = state.telemetry.lock() { tel.sb_state = Some(v); update_iec_state(&mut tel); }
         }
         ProtocolEvent::Energy(e) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.energy = e; }
