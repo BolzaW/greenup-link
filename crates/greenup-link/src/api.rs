@@ -46,7 +46,7 @@ async fn get_info(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// GET /api/telemetry
 async fn get_telemetry(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "📡 Demande GET /api/telemetry");
+    logger::log("TRACE", "📡 Demande GET /api/telemetry");
     let telemetry = state.telemetry.lock().unwrap().clone();
     Json(telemetry)
 }
