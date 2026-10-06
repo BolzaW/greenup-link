@@ -283,9 +283,9 @@
                             <span id="lblSlider" class="font-bold text-sky-400 font-mono text-sm">16 A</span>
                         </div>
                     </div>
-                    <input type="range" id="currentSlider" min="10" max="32" step="1" value="16">
+                    <input type="range" id="currentSlider" min="7" max="32" step="1" value="16">
                     <div class="flex justify-between text-[10px] font-bold text-slate-600 mt-3 font-mono">
-                        <span>MIN 10A</span>
+                        <span>MIN 7A</span>
                         <span>MAX 32A</span>
                     </div>
                 </div>
@@ -614,8 +614,9 @@
             }
 
             if (data.limit_amps && !isDraggingSlider && !isActionPending) {
-                slider.value = data.limit_amps;
-                lblSlider.innerText = data.limit_amps + " A";
+                let displayLimit = data.eliot_limit_amps || data.limit_amps;
+                slider.value = displayLimit;
+                lblSlider.innerText = displayLimit + " A";
             }
 
             lastReportedState = data.state;
