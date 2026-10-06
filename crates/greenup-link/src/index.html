@@ -458,20 +458,20 @@
         }
     }
 
-    function updateVisuals(state, isChargeComplete, currentAmps) {
+    function updateVisuals(greenup_state, isChargeComplete, currentAmps, iec_state, error_code) {
         let amps = Math.max(0, Math.min(32, currentAmps || 0));
         let speed = (8.0 - (amps * (6.5 / 33.0))) / 6.0;
-        // Sécurité vitale : si speed atteint 0 (à 32A, 8 - 8 = 0), l'animation freeze. On force un minimum vital.
         speed = Math.max(0.1, speed);
 
-        if (state === window.lastVisualState && 
+        if (greenup_state === window.lastVisualState && 
+            iec_state === window.lastIecState &&
             isChargeComplete === window.lastChargeComplete && 
             typeof window.lastAppliedSpeed !== 'undefined' && Math.abs(speed - window.lastAppliedSpeed) < 0.05) {
-            // No significant visual change, avoid DOM thrashing that causes animation saccades
             return;
         }
         
-        window.lastVisualState = state;
+        window.lastVisualState = greenup_state;
+        window.lastIecState = iec_state;
         window.lastChargeComplete = isChargeComplete;
         window.lastAppliedSpeed = speed;
 
@@ -481,110 +481,107 @@
         chargerLed.className = 'w-6 h-1 md:w-8 md:h-1.5 rounded-full bg-slate-700 mt-4 transition-all duration-500';
         carIcon.className = 'w-full h-full text-slate-700 transition-all duration-500 drop-shadow-2xl';
         carBox.classList.remove('scale-105');
+        
         const animWire1 = document.getElementById('animWire1');
         const animWire2 = document.getElementById('animWire2');
-        if (animWire1) { animWire1.classList.add('opacity-0'); animWire1.classList.remove('anim-flow'); }
-        if (animWire2) { animWire2.classList.add('opacity-0'); animWire2.classList.remove('anim-flow'); }
-        carIcon.style.fill = ''; // Reset fill to currentColor
-        carIcon.classList.remove('animate-pulse');
+        if (animWire1) { animWire1.classList.add('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#10b981'); }
+        if (animWire2) { animWire2.classList.add('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#10b981'); }
         
-        let stateLabel = state;
+        carIcon.style.fill = ''; 
+        carIcon.classList.remove('animate-pulse');
+        chargerBox.classList.remove('animate-pulse');
+        
+        let stateLabel = iec_state || greenup_state;
         let startEnabled = false;
         let stopEnabled = false;
 
-        switch(state) {
-            case 'A':
-                stateLabel = "Libre / Prêt (A)";
+        switch(iec_state) {
+            case 'Disconnected_A':
+                stateLabel = "Débranché (A)";
                 startEnabled = true;
                 break;
-            case 'B':
-                stateLabel = "Prise Branchée (B)";
+
+            case 'Connected_B':
+                stateLabel = "Connecté (B)";
                 startEnabled = true;
-                carIcon.classList.replace('text-slate-700', 'text-sky-500');
+                // Cable vert (solide, pas d'animation)
                 if(animWire1) animWire1.classList.remove('opacity-0');
                 if(animWire2) animWire2.classList.remove('opacity-0');
-                break;
-            case 'C':
-                stateLabel = "Attente du véhicule (C)";
-                stopEnabled = true;
+                
                 carIcon.classList.replace('text-slate-700', 'text-sky-500');
-                carIcon.classList.add('animate-pulse');
-                if(animWire1) animWire1.classList.remove('opacity-0');
-                if(animWire2) animWire2.classList.remove('opacity-0');
+                
+                if (greenup_state === 'B') {
+                    // Borne clignote en bleu
+                    chargerBox.classList.add('animate-pulse', 'border-sky-500/50', 'shadow-[0_0_15px_rgba(14,165,233,0.3)]');
+                    chargerIcon.classList.replace('text-slate-600', 'text-sky-400');
+                    chargerLed.classList.replace('bg-slate-700', 'bg-sky-400');
+                    carIcon.classList.remove('animate-pulse');
+                } else if (greenup_state === 'C') {
+                    // Voiture clignote en bleu
+                    carIcon.classList.add('animate-pulse');
+                }
                 break;
-            case 'D': case 'E':
-                stateLabel = state === 'E' ? "Charge en cours (E)" : "Charge en cours (D)";
+
+            case 'Charging_C':
+                stateLabel = "En Charge (C)";
                 stopEnabled = true;
-                // Charger Glow
+                // Cable vert animé
+                if(animWire1) {
+                    animWire1.classList.remove('opacity-0');
+                    animWire1.classList.add('anim-flow');
+                    animWire1.style.animationDuration = speed + 's';
+                }
+                if(animWire2) {
+                    animWire2.classList.remove('opacity-0');
+                    animWire2.classList.add('anim-flow');
+                    animWire2.style.animationDuration = speed + 's';
+                }
+                // Borne verte
                 chargerBox.classList.add('border-emerald-500/50', 'shadow-[0_0_30px_rgba(16,185,129,0.15)]');
                 chargerIcon.classList.replace('text-slate-600', 'text-emerald-400');
                 chargerLed.classList.replace('bg-slate-700', 'bg-emerald-400');
-                chargerLed.classList.add('shadow-[0_0_12px_rgba(16,185,129,1)]');
-                // Car Wave Gradient
-                carIcon.classList.replace('text-slate-700', 'text-emerald-500');
-                carIcon.style.fill = 'url(#waveGradient)';
+                chargerLed.classList.add('shadow-[0_0_10px_rgba(16,185,129,0.8)]');
+                
+                // Voiture verte animée
                 carBox.classList.add('scale-105');
-                // Wire flow activation & speed
-                if (animWire1) { animWire1.classList.remove('opacity-0'); animWire1.classList.add('anim-flow'); }
-                if (animWire2) { animWire2.classList.remove('opacity-0'); animWire2.classList.add('anim-flow'); }
-                
-                const dur = speed.toFixed(2) + 's';
-                if (animWire1) {
-                    animWire1.style.animation = 'none';
-                    void animWire1.offsetHeight;
-                    animWire1.style.animation = '';
-                    animWire1.style.animationDuration = dur;
-                }
-                if (animWire2) {
-                    animWire2.style.animation = 'none';
-                    void animWire2.offsetHeight;
-                    animWire2.style.animation = '';
-                    animWire2.style.animationDuration = dur;
-                }
-                
-                const carAnimWave1 = document.getElementById('carAnimWave1');
-                const carAnimWave2 = document.getElementById('carAnimWave2');
-                const carDur = (speed * 6.25).toFixed(2) + 's';
-                if (carAnimWave1) {
-                    carAnimWave1.setAttribute('dur', carDur);
-                    if (typeof carAnimWave1.beginElement === 'function') carAnimWave1.beginElement();
-                }
-                if (carAnimWave2) {
-                    carAnimWave2.setAttribute('dur', carDur);
-                    if (typeof carAnimWave2.beginElement === 'function') carAnimWave2.beginElement();
-                }
+                carIcon.style.fill = 'url(#waveGradient)';
                 break;
-            case 'W': case 'M':
-                stateLabel = state === 'W' ? "Arrêt en cours (W)" : "Arrêt terminé (M)";
-                carIcon.classList.replace('text-slate-700', 'text-emerald-800');
-                if(animWire1) animWire1.classList.remove('opacity-0');
-                if(animWire2) animWire2.classList.remove('opacity-0');
-                break;
-            case 'Y':
-                stateLabel = "Veille Profonde (Y)";
-                startEnabled = true;
-                chargerBox.classList.add('opacity-30');
-                break;
-            case 'F': case 'G': case 'H': 
-            case 'R': case 'S': case 'T': 
-            case 'U': case 'V':
-                stateLabel = "⛔ ERREUR (" + state + ")";
-                chargerBox.classList.add('border-rose-500/50');
+
+            case 'Error_E':
+            case 'Faulted_F':
+                stateLabel = `Défaut (${iec_state}) - Code: ${error_code || 'Inconnu'}`;
+                // Borne, cable et voiture rouges
+                chargerBox.classList.add('border-rose-500/50', 'shadow-[0_0_30px_rgba(244,63,94,0.15)]');
                 chargerIcon.classList.replace('text-slate-600', 'text-rose-500');
                 chargerLed.classList.replace('bg-slate-700', 'bg-rose-500');
-                carIcon.classList.replace('text-slate-700', 'text-rose-400');
-                if(chargePort) chargePort.classList.replace('fill-slate-900', 'fill-rose-400');
+                
+                carIcon.classList.replace('text-slate-700', 'text-rose-500');
+                
+                if(animWire1) { animWire1.classList.remove('opacity-0'); animWire1.setAttribute('stroke', '#f43f5e'); }
+                if(animWire2) { animWire2.classList.remove('opacity-0'); animWire2.setAttribute('stroke', '#f43f5e'); }
                 break;
+                
             default:
-                if (state === "") stateLabel = "En attente...";
+                stateLabel = iec_state || greenup_state;
                 break;
         }
 
-        if (isChargeComplete && state !== 'A' && state !== 'L') {
+        // Cas particulier de la charge terminée physiquement (ex: L ou M post-charge)
+        if (isChargeComplete && (iec_state === 'Disconnected_A' || iec_state === 'Connected_B')) {
+            stateLabel = "Charge Terminée";
             carIcon.classList.replace('text-slate-700', 'text-emerald-500');
             carIcon.classList.replace('text-sky-500', 'text-emerald-500');
-            stateLabel = "Charge Terminée 🔋";
-            stopEnabled = true;
+        }
+
+        if (startEnabled && !isActionPending) {
+            btnStart.classList.remove('opacity-50', 'pointer-events-none');
+            btnStop.classList.add('opacity-50', 'pointer-events-none');
+        } else if (stopEnabled && !isActionPending) {
+            btnStart.classList.add('opacity-50', 'pointer-events-none');
+            btnStop.classList.remove('opacity-50', 'pointer-events-none');
+        } else if (!isActionPending) {
+            btnStart.classList.add('opacity-50', 'pointer-events-none');
+            btnStop.classList.add('opacity-50', 'pointer-events-none');
         }
 
         lblState.innerText = stateLabel;
@@ -620,7 +617,7 @@
 
             lastReportedState = data.greenup_state;
             updateLinky(data.tic_mode);
-            updateVisuals(data.greenup_state, data.charge_complete, data.current);
+            updateVisuals(data.greenup_state, data.charge_complete, data.current, data.iec_state, data.error_code);
             
         } catch (err) {
             console.error("Erreur polling", err);
