@@ -12,10 +12,13 @@ function Show-Menu {
     Write-Host "=================================================" -ForegroundColor Cyan
     Write-Host "1. Obtenir les informations de la borne (Info)"
     Write-Host "2. Obtenir la télémesure en temps réel"
-    Write-Host "3. Démarrer la charge (T2COK)"
-    Write-Host "4. Stopper la charge (T2CNOK)"
-    Write-Host "5. Définir la limite de courant (10A - 32A)"
+    Write-Host "3. Démarrer la charge (SBOK)"
+    Write-Host "4. Stopper la charge (SBNOK)"
+    Write-Host "5. Définir la limite de courant (7A - 32A)"
     Write-Host "6. Activer/Désactiver le module Bluetooth"
+    Write-Host "7. Relancer l'initialisation de la borne"
+    Write-Host "8. Activer la prise Type 2 (T2COK)"
+    Write-Host "9. Désactiver la prise Type 2 (T2CNOK)"
     Write-Host "0. Quitter"
     Write-Host "=================================================" -ForegroundColor Cyan
 }
@@ -58,6 +61,24 @@ while ($true) {
                 $body = @{ enabled = $isEnabled } | ConvertTo-Json
                 Write-Host "`n[POST] $BASE_URL/api/bluetooth..." -ForegroundColor Yellow
                 $response = Invoke-RestMethod -Uri "$BASE_URL/api/bluetooth" -Method Post -Body $body -ContentType "application/json"
+                $response | ConvertTo-Json | Write-Host -ForegroundColor Green
+            }
+            "7" {
+                Write-Host "
+[POST] $BASE_URL/api/init..." -ForegroundColor Yellow
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/init" -Method Post
+                $response | ConvertTo-Json | Write-Host -ForegroundColor Green
+            }
+            "8" {
+                Write-Host "
+[POST] $BASE_URL/api/t2/enable..." -ForegroundColor Yellow
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/t2/enable" -Method Post
+                $response | ConvertTo-Json | Write-Host -ForegroundColor Green
+            }
+            "9" {
+                Write-Host "
+[POST] $BASE_URL/api/t2/disable..." -ForegroundColor Yellow
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/t2/disable" -Method Post
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
             "COMMAND" {

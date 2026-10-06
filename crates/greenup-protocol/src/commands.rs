@@ -108,6 +108,12 @@ pub enum Command {
     GetCurrentLimit,
     /// `CCEl?`
     GetEliotCurrentLimit,
+    /// `CP?`
+    GetCpVoltage,
+    /// `T2C?`
+    GetT2CEnabled,
+    /// `SB?`
+    GetSbState,
     /// `CCTIC?` – Limite de courant calculée à partir de la TIC.
     GetTicCurrentLimit,
     /// `TICTM:1` / `TICTM:0` – Active/désactive le mode test TIC.
@@ -203,6 +209,9 @@ impl Command {
             Command::GetErrors => "E?".into(),
             Command::GetCurrentLimit => "CC?".into(),
             Command::GetEliotCurrentLimit => "CCEl?".into(),
+            Command::GetCpVoltage => "CP?".into(),
+            Command::GetT2CEnabled => "T2C?".into(),
+            Command::GetSbState => "SB?".into(),
             Command::GetTicCurrentLimit => "CCTIC?".into(),
             Command::SetTicTestMode(on) => format!("TICTM:{}", *on as u8),
 
@@ -249,6 +258,9 @@ impl Command {
             Command::GetFunctioningMode,
             Command::GetCurrentLimit,
             Command::GetEliotCurrentLimit,
+            Command::GetCpVoltage,
+            Command::GetT2CEnabled,
+            Command::GetSbState,
             Command::GetErrors,
             Command::GetBluetooth,
         ]

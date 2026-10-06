@@ -7,6 +7,44 @@ use greenup_protocol::{parse_line, Command, FunctioningMode, ProtocolEvent};
 
 const TICTM_MAX_ZEROS: u32 = 5;
 
+pub async fn trigger_init_sequence(state: &SharedState) {
+    let hello = Command::RaspberryPiModeOk;
+    let _ = state.serial_tx.send(hello.encode()).await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    for cmd in Command::startup_queries() {
+        let _ = state.serial_tx.send(cmd.encode()).await;
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
+
+    if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
+    if let Ok(mut tel) = state.telemetry.lock() {
+        tel.tic_mode = "detecting".to_string();
+    }
+    let _ = state.serial_tx.send(Command::SetTicTestMode(true).encode()).await;
+}
+
+pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, state: &SharedState) {
+    let hello = Command::RaspberryPiModeOk;
+    let _ = port.write_all(hello.encode().as_bytes());
+    logger::log("SERIE_TX", &hello.as_frame());
+    std::thread::sleep(Duration::from_millis(200));
+
+    for cmd in Command::startup_queries() {
+        let _ = port.write_all(cmd.encode().as_bytes());
+        logger::log("SERIE_TX", &cmd.as_frame());
+        std::thread::sleep(Duration::from_millis(150));
+    }
+
+    if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
+    if let Ok(mut tel) = state.telemetry.lock() {
+        tel.tic_mode = "detecting".to_string();
+    }
+    let tic_cmd = Command::SetTicTestMode(true);
+    let _ = port.write_all(tic_cmd.encode().as_bytes());
+    logger::log("SERIE_TX", &tic_cmd.as_frame());
+}
+
 pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
     let port_name = "/dev/ttyUSB0";
     let baud_rate = 115200;
@@ -212,6 +250,15 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::EliotLimitAmps(limit) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.eliot_limit_amps = Some(limit); }
+        }
+        ProtocolEvent::CpVoltage(v) => {
+            if let Ok(mut tel) = state.telemetry.lock() { tel.cp_voltage = Some(v); }
+        }
+        ProtocolEvent::T2CEnabled(v) => {
+            if let Ok(mut tel) = state.telemetry.lock() { tel.t2c_enabled = Some(v); }
+        }
+        ProtocolEvent::SbState(v) => {
+            if let Ok(mut tel) = state.telemetry.lock() { tel.sb_state = Some(v); }
         }
         ProtocolEvent::Energy(e) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.energy = e; }

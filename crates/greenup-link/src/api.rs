@@ -19,6 +19,7 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/charge/start", post(start_charge))
         .route("/api/charge/stop", post(stop_charge))
         .route("/api/t2/enable", post(enable_t2))
+        .route("/api/init", post(init_sequence))
         .route("/api/t2/disable", post(disable_t2))
         .route("/api/command", post(send_raw_command))
         .route("/api/tic/refresh", post(refresh_tic))
@@ -95,6 +96,16 @@ async fn start_charge(State(state): State<SharedState>) -> impl IntoResponse {
 /// POST /api/charge/stop
 
 /// POST /api/t2/enable
+
+/// POST /api/init
+async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
+    logger::log("API", "🔄 Lancement de la séquence d'initialisation");
+    tokio::spawn(async move {
+        greenup_driver::serial::trigger_init_sequence(&state).await;
+    });
+    (StatusCode::OK, Json(json!({"status": "success", "message": "Séquence d'initialisation lancée"})))
+}
+
 async fn enable_t2(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("API", "🔓 Activation de la prise Type 2 (T2COK)");
     if state.serial_tx.send(Command::AuthorizeType2(true).encode()).await.is_ok() {

@@ -17,6 +17,9 @@ pub enum ProtocolEvent {
     Current(f32),
     LimitAmps(u32),
     EliotLimitAmps(u32),
+    CpVoltage(u32),
+    T2CEnabled(bool),
+    SbState(bool),
     Energy(f32),
     Frequency(f32),
     CommandNotUnderstood(String),
@@ -72,6 +75,26 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
     } else if line.starts_with("CCEl:") {
         if let Ok(val) = line.replace("CCEl:", "").parse::<u32>() {
             ProtocolEvent::EliotLimitAmps(val)
+        } else {
+            ProtocolEvent::Unknown(line.to_string())
+        }
+        } else if line.starts_with("CP:") {
+        if let Ok(val) = line.replace("CP:", "").parse::<u32>() {
+            ProtocolEvent::CpVoltage(val)
+        } else {
+            ProtocolEvent::Unknown(line.to_string())
+        }
+    } else if line.starts_with("T2C:") {
+        let v = line.replace("T2C:", "");
+        if v == "1" || v == "0" {
+            ProtocolEvent::T2CEnabled(v == "1")
+        } else {
+            ProtocolEvent::Unknown(line.to_string())
+        }
+    } else if line.starts_with("SB:") {
+        let v = line.replace("SB:", "");
+        if v == "1" || v == "0" {
+            ProtocolEvent::SbState(v == "1")
         } else {
             ProtocolEvent::Unknown(line.to_string())
         }
