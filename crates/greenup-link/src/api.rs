@@ -18,6 +18,8 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/current/:amps", post(set_current))
         .route("/api/charge/start", post(start_charge))
         .route("/api/charge/stop", post(stop_charge))
+        .route("/api/t2/enable", post(enable_t2))
+        .route("/api/t2/disable", post(disable_t2))
         .route("/api/command", post(send_raw_command))
         .route("/api/tic/refresh", post(refresh_tic))
         .route("/api/bluetooth", post(set_bluetooth))
@@ -83,7 +85,7 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
 /// POST /api/charge/start
 async fn start_charge(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("API", "▶ Demande de démarrage de charge (T2COK)");
-    if state.serial_tx.send(Command::AuthorizeType2(true).encode()).await.is_ok() {
+    if state.serial_tx.send(Command::SetStartButton(true).encode()).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Charge autorisée (Type 2)"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
@@ -91,9 +93,30 @@ async fn start_charge(State(state): State<SharedState>) -> impl IntoResponse {
 }
 
 /// POST /api/charge/stop
+
+/// POST /api/t2/enable
+async fn enable_t2(State(state): State<SharedState>) -> impl IntoResponse {
+    logger::log("API", "🔓 Activation de la prise Type 2 (T2COK)");
+    if state.serial_tx.send(Command::AuthorizeType2(true).encode()).await.is_ok() {
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Prise activée (T2COK)"})))
+    } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
+    }
+}
+
+/// POST /api/t2/disable
+async fn disable_t2(State(state): State<SharedState>) -> impl IntoResponse {
+    logger::log("API", "🔒 Désactivation de la prise Type 2 (T2CNOK)");
+    if state.serial_tx.send(Command::AuthorizeType2(false).encode()).await.is_ok() {
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Prise désactivée (T2CNOK)"})))
+    } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
+    }
+}
+
 async fn stop_charge(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("API", "⏹ Demande d'arrêt de charge (T2CNOK)");
-    if state.serial_tx.send(Command::AuthorizeType2(false).encode()).await.is_ok() {
+    if state.serial_tx.send(Command::SetStartButton(false).encode()).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Charge stoppée (Type 2)"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))

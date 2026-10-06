@@ -129,6 +129,8 @@ pub enum Command {
     /// `SOK` / `SNOK` – Entre/sort du mode veille (uniquement depuis l'état A).
     SetSleep(bool),
     /// `Unlock` – Déverrouillage physique du câble.
+    /// `SBOK` / `SBNOK` - Simule l'appui logiciel sur le bouton START/STOP (Pause/Reprise parfaite).
+    SetStartButton(bool),
     Unlock,
 
     // --- 4. OCPP / RFID ---
