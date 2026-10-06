@@ -613,10 +613,9 @@
                 lblError.innerText = "";
             }
 
-            if (data.limit_amps && !isDraggingSlider && !isActionPending) {
-                let displayLimit = data.eliot_limit_amps || data.limit_amps;
-                slider.value = displayLimit;
-                lblSlider.innerText = displayLimit + " A";
+            if (data.eliot_limit_amps && !isDraggingSlider && !isActionPending) {
+                slider.value = data.eliot_limit_amps;
+                lblSlider.innerText = data.eliot_limit_amps + " A";
             }
 
             lastReportedState = data.state;
