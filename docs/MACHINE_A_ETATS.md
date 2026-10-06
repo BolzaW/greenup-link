@@ -116,3 +116,28 @@ Ces commandes simulent un appui logiciel sur le gros bouton physique STOP/START 
 *   Envoi de **`SBOK`** : La borne croit qu'on a appuyé sur START (ou branché le câble). Elle repasse en `State:A`, détecte la prise (`SBF:1`), émet `Start`, passe en `State:B` puis enclenche la charge (`State:C`).
 
 C'est la mécanique **parfaite** pour piloter les sessions de charge et de délestage pour l'intégration EVerest / Home Assistant, sans avoir à subir les effets secondaires des autres commandes d'interruption !
+
+### Mappage Standard EVCC / EVerest (Niveau 2)
+
+Pour exposer une machine à état propre et stable à un superviseur (comme EVCC ou EVerest), nous utilisons une couche d'abstraction (Niveau 2) qui traduit les états natifs Legrand en états standardisés : **A** (Débranché), **B** (Branché, en attente), **C** (En charge), **E** (Erreur).
+
+La logique choisie pour le code du driver `greenup-everest` est la suivante :
+
+**Cas Particulier (Borne verrouillée logiciellement) :**
+Si `T2C:0` : La borne est désactivée et sa machine à état est aveugle (`State` reste bloqué à `A`). L'état EVCC est déduit exclusivement de la tension du Control Pilot (`CP?`) :
+*   `CP:12` ➔ **A** (Débranché)
+*   `CP:9` ➔ **B** (Branché, suspendu)
+*(Note de conception : Le driver devra repasser `T2C:1` lorsqu'il voudra réautoriser la charge).*
+
+**Cas Nominal (T2C:1) :**
+La machine à état Legrand est cohérente et peut être traduite directement :
+*   `State:A` (Repos) ➔ **A**
+*   `State:L` (Débranchement) ➔ **A** *(transitionne automatiquement vers A)*
+*   `State:B` (Connecté, attente borne/TIC) ➔ **B**
+*   `State:C` (Attente véhicule / Prêt) ➔ **B**
+*   `State:I` (Interrompu par EV) ➔ **B** *(attention, reboucle automatiquement vers A->B->C, mais reste logique B)*
+*   `State:W` (Arrêt en cours) ➔ **B**
+*   `State:M` (Arrêt manuel / via `SBNOK`) ➔ **B** *(état stable tant que le véhicule n'est pas débranché/rebranché, car le rebranchement repassera `SB:1` physiquement)*
+*   `State:D` / `State:E` (En charge) ➔ **C**
+*   `State:R` (Défaut) ➔ **E**
+*   `State:X` (Reboot) ➔ **E**
