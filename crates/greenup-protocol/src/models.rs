@@ -10,6 +10,7 @@ pub struct Telemetry {
     pub state: String,
     pub error_code: String,
     pub limit_amps: u32,
+    pub eliot_limit_amps: Option<u32>,
     pub charge_complete: bool,
     pub tic_mode: String, // "": inconnu, "0": non présent, "1200": historique, "9600": standard
     #[serde(skip)]
@@ -27,6 +28,7 @@ impl Default for Telemetry {
             state: String::new(),
             error_code: String::new(),
             limit_amps: 16, // 16A par défaut
+            eliot_limit_amps: None,
             charge_complete: false,
             tic_mode: String::new(),
             last_power_update: None,
