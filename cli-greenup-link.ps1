@@ -83,7 +83,7 @@ while ($true) {
                 $response = Invoke-RestMethod -Uri "$BASE_URL/api/tic/refresh" -Method Post
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
-            "COMMAND" {            "COMMAND" {
+            "COMMAND" {
                 Write-Host "`n--- ATTENTION: MODE COMMANDE DIRECTE ---" -ForegroundColor Red
                 Write-Host "Vous écrivez directement sur le bus série de la borne." -ForegroundColor Red
                 Write-Host "N'envoyez pas de commandes inconnues sous peine de risquer de corrompre ou bloquer le matériel !" -ForegroundColor Red
