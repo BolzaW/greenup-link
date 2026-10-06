@@ -18,6 +18,8 @@ function Show-Menu {
     Write-Host "6. Piloter le module Bluetooth"
     Write-Host "7. Relancer l'initialisation de la borne"
     Write-Host "8. Forcer le rafraîchissement TIC"
+    Write-Host "9. Redémarrer la carte de puissance (Reset)"
+    Write-Host "COMMAND. Mode Expert (Commandes brutes)"
     Write-Host "0. Quitter"
     Write-Host "=================================================" -ForegroundColor Cyan
 }
@@ -81,6 +83,11 @@ while ($true) {
             "8" {
                 Write-Host "`n[POST] $BASE_URL/api/tic/refresh..." -ForegroundColor Yellow
                 $response = Invoke-RestMethod -Uri "$BASE_URL/api/tic/refresh" -Method Post
+                $response | ConvertTo-Json | Write-Host -ForegroundColor Green
+            }
+            "9" {
+                Write-Host "`n[POST] $BASE_URL/api/reset..." -ForegroundColor Yellow
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/reset" -Method Post
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
             "COMMAND" {
