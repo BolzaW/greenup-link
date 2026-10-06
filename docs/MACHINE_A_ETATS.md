@@ -37,7 +37,41 @@ Cette sémantique a été établie avec certitude par rétro-ingénierie du firm
 
 ---
 
-## 2. Incohérences constatées dans les logs (Quirks)
+## 2. Séquencements des états
+
+```
+                        +-----------------------------------+
+                        |                                   |
+        Slp:1           v                                   |
+   Y <---------------  [A]  Repos / Available               |
+   |                   / | \                                |
+   | Slp:0            /  |  \                               |
+   +-----------------+   |   +--------------------+         |
+                     |   |                        |         |
+              T2S    v   v DOM                    |         |
+                    [B]  [F]  <--------+          |         |
+                   / | \  / | \        |          |         |
+                  /  |  \/  |  \       |          |         |
+                 /   |  /\  |   \      |          |         |
+                v    v v  v v    v     |          |         |
+              [L]  [C]  [G]  [H]  [R]  |          |         |
+               |   /|\    \   /        |          |         |
+               |  / | \    \ /         |          |         |
+               | v  v  v    v          |          |         |
+               |[D] [E] [N] [B]--------+          |         |
+               | | \ / |                          |         |
+               | |  X  |                          |         |
+               | v v v v                          |         |
+               |[I]<->[J]                         |         |
+               |  \    /                          |         |
+               |   v  v                           |         |
+               +-->[L]--> [R] --------------------+---------+
+                                                            |
+      [K] --> [R] --> [A]      [M] --> [P] --> [M]          |
+      [O] --> [A]              [P] --> [R] --> [A] ---------+
+```
+
+## 3. Incohérences constatées dans les logs (Quirks)
 
 Bien que la liste ci-dessus soit extraite du code source de la borne, l'observation en direct (logs de charge) a mis en évidence quelques subtilités du moteur d'états qui devront être gérées par greenup-driver.
 
@@ -50,3 +84,6 @@ Lorsqu'on interroge l'état OCPP interne via OCPPPS? après que la **voiture** a
 
 ### Quirk #3 : State:A forcé malgré un câble branché après arrêt local
 Si l'on force l'arrêt de la charge depuis la borne via la commande T2CNOK, la borne effectue sa séquence de clôture (passant par W puis M) et retombe ensuite à l'état A (Available). **Cependant, le câble côté véhicule est toujours physiquement branché.** Logiquement, la borne devrait retourner en état B (Prise occupée, en attente d'autorisation), mais elle se déclare complètement libre.
+
+### Quirk #4 : Le mode Eco-Start (Heures Creuses) fantôme
+Normalement, la commande FM2:0 est censée désactiver la fonction éco-démarrage (la charge devrait démarrer instantanément sans attendre les Heures Creuses du TIC). Cependant, les logs montrent que même avec FM2:0, la borne semble rester influencée par le signal TIC. Au passage en Heures Creuses, l'ATmega pousse le passage à State:C de manière inattendue. Ce comportement confirme un bug matériel dans la gestion de la consigne FM2 en présence d'un compteur Linky.
