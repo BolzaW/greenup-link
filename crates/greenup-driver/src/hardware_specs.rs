@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// Spécifications matérielles de la borne, déduites de sa référence.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelSpec {
+pub struct HardwareCapabilities {
     /// Nom commercial de la borne.
     pub name: String,
     /// Référence Legrand (sans espaces).
@@ -21,7 +21,7 @@ pub struct ModelSpec {
     pub is_known: bool,
 }
 
-impl Default for ModelSpec {
+impl Default for HardwareCapabilities {
     /// Borne par défaut si la référence est inconnue (Mono, 4.6kW, 1 T2, pas de Schuko).
     fn default() -> Self {
         Self {
@@ -37,7 +37,7 @@ impl Default for ModelSpec {
     }
 }
 
-impl ModelSpec {
+impl HardwareCapabilities {
     /// Renvoie les spécifications de la borne à partir de sa référence Legrand (ex: "058001").
     pub fn from_reference(reference: &str) -> Self {
         // Nettoie la référence pour enlever d'éventuels espaces

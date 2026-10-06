@@ -44,7 +44,7 @@ impl Default for Telemetry {
     }
 }
 
-use crate::hardware_specs::ModelSpec;
+use crate::hardware_specs::HardwareCapabilities;
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug)]
 pub struct BoardInfo {
@@ -55,5 +55,5 @@ pub struct BoardInfo {
     pub week_year_production: String,
     pub bluetooth_enabled: Option<bool>,
     pub link_version: String,
-    pub spec: Option<ModelSpec>,
+    pub capabilities: Option<HardwareCapabilities>,
 }

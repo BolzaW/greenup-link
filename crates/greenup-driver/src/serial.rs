@@ -167,14 +167,14 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::Reference(v) => {
             if let Ok(mut info) = state.info.lock() {
-                let spec = crate::hardware_specs::ModelSpec::from_reference(&v);
+                let spec = crate::hardware_specs::HardwareCapabilities::from_reference(&v);
                 if !spec.is_known {
                     logger::log("SERIE", &format!("⚠️ Référence inconnue ({}), on assume un modèle de base (Mono 4.6kW)", v));
                 } else {
                     logger::log("SERIE", &format!("ℹ️ Modèle identifié : {}", spec.name));
                 }
                 info.reference = v;
-                info.spec = Some(spec);
+                info.capabilities = Some(spec);
             }
         }
         ProtocolEvent::WeekYearProduction(v) => {
