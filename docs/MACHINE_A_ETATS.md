@@ -85,9 +85,8 @@ Lorsqu'on interroge l'état OCPP interne via OCPPPS? après que la **voiture** a
 ### Quirk #3 : State:A forcé malgré un câble branché après arrêt local
 Si l'on force l'arrêt de la charge depuis la borne via la commande T2CNOK, la borne effectue sa séquence de clôture (passant par W puis M) et retombe ensuite à l'état A (Available). **Cependant, le câble côté véhicule est toujours physiquement branché.** Logiquement, la borne devrait retourner en état B (Prise occupée, en attente d'autorisation), mais elle se déclare complètement libre.
 
-### Quirk #4 : Le mode Eco-Start (Heures Creuses) fantôme
-Normalement, la commande FM2:0 est censée désactiver la fonction éco-démarrage (la charge devrait démarrer instantanément sans attendre les Heures Creuses du TIC). Cependant, les logs montrent que même avec FM2:0, la borne semble rester influencée par le signal TIC. Au passage en Heures Creuses, l'ATmega pousse le passage à State:C de manière inattendue. Ce comportement confirme un bug matériel dans la gestion de la consigne FM2 en présence d'un compteur Linky.
+### Quirk #4 : Le mode Eco-Start (Heures Creuses) fantôme et son contournement
+Normalement, la commande FM2:0 est censée désactiver la fonction éco-démarrage (la charge devrait démarrer instantanément sans attendre les Heures Creuses du TIC). Cependant, les logs montrent que même avec FM2:0, la borne semble rester influencée par le signal TIC. Au passage en Heures Creuses, l'ATmega pousse le passage à State:C de manière inattendue.
 
-### Quirk #5 : Le double rôle du bouton façade (SBF)
-L'analyse statique du firmware avait identifié les trames SBF:1 et SBF:0 comme provenant du gros bouton STOP/START en façade de la borne. S'il est vrai qu'un utilisateur peut l'actionner manuellement, les logs révèlent un comportement mécanique inattendu : **le branchement ou débranchement du véhicule fait basculer automatiquement le contacteur lié à ce bouton**. 
-Ainsi, l'insertion du câble déclenche SBF:1 -> Start -> State:B. Le retrait déclenche State:L -> SBF:0 -> State:A. Ce comportement hybride est fondamental à comprendre car le driver recevra des événements 'bouton' qui sont en réalité des événements de branchement physique.
+Fait particulièrement troublant : la borne peut répondre FM:1 à la commande FM? (indiquant qu'elle est bien en mode Direct Charge permanent), tout en appliquant quand même ce mode éco-start fantôme ! 
+**Solution de contournement :** L'envoi explicite de la commande FM:1 (même si la borne indique déjà être dans ce mode) désactive et purge efficacement ce mode fantôme. Le driver devra donc envoyer systématiquement FM:1 lors de son cycle d'initialisation pour garantir un état sain.
