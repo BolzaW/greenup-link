@@ -92,7 +92,9 @@ Normalement, la commande FM2:0 est censée désactiver la fonction éco-démarra
 Fait particulièrement troublant : la borne peut répondre FM:1 à la commande FM? (indiquant qu'elle est bien en mode Direct Charge permanent), tout en appliquant quand même ce mode éco-start fantôme ! 
 **Solution de contournement :** L'envoi explicite de la commande FM:1 (même si la borne indique déjà être dans ce mode) désactive et purge efficacement ce mode fantôme. Cependant, **ATTENTION** : l'envoi de FM:1 (notamment pendant un State:B) désactive purement et simplement toute la détection TIC ! La borne devient incapable de gérer le délestage ou les heures creuses. Il faut donc être très prudent avec cette commande.
 
-### Quirk #6 : Le Crash / Redémarrage sous 10A (CC:09)
-La norme IEC 61851 autorise une charge jusqu'à un minimum de 6A. Cependant, la borne Legrand possède une limitation drastique (déjà entraperçue dans les manuels) : **si la consigne de courant descend sous 10A, la borne panique.**
-Lorsqu'on envoie CC:9 (ou CC:09), la borne répond CC:00, abaisse physiquement le courant à ~6A pendant quelques secondes, puis émet un code d'erreur E:0010 et passe en State:R (Défaut). Pire encore, **elle redémarre complètement** (State:X) 5 secondes plus tard !
-Le driver greenup-everest devra donc imposer une limite logicielle stricte (Hard Limit) à 10A minimum pour toute consigne de charge dynamique (Smart Charging), sous peine de faire rebooter la borne en boucle.
+### Quirk #6 : Le bug du parseur `CC:` et le crash sous 6A
+L'analyse des consignes de courant a mis en évidence deux failles matérielles / logicielles consécutives :
+1. **Le parseur `CC:` est buggé** : Il attend strictement 2 chiffres. Si l'on envoie `CC:9` au lieu de `CC:09`, la borne l'interprète mal et applique une consigne de `0A` (elle répond d'ailleurs `CC:00`).
+2. **Crash sous 6A** : La norme IEC 61851 impose un courant minimum de 6A. Si la borne reçoit une consigne strictement inférieure à 6A (comme `CC:05`, ou `0A` à cause du bug précédent), elle n'arrête pas proprement la charge. Le courant chute au minimum matériel (~6.8A), puis au bout de 8 secondes la borne panique. Elle émet le défaut `E:0010` (`State:R`), clôture la session, et **redémarre complètement** (`State:X`) !
+
+Le driver `greenup-everest` devra donc systématiquement formater ses consignes sur 2 chiffres (ex: `CC:06`) et imposer une limite logicielle stricte interdisant de descendre sous `6A` pour éviter les reboots en boucle.
