@@ -211,6 +211,7 @@ impl Command {
             Command::ForceType2(on) => ok_nok("T2F", *on),
             Command::ForceDomestic(on) => ok_nok("2PF", *on),
             Command::SetSleep(on) => ok_nok("S", *on),
+            Command::SetStartButton(on) => ok_nok("SB", *on),
             Command::Unlock => "Unlock".into(),
 
             Command::GetOcppParameters => "OCPPPS?".into(),
@@ -271,6 +272,7 @@ mod tests {
 
     #[test]
     fn encodes_ok_nok_pairs() {
+        assert_eq!(Command::SetStartButton(false).as_frame(), "SBNOK");
         assert_eq!(Command::AuthorizeType2(true).as_frame(), "T2COK");
         assert_eq!(Command::AuthorizeType2(false).as_frame(), "T2CNOK");
         assert_eq!(Command::AuthorizeDomestic(true).as_frame(), "2PCOK");

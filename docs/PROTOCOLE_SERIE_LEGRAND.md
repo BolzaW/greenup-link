@@ -59,6 +59,7 @@ Ces commandes contrôlent directement la délivrance du courant.
 | `T2FOK` / `T2FNOK` | **Force** la charge sur la prise Type 2 (contournement des sécurités ou du planning ?). |
 | `2PFOK` / `2PFNOK` | **Force** la charge sur la prise domestique. |
 | `SOK` / `SNOK` | **Sleep (Veille)** : `SOK` force la borne à entrer en mode veille profonde (État `Y`, LEDs éteintes avec flash lent, réponse `Slp:1`). Ce mode n'est atteignable que depuis l'état `A`. `SNOK` réveille la borne (`Slp:0`, État `A`). |
+| `SBOK` / `SBNOK` | **Commandes de pilotage logiciel absolu (Pause/Reprise)**. Simulent l'appui sur le bouton physique START/STOP de la façade. `SBNOK` arrête proprement la charge et stabilise la borne en `State:M`. `SBOK` réveille la borne et relance le cycle (`State:B` -> `State:C`). Ne pas confondre avec l'événement de lecture `SBF`. |
 | `Unlock` | Ordonne le **déverrouillage physique** du câble (si la borne a un verrouillage de la prise Type 2). |
 
 ## 💳 4. Gestion OCPP / RFID

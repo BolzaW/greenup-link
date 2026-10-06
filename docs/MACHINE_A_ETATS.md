@@ -107,3 +107,12 @@ Cependant, puisque le câble est physiquement toujours branché, la borne détec
 **Le problème de l'auto-validation :**
 En mode `FM:1` (Direct Charge), la borne est programmée pour valider *automatiquement* l'état `B`. Sans intervention externe, elle passe de suite en `State:C` puis reprend la charge (`State:E`). Ce mode `FM:1` nous prive donc du contrôle de l'autorisation : la borne décide de charger d'elle-même.
 Pour implémenter une borne intelligente (Smart Charging) où le driver décide *quand* la charge doit démarrer, le mode `FM:1` n'est probablement pas adapté. Il faudra explorer d'autres modes (comme le mode OCPP `FM:6` ou l'activation de la gestion RFID) qui maintiennent la borne bloquée en `State:B` en attente d'une autorisation logicielle explicite.
+### Quirk #8 : La découverte majeure du pilotage Start/Stop via `SBOK` / `SBNOK`
+Le pilotage intelligent (Smart Charging) nécessite de pouvoir mettre en pause et reprendre une charge sans verrouiller le système. L'utilisation d' `Unlock` boucle à l'infini (voir Quirk #7), et `T2CNOK` aveugle la machine à état (Quirk #3).
+**La solution ultime réside dans les commandes `SBOK` et `SBNOK`.**
+Ces commandes simulent un appui logiciel sur le gros bouton physique STOP/START de la façade (qui est lui-même lié au contacteur de présence câble `SBF`).
+
+*   Envoi de **`SBNOK`** : La borne croit qu'on a appuyé sur le bouton STOP. Elle passe immédiatement en `State:W` (Arrêt en cours), envoie le ticket de session, puis se stabilise sagement en **`State:M`** (Arrêt manuel). Elle ne boucle pas, elle attend.
+*   Envoi de **`SBOK`** : La borne croit qu'on a appuyé sur START (ou branché le câble). Elle repasse en `State:A`, détecte la prise (`SBF:1`), émet `Start`, passe en `State:B` puis enclenche la charge (`State:C`).
+
+C'est la mécanique **parfaite** pour piloter les sessions de charge et de délestage pour l'intégration EVerest / Home Assistant, sans avoir à subir les effets secondaires des autres commandes d'interruption !
