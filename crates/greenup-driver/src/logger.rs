@@ -38,7 +38,9 @@ pub fn log(category: &str, message: &str) {
     let entry = format!("[{}] [{}] {}", timestamp, category, message);
 
     // Stdout (console)
-    println!("{}", entry);
+    if category != "TRACE" {
+        println!("{}", entry);
+    }
 
     // Fichier
     if let Ok(guard) = LOG_FILE.lock() {
