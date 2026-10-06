@@ -38,9 +38,9 @@ async fn main() {
         adapter_for_loop.run_event_loop().await;
     });
 
-    // 3. Connexion MQTT (Localhost Mosquitto d'EVerest)
-    // On désactive TLS pour alléger la compilation embarquée.
-    let mut mqttoptions = MqttOptions::new("greenup-everest-driver", "127.0.0.1", 1883);
+    // 3. Connexion MQTT (Configurable via variable d'environnement)
+    let mqtt_host = std::env::var("MQTT_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let mut mqttoptions = MqttOptions::new("greenup-everest-driver", &mqtt_host, 1883);
     mqttoptions.set_keep_alive(Duration::from_secs(5));
     
     let (client, mut connection) = AsyncClient::new(mqttoptions, 10);
