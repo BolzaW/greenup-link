@@ -91,3 +91,8 @@ Normalement, la commande FM2:0 est censée désactiver la fonction éco-démarra
 
 Fait particulièrement troublant : la borne peut répondre FM:1 à la commande FM? (indiquant qu'elle est bien en mode Direct Charge permanent), tout en appliquant quand même ce mode éco-start fantôme ! 
 **Solution de contournement :** L'envoi explicite de la commande FM:1 (même si la borne indique déjà être dans ce mode) désactive et purge efficacement ce mode fantôme. Cependant, **ATTENTION** : l'envoi de FM:1 (notamment pendant un State:B) désactive purement et simplement toute la détection TIC ! La borne devient incapable de gérer le délestage ou les heures creuses. Il faut donc être très prudent avec cette commande.
+
+### Quirk #6 : Le Crash / Redémarrage sous 10A (CC:09)
+La norme IEC 61851 autorise une charge jusqu'à un minimum de 6A. Cependant, la borne Legrand possède une limitation drastique (déjà entraperçue dans les manuels) : **si la consigne de courant descend sous 10A, la borne panique.**
+Lorsqu'on envoie CC:9 (ou CC:09), la borne répond CC:00, abaisse physiquement le courant à ~6A pendant quelques secondes, puis émet un code d'erreur E:0010 et passe en State:R (Défaut). Pire encore, **elle redémarre complètement** (State:X) 5 secondes plus tard !
+Le driver greenup-everest devra donc imposer une limite logicielle stricte (Hard Limit) à 10A minimum pour toute consigne de charge dynamique (Smart Charging), sous peine de faire rebooter la borne en boucle.
