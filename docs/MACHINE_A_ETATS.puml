@@ -11,7 +11,7 @@ state "A (Repos)" as A
 state "R (Défaut)" as R
 state "L (Débranchement T2S)" as L
 
-state "États Isolés" {
+state "États Isolés" as Isoles {
   state "K (Suspendu Borne)" as K
   state "O (Suspendu DOM)" as O
   state "M (Arrêt Local)" as M
