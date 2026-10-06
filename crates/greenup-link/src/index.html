@@ -618,9 +618,9 @@
                 lblSlider.innerText = data.eliot_limit_amps + " A";
             }
 
-            lastReportedState = data.state;
+            lastReportedState = data.greenup_state;
             updateLinky(data.tic_mode);
-            updateVisuals(data.state, data.charge_complete, data.current);
+            updateVisuals(data.greenup_state, data.charge_complete, data.current);
             
         } catch (err) {
             console.error("Erreur polling", err);

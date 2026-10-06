@@ -123,7 +123,7 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
 use crate::telemetry::Telemetry;
 
 fn update_iec_state(tel: &mut Telemetry) {
-    if tel.state == "R" || tel.state == "X" {
+    if tel.greenup_state == "R" || tel.greenup_state == "X" {
         tel.iec_state = Some("Error_E".to_string());
         return;
     }
@@ -138,7 +138,7 @@ fn update_iec_state(tel: &mut Telemetry) {
         return;
     }
 
-    match tel.state.as_str() {
+    match tel.greenup_state.as_str() {
         "A" | "L" => tel.iec_state = Some("Disconnected_A".to_string()),
         "B" | "C" | "I" | "W" | "M" => tel.iec_state = Some("Connected_B".to_string()),
         "D" | "E" => tel.iec_state = Some("Charging_C".to_string()),
@@ -185,11 +185,11 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::StateChange(state_val) => {
             if let Ok(mut tel) = state.telemetry.lock() {
-                if (state_val == "D" || state_val == "E") && (tel.state != "D" && tel.state != "E") {
+                if (state_val == "D" || state_val == "E") && (tel.greenup_state != "D" && tel.greenup_state != "E") {
                     tel.energy = 0.0;
                     tel.last_power_update = Some(std::time::Instant::now());
                 }
-                tel.state = state_val.clone(); update_iec_state(&mut tel);
+                tel.greenup_state = state_val.clone(); update_iec_state(&mut tel);
                 if state_val == "A" || state_val == "L" {
                     tel.charge_complete = false;
                 }
@@ -254,7 +254,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                 let now = std::time::Instant::now();
                 if let Some(last_time) = tel.last_power_update {
                     let elapsed_hours = last_time.elapsed().as_secs_f32() / 3600.0;
-                    if tel.state == "D" || tel.state == "E" {
+                    if tel.greenup_state == "D" || tel.greenup_state == "E" {
                         let energy_wh = ((previous_power + tel.power) / 2.0) * elapsed_hours;
                         tel.energy += energy_wh;
                     }

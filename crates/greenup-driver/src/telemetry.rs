@@ -7,7 +7,7 @@ pub struct Telemetry {
     pub power: f32, // Calculée: V * I
     pub energy: f32,
     pub frequency: f32,
-    pub state: String,
+    pub greenup_state: String,
     pub error_code: String,
     pub limit_amps: u32,
     pub eliot_limit_amps: Option<u32>,
@@ -29,7 +29,7 @@ impl Default for Telemetry {
             power: 0.0,
             energy: 0.0,
             frequency: 0.0,
-            state: String::new(),
+            greenup_state: String::new(),
             error_code: String::new(),
             limit_amps: 16, // 16A par défaut
             eliot_limit_amps: None,
