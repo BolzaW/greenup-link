@@ -84,9 +84,10 @@ Lorsqu'on interroge l'état OCPP interne via OCPPPS? après que la **voiture** a
 
 ### Quirk #3 : State:A forcé malgré un câble branché après arrêt local
 Si l'on force l'arrêt de la charge depuis la borne via la commande T2CNOK, la borne effectue sa séquence de clôture (passant par W puis M) et retombe ensuite à l'état A (Available). **Cependant, le câble côté véhicule est toujours physiquement branché.** Logiquement, la borne devrait retourner en état B (Prise occupée, en attente d'autorisation), mais elle se déclare complètement libre.
+**Conséquence grave (Cécité matérielle) :** Lorsque la borne a basculé en State:A suite à un T2CNOK (donc avec T2C:0), elle n'émet **PLUS AUCUN** événement lors du débranchement physique de la voiture (State:L et SBF:0 sont silencieusement ignorés). L'API se retrouve donc complètement aveugle : impossible de savoir si le câble est toujours là ou si l'utilisateur est parti !
 
 ### Quirk #4 : Le mode Eco-Start (Heures Creuses) fantôme et son contournement
 Normalement, la commande FM2:0 est censée désactiver la fonction éco-démarrage (la charge devrait démarrer instantanément sans attendre les Heures Creuses du TIC). Cependant, les logs montrent que même avec FM2:0, la borne semble rester influencée par le signal TIC. Au passage en Heures Creuses, l'ATmega pousse le passage à State:C de manière inattendue.
 
 Fait particulièrement troublant : la borne peut répondre FM:1 à la commande FM? (indiquant qu'elle est bien en mode Direct Charge permanent), tout en appliquant quand même ce mode éco-start fantôme ! 
-**Solution de contournement :** L'envoi explicite de la commande FM:1 (même si la borne indique déjà être dans ce mode) désactive et purge efficacement ce mode fantôme. Le driver devra donc envoyer systématiquement FM:1 lors de son cycle d'initialisation pour garantir un état sain.
+**Solution de contournement :** L'envoi explicite de la commande FM:1 (même si la borne indique déjà être dans ce mode) désactive et purge efficacement ce mode fantôme. Cependant, **ATTENTION** : l'envoi de FM:1 (notamment pendant un State:B) désactive purement et simplement toute la détection TIC ! La borne devient incapable de gérer le délestage ou les heures creuses. Il faut donc être très prudent avec cette commande.
