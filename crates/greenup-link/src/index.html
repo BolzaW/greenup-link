@@ -466,9 +466,11 @@
         if (greenup_state === window.lastVisualState && 
             iec_state === window.lastIecState &&
             isChargeComplete === window.lastChargeComplete && 
+            isActionPending === window.lastActionPending &&
             typeof window.lastAppliedSpeed !== 'undefined' && Math.abs(speed - window.lastAppliedSpeed) < 0.05) {
             return;
         }
+        window.lastActionPending = isActionPending;
         
         window.lastVisualState = greenup_state;
         window.lastIecState = iec_state;
@@ -497,12 +499,12 @@
 
         switch(iec_state) {
             case 'Disconnected_A':
-                stateLabel = "Débranché (A)";
+                stateLabel = "Débranché (" + greenup_state + ")";
                 startEnabled = true;
                 break;
 
             case 'Connected_B':
-                stateLabel = "Connecté (B)";
+                stateLabel = "Connecté (" + greenup_state + ")";
                 startEnabled = true;
                 // Cable vert (solide, pas d'animation)
                 if(animWire1) animWire1.classList.remove('opacity-0');
@@ -523,7 +525,7 @@
                 break;
 
             case 'Charging_C':
-                stateLabel = "En Charge (C)";
+                stateLabel = "En Charge (" + greenup_state + ")";
                 stopEnabled = true;
                 // Cable vert animé
                 if(animWire1) {
@@ -549,7 +551,7 @@
 
             case 'Error_E':
             case 'Faulted_F':
-                stateLabel = `Défaut (${iec_state}) - Code: ${error_code || 'Inconnu'}`;
+                stateLabel = `Défaut (${iec_state} / ${greenup_state}) - Code: ${error_code || 'Inconnu'}`;
                 // Borne, cable et voiture rouges
                 chargerBox.classList.add('border-rose-500/50', 'shadow-[0_0_30px_rgba(244,63,94,0.15)]');
                 chargerIcon.classList.replace('text-slate-600', 'text-rose-500');
@@ -568,7 +570,7 @@
 
         // Cas particulier de la charge terminée physiquement (ex: L ou M post-charge)
         if (isChargeComplete && (iec_state === 'Disconnected_A' || iec_state === 'Connected_B')) {
-            stateLabel = "Charge Terminée";
+            stateLabel = "Charge Terminée (" + greenup_state + ")";
             carIcon.classList.replace('text-slate-700', 'text-emerald-500');
             carIcon.classList.replace('text-sky-500', 'text-emerald-500');
         }
@@ -645,7 +647,8 @@
             console.error(err);
         }
         setTimeout(() => {
-            fetchTelemetry().then(unlockControls);
+            unlockControls();
+            fetchTelemetry();
         }, 1000);
     }
 
