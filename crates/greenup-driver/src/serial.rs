@@ -210,6 +210,9 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::LimitAmps(limit) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.limit_amps = limit; }
         }
+        ProtocolEvent::EliotLimitAmps(limit) => {
+            if let Ok(mut tel) = state.telemetry.lock() { tel.eliot_limit_amps = Some(limit); }
+        }
         ProtocolEvent::Energy(e) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.energy = e; }
         }
