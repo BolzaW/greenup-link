@@ -120,7 +120,7 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
 
 // Fonction qui analyse chaque ligne venant de la carte et met à jour la mémoire partagée
 
-use greenup_protocol::models::Telemetry;
+use crate::telemetry::Telemetry;
 
 fn update_iec_state(tel: &mut Telemetry) {
     if tel.state == "R" || tel.state == "X" {
@@ -167,7 +167,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::Reference(v) => {
             if let Ok(mut info) = state.info.lock() {
-                let spec = greenup_protocol::ModelSpec::from_reference(&v);
+                let spec = crate::hardware_specs::ModelSpec::from_reference(&v);
                 if !spec.is_known {
                     logger::log("SERIE", &format!("⚠️ Référence inconnue ({}), on assume un modèle de base (Mono 4.6kW)", v));
                 } else {

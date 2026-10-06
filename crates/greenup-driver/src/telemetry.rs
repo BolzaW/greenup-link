@@ -44,7 +44,7 @@ impl Default for Telemetry {
     }
 }
 
-use crate::modelspec::ModelSpec;
+use crate::hardware_specs::ModelSpec;
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug)]
 pub struct BoardInfo {
