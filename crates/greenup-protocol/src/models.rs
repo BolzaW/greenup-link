@@ -14,6 +14,7 @@ pub struct Telemetry {
     pub cp_voltage: Option<u32>,
     pub t2c_enabled: Option<bool>,
     pub sb_state: Option<bool>,
+    pub iec_state: Option<String>,
     pub charge_complete: bool,
     pub tic_mode: String, // "": inconnu, "0": non présent, "1200": historique, "9600": standard
     #[serde(skip)]
@@ -35,6 +36,7 @@ impl Default for Telemetry {
             cp_voltage: None,
             t2c_enabled: None,
             sb_state: None,
+            iec_state: None,
             charge_complete: false,
             tic_mode: String::new(),
             last_power_update: None,
