@@ -8,6 +8,7 @@ use axum::{
 use serde_json::json;
 use greenup_driver::logger;
 use greenup_driver::SharedState;
+use greenup_driver::serial::TicStartError;
 use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
 
 pub fn build_router(state: SharedState) -> Router {
@@ -19,12 +20,12 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/charge/start", post(start_charge))
         .route("/api/charge/stop", post(stop_charge))
         .route("/api/t2/enable", post(enable_t2))
-                .route("/api/init", post(init_sequence))
-        .route("/api/reset", post(reset_board))
         .route("/api/t2/disable", post(disable_t2))
-        .route("/api/command", post(send_raw_command))
+        .route("/api/init", post(init_sequence))
+        .route("/api/reset", post(reset_board))
         .route("/api/tic/refresh", post(refresh_tic))
         .route("/api/bluetooth", post(set_bluetooth))
+        .route("/api/command", post(send_raw_command))
         .with_state(state)
 }
 
@@ -88,7 +89,7 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
 
 /// POST /api/charge/start
 async fn start_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "▶ Demande de démarrage de charge (T2COK)");
+    logger::log("API", "▶ Demande de reprise de charge (SBOK)");
     if state.serial_tx.send(Command::SetStartButton(true).encode()).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Charge autorisée (Type 2)"})))
     } else {
@@ -104,22 +105,9 @@ async fn start_charge(State(state): State<SharedState>) -> impl IntoResponse {
 async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("API", "🔄 Lancement de la séquence d'initialisation");
     tokio::spawn(async move {
+        // La détection TIC n'est jamais lancée automatiquement :
+        // elle doit être demandée explicitement via POST /api/tic/refresh.
         greenup_driver::serial::trigger_init_sequence(&state).await;
-        // Laissons le temps aux réponses d'arriver (State?)
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        let is_state_a = {
-            if let Ok(tel) = state.telemetry.lock() {
-                tel.greenup_state == "A"
-            } else {
-                false
-            }
-        };
-        if is_state_a {
-            logger::log("API", "ℹ️ État A détecté post-init, lancement auto de la détection TIC");
-            if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
-            if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "detecting".to_string(); }
-            let _ = state.serial_tx.send(Command::SetTicTestMode(true).encode()).await;
-        }
     });
     (StatusCode::OK, Json(json!({"status": "success", "message": "Séquence d'initialisation lancée"})))
 }
@@ -154,7 +142,7 @@ async fn disable_t2(State(state): State<SharedState>) -> impl IntoResponse {
 }
 
 async fn stop_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "⏹ Demande d'arrêt de charge (T2CNOK)");
+    logger::log("API", "⏹ Demande de pause de charge (SBNOK)");
     if state.serial_tx.send(Command::SetStartButton(false).encode()).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Charge stoppée (Type 2)"})))
     } else {
@@ -175,37 +163,17 @@ async fn send_raw_command(State(state): State<SharedState>, body: String) -> imp
 
 /// POST /api/tic/refresh
 async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
-    let state_val = {
-        let tel = state.telemetry.lock().unwrap();
-        tel.greenup_state.clone()
-    };
-
-    if state_val != "A" {
-        logger::log("API", &format!("⛔ Rejet détection TIC car borne non libre (State: {})", state_val));
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": "La détection TIC ne peut se faire que lorsque la borne est libre (Statut A)"})),
-        );
-    }
-
     logger::log("API", "🔄 Demande manuelle de détection TIC (TICTM:1)");
-    
-    // Reset du compteur et state
-    
-    // Activation de la détection automatique du TIC (le driver se chargera d'envoyer TICTM:0)
-    if let Ok(mut tic) = state.tic_detection.lock() {
-        tic.is_active = true;
-        tic.zero_count = 0;
-    }
-
-    if let Ok(mut tel) = state.telemetry.lock() {
-        tel.tic_mode = "detecting".to_string(); // Indicateur pour l'IHM
-    }
-
-    if state.serial_tx.send(Command::SetTicTestMode(true).encode()).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Détection TIC lancée"})))
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
+    match greenup_driver::serial::start_tic_detection(&state).await {
+        Ok(()) => (StatusCode::OK, Json(json!({"status": "success", "message": "Détection TIC lancée"}))),
+        Err(TicStartError::NotInStateA(current)) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": format!("La détection TIC ne peut se faire que lorsque la borne est libre (State:A). État actuel : {}", current)})),
+        ),
+        Err(TicStartError::Serial) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Erreur de communication série"})),
+        ),
     }
 }
 

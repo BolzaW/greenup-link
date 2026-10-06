@@ -16,9 +16,42 @@ pub async fn trigger_init_sequence(state: &SharedState) {
         let _ = state.serial_tx.send(cmd.encode()).await;
         tokio::time::sleep(Duration::from_millis(150)).await;
     }
-
-
 }
+
+/// Raison pour laquelle la détection TIC n'a pas été lancée.
+#[derive(Debug)]
+pub enum TicStartError {
+    /// La borne n'est pas en `State:A` (contient l'état Legrand courant).
+    NotInStateA(String),
+    /// Le canal vers le port série est fermé.
+    Serial,
+}
+
+/// Lance la détection TIC (`TICTM:1`), UNIQUEMENT si l'état Legrand est `A`.
+///
+/// Garde-fou centralisé : si la borne n'est pas en `State:A`, la fonction ne fait
+/// strictement rien (aucune trame envoyée, aucun état modifié). Le driver se charge
+/// ensuite d'envoyer `TICTM:0` à la fin de la détection.
+pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartError> {
+    let current_state = match state.telemetry.lock() {
+        Ok(tel) => tel.greenup_state.clone(),
+        Err(_) => String::from("Unknown"),
+    };
+
+    if current_state != "A" {
+        logger::log("SERIE", &format!("⛔ Détection TIC ignorée : borne non libre (State: {})", current_state));
+        return Err(TicStartError::NotInStateA(current_state));
+    }
+
+    if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
+    if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "detecting".to_string(); }
+    state
+        .serial_tx
+        .send(Command::SetTicTestMode(true).encode())
+        .await
+        .map_err(|_| TicStartError::Serial)
+}
+
 
 pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, _state: &SharedState) {
     let hello = Command::RaspberryPiModeOk;
@@ -49,28 +82,10 @@ pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
             Ok(mut port) => {
                 logger::log("SERIE", "✅ Port ouvert. Envoi de la séquence d'initialisation...");
 
-                // Trame magique
-                let hello = Command::RaspberryPiModeOk;
-                let _ = port.write_all(hello.encode().as_bytes());
-                logger::log("SERIE_TX", &hello.as_frame());
-                std::thread::sleep(Duration::from_millis(200));
-
-                // Demande des infos de base avec délais pour ne pas saturer le buffer RX
-                for cmd in Command::startup_queries() {
-                    let _ = port.write_all(cmd.encode().as_bytes());
-                    logger::log("SERIE_TX", &cmd.as_frame());
-                    std::thread::sleep(Duration::from_millis(150));
-                }
-
-                // Séquence de détection TIC : on envoie TICTM:1 et on attend TICTestB:XXXX
-                if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
-                if let Ok(mut tel) = state.telemetry.lock() {
-                    tel.tic_mode = "detecting".to_string(); // Indicateur pour l'IHM
-                }
-                let tic = Command::SetTicTestMode(true);
-                let _ = port.write_all(tic.encode().as_bytes());
-                logger::log("SERIE_TX", &format!("{} (début détection TIC)", tic));
-                std::thread::sleep(Duration::from_millis(150));
+                // Séquence de démarrage (trame magique + requêtes d'état).
+                // La détection TIC n'est PLUS lancée automatiquement : elle doit être
+                // demandée explicitement via start_tic_detection() (POST /api/tic/refresh).
+                send_init_sequence_sync(&mut port, &state);
 
                 let mut read_buf = [0u8; 1024];
                 let mut line_buffer = String::new();
