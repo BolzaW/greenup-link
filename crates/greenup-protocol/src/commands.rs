@@ -12,7 +12,7 @@ use std::fmt;
 pub const FRAME_TERMINATOR: &str = "\r";
 
 /// Courant minimal accepté par la carte (en dessous, la carte passe en défaut).
-pub const MIN_CURRENT_AMPS: u8 = 10;
+pub const MIN_CURRENT_AMPS: u8 = 7;
 /// Courant maximal accepté par la carte.
 pub const MAX_CURRENT_AMPS: u8 = 32;
 
@@ -201,7 +201,7 @@ impl Command {
             Command::GetTicCurrentLimit => "CCTIC?".into(),
             Command::SetTicTestMode(on) => format!("TICTM:{}", *on as u8),
 
-            Command::SetCurrentLimit(a) => format!("CC:{:02}", a),
+            Command::SetCurrentLimit(a) => format!("CCEl:{:02}", a),
             Command::SetSchukoCurrentLimit(a) => format!("CCS:{:02}", a),
             Command::AuthorizeType2(on) => ok_nok("T2C", *on),
             Command::AuthorizeDomestic(on) => ok_nok("2PC", *on),
@@ -278,8 +278,8 @@ mod tests {
 
     #[test]
     fn encodes_parameterized_frames() {
-        assert_eq!(Command::SetCurrentLimit(6).as_frame(), "CC:06");
-        assert_eq!(Command::SetCurrentLimit(16).as_frame(), "CC:16");
+        assert_eq!(Command::SetCurrentLimit(7).as_frame(), "CCEl:07");
+        assert_eq!(Command::SetCurrentLimit(16).as_frame(), "CCEl:16");
         assert_eq!(Command::SetSchukoCurrentLimit(10).as_frame(), "CCS:10");
         assert_eq!(Command::SetTicTestMode(true).as_frame(), "TICTM:1");
         assert_eq!(Command::SetEcoStart(false).as_frame(), "FM2:0");
