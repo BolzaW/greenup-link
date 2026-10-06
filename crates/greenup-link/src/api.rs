@@ -102,6 +102,21 @@ async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("API", "🔄 Lancement de la séquence d'initialisation");
     tokio::spawn(async move {
         greenup_driver::serial::trigger_init_sequence(&state).await;
+        // Laissons le temps aux réponses d'arriver (State?)
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let is_state_a = {
+            if let Ok(tel) = state.telemetry.lock() {
+                tel.state == "A"
+            } else {
+                false
+            }
+        };
+        if is_state_a {
+            logger::log("API", "ℹ️ État A détecté post-init, lancement auto de la détection TIC");
+            if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
+            if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "detecting".to_string(); }
+            let _ = state.serial_tx.send(Command::SetTicTestMode(true).encode()).await;
+        }
     });
     (StatusCode::OK, Json(json!({"status": "success", "message": "Séquence d'initialisation lancée"})))
 }

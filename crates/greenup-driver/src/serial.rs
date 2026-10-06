@@ -17,11 +17,7 @@ pub async fn trigger_init_sequence(state: &SharedState) {
         tokio::time::sleep(Duration::from_millis(150)).await;
     }
 
-    if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
-    if let Ok(mut tel) = state.telemetry.lock() {
-        tel.tic_mode = "detecting".to_string();
-    }
-    let _ = state.serial_tx.send(Command::SetTicTestMode(true).encode()).await;
+
 }
 
 pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, state: &SharedState) {
@@ -36,13 +32,7 @@ pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, state
         std::thread::sleep(Duration::from_millis(150));
     }
 
-    if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
-    if let Ok(mut tel) = state.telemetry.lock() {
-        tel.tic_mode = "detecting".to_string();
-    }
-    let tic_cmd = Command::SetTicTestMode(true);
-    let _ = port.write_all(tic_cmd.encode().as_bytes());
-    logger::log("SERIE_TX", &tic_cmd.as_frame());
+
 }
 
 pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
