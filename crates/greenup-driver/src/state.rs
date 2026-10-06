@@ -6,7 +6,7 @@ pub struct TicDetectionState {
 
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-pub use greenup_protocol::{BoardInfo, Telemetry};
+pub use crate::telemetry::{BoardInfo, Telemetry};
 
 pub struct AppState {
     pub telemetry: Mutex<Telemetry>,
