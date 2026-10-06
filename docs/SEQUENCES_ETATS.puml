@@ -8,12 +8,12 @@ skinparam state {
 }
 
 state "1. Cycle Nominal : Arrêt déclenché par la voiture (EV)" as CycleNominal {
-  state "Repos" as A1
-  state "Connecté" as B1
-  state "Attente EV" as C1
-  state "En Charge" as DE1
-  state "Interrompu par EV" as I1
-  state "Débranchement" as L1
+  state "A : Repos" as A1
+  state "B : Connecté" as B1
+  state "C : Attente EV" as C1
+  state "D/E : En Charge" as DE1
+  state "I : Interrompu par EV" as I1
+  state "L : Débranchement" as L1
 
   [*] --> A1
   A1 --> B1 : Branchement
@@ -27,12 +27,12 @@ state "1. Cycle Nominal : Arrêt déclenché par la voiture (EV)" as CycleNomina
 }
 
 state "2. Arrêt forcé par la Borne (via commande locale)" as CycleForce {
-  state "Repos" as A2
-  state "Connecté" as B2
-  state "Attente EV" as C2
-  state "En Charge" as DE2
-  state "Arrêt en cours" as W2
-  state "Arrêt terminé" as M2
+  state "A : Repos" as A2
+  state "B : Connecté" as B2
+  state "C : Attente EV" as C2
+  state "D/E : En Charge" as DE2
+  state "W : Arrêt en cours" as W2
+  state "M : Arrêt terminé" as M2
 
   [*] --> A2
   A2 --> B2 : Branchement
