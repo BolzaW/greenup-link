@@ -87,3 +87,6 @@ Si l'on force l'arrêt de la charge depuis la borne via la commande T2CNOK, la b
 
 ### Quirk #4 : Le mode Eco-Start (Heures Creuses) fantôme
 Normalement, la commande FM2:0 est censée désactiver la fonction éco-démarrage (la charge devrait démarrer instantanément sans attendre les Heures Creuses du TIC). Cependant, les logs montrent que même avec FM2:0, la borne semble rester influencée par le signal TIC. Au passage en Heures Creuses, l'ATmega pousse le passage à State:C de manière inattendue. Ce comportement confirme un bug matériel dans la gestion de la consigne FM2 en présence d'un compteur Linky.
+
+### Quirk #5 : SBF:1 et SBF:0 ne sont pas un bouton en façade, mais le capteur de présence câble
+L'analyse statique du firmware avait identifié les trames SBF:1 et SBF:0 comme provenant d'un 'bouton poussoir'. En réalité, les logs révèlent que l'insertion du câble déclenche la séquence de démarrage CCCa:32 -> CCS:32 -> SBF:1 -> Start -> State:B. De même, le retrait du câble déclenche State:L -> SBF:0 -> State:A. **SBF (Switch Branchement Fiche)** est donc le micro-switch mécanique situé dans la prise T2S, confirmant l'insertion ou l'extraction physique du connecteur indépendamment du signal Control Pilot.
