@@ -19,7 +19,8 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/charge/start", post(start_charge))
         .route("/api/charge/stop", post(stop_charge))
         .route("/api/t2/enable", post(enable_t2))
-        .route("/api/init", post(init_sequence))
+                .route("/api/init", post(init_sequence))
+        .route("/api/reset", post(reset_board))
         .route("/api/t2/disable", post(disable_t2))
         .route("/api/command", post(send_raw_command))
         .route("/api/tic/refresh", post(refresh_tic))
@@ -127,6 +128,16 @@ async fn enable_t2(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("API", "🔓 Activation de la prise Type 2 (T2COK)");
     if state.serial_tx.send(Command::AuthorizeType2(true).encode()).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Prise activée (T2COK)"})))
+    } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
+    }
+}
+
+/// POST /api/reset
+async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
+    logger::log("API", "⚠️ Demande de redémarrage matériel (Reset)");
+    if state.serial_tx.send(Command::Reset.encode()).await.is_ok() {
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Redémarrage de la carte ATmega demandé"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
     }
