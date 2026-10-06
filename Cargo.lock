@@ -233,7 +233,7 @@ version = "0.1.0"
 
 [[package]]
 name = "greenup-link"
-version = "0.1.0-SNAPSHOT"
+version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
