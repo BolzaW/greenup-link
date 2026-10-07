@@ -43,6 +43,20 @@ Pour intégrer cette borne dans EVerest, utilisez les modules génériques MQTT 
 
 Dans votre fichier `config.json` d'EVerest, vous devrez configurer les modules de type "Generic MQTT" pour faire correspondre les entrées/sorties avec ces topics.
 
+## Limites et Avertissements (Hardware Quirks)
+
+En raison de la nature propriétaire du firmware de la carte Legrand, certaines contraintes physiques s'imposent à ce module et à EVerest :
+
+1. **Le Powermeter est largement falsifié (émulé) :**
+   La borne Legrand ne possède pas de véritable compteur d'énergie (certifié MID). La seule grandeur réellement mesurée par le matériel est l'intensité (`Courant_A`). La tension (`voltage_V`) remonte toujours une valeur fixe théorique de 230V. Par conséquent, les valeurs de puissance (`power_W`) et d'énergie cumulée (`energy_Wh`) exposées à EVerest sont de pures déductions mathématiques (P = U × I), basées sur l'hypothèse d'une tension parfaite. 
+
+2. **L'Auto-start au branchement (Saut direct à l'état C) :**
+   Par défaut, la carte Legrand agit en mode "Plug & Charge". Dès qu'un véhicule est branché, la carte valide l'état interne (`SB:1`) de son propre chef, passant presque instantanément de l'état `B` (Connecté) à `C` (En charge).
+   Si vous configurez EVerest pour gérer les autorisations (par exemple : exiger un badge RFID avant de charger), notre adaptateur sera obligé d'intercepter ce "faux départ" et d'envoyer immédiatement un `SBNOK` (Stop) logiciel à la carte pour la forcer à suspendre la charge (`State:M`). 
+   Il est donc normal d'entendre un "clac" de relais suivi d'une micro-charge d'une seconde lors du branchement, avant que le gestionnaire d'EVerest ne reprenne la main et ne coupe le jus. C'est un bricolage inévitable face au comportement très (trop) autonome du firmware Legrand.
+
+## Architecture de l'Adaptateur
+
 ```rust
 pub struct EverestAdapter {
     // Écoute des événements traduits pour EVerest
