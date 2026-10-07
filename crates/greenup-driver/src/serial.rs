@@ -78,19 +78,31 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
         let mut reader = BufReader::new(clone_port);
         let mut line = String::new();
         loop {
-            line.clear();
             match reader.read_line(&mut line) {
                 Ok(n) if n > 0 => {
                     let clean_line = line.trim();
-                    if clean_line.is_empty() { continue; }
-                    
-                    // On envoie une copie au TX pour le matching
-                    let _ = internal_tx.send(clean_line.to_string());
-                    
-                    // On parse pour mettre a jour la telemetrie
-                    parse_incoming_line(clean_line, &state_rx);
+                    if !clean_line.is_empty() {
+                        // On envoie une copie au TX pour le matching
+                        let _ = internal_tx.send(clean_line.to_string());
+                        
+                        // On parse pour mettre a jour la telemetrie
+                        parse_incoming_line(clean_line, &state_rx);
+                    }
+                    line.clear();
                 }
-                _ => {}
+                Ok(_) => {
+                    // EOF
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                    // Timeout normal, on garde ce qui a déjà été lu dans line
+                }
+                Err(e) => {
+                    // Autre erreur
+                    crate::logger::log("SERIE", &format!("Erreur de lecture série: {:?}", e));
+                    line.clear();
+                    std::thread::sleep(Duration::from_millis(100));
+                }
             }
         }
     });
