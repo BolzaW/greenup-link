@@ -12,13 +12,36 @@ La crate `greenup-everest` joue donc le rôle de **Façade / Adaptateur** :
 3. **Limite de courant (Set PWM)** : Convertit le rapport cyclique demandé par le gestionnaire d'énergie d'EVerest (`duty_cycle_pct`) en Ampères matériels pour la borne (`CC:XX`).
 4. **Télémétrie (Powermeter)** : Publie la puissance, la tension et l'énergie sous un format digeste pour EVerest.
 
-## Intégration Finale
+## Intégration Finale (Pont MQTT)
 
-Actuellement, ce crate est prêt à être interfacé soit :
-- Avec **`everest-rs`** si l'environnement de build (CMake, `ev-cli`) le permet.
-- Via un pont **MQTT** (le plus universel) : on pourra créer un binaire qui instancie l'`EverestAdapter` et publie/souscrit aux topics MQTT EVerest (`everest/power_meter/...`, `everest/board_support/...`).
+Actuellement, ce crate fonctionne comme un **exécutable autonome (Daemon MQTT)**. Il se connecte à un broker MQTT local et agit comme un pont de traduction entre le port série Legrand et le monde extérieur.
 
-## Architecture de l'Adaptateur
+### API MQTT (Topics standards)
+
+Pour intégrer cette borne dans EVerest, utilisez les modules génériques MQTT d'EVerest et configurez-les pour écouter/publier sur les topics suivants :
+
+#### Émission (Legrand ➔ EVerest)
+*   **Topic:** `everest/board_support/event`
+    *   **Payload (Texte) :** `A`, `B`, `C`, `Error`, `Faulted`
+    *   **Description :** État de la machine IEC 61851 (câble branché, charge en cours, etc.).
+*   **Topic:** `everest/powermeter/telemetry`
+    *   **Payload (JSON) :** `{"voltage_V": 230.0, "current_A": 16.0, "power_W": 3680.0, "energy_Wh": 15000.0}`
+    *   **Description :** Remontée des compteurs d'énergie et puissances instantanées.
+
+#### Réception (EVerest ➔ Legrand)
+*   **Topic:** `everest/board_support/cmd/allow_power_on`
+    *   **Payload (Texte) :** `true` ou `false`
+    *   **Description :** Autorise ou suspend la charge (simule un appui sur Start/Stop).
+*   **Topic:** `everest/board_support/cmd/set_pwm`
+    *   **Payload (Texte) :** Rapport cyclique en pourcentage (ex: `26.6` pour 16A).
+    *   **Description :** Modifie la consigne de courant. La borne Legrand ne gère pas le vrai PWM, ce pourcentage est converti en Ampères (`Amps = PWM * 0.6`) et envoyé à la carte. Limite bridée entre 7A et 32A.
+*   **Topic:** `everest/board_support/cmd/reset`
+    *   **Payload (Texte) :** N'importe quelle valeur (ex: `1`).
+    *   **Description :** Déclenche un redémarrage matériel (Reset ATmega).
+
+### Configuration EVerest
+
+Dans votre fichier `config.json` d'EVerest, vous devrez configurer les modules de type "Generic MQTT" pour faire correspondre les entrées/sorties avec ces topics.
 
 ```rust
 pub struct EverestAdapter {
