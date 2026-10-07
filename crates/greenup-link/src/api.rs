@@ -71,7 +71,7 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
 
     logger::log("API", &format!("⚡ Modification limite courant → {}A", amps));
     
-    if state.serial_tx.send(Command::Raw(cmd)).await.is_ok() {
+    if state.serial_tx.send(cmd).await.is_ok() {
         (
             StatusCode::OK,
             Json(json!({
@@ -184,7 +184,7 @@ async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<Blu
     
     logger::log("API", &format!("{} Bluetooth demandée", log_msg));
     
-    if state.serial_tx.send(Command::Raw(cmd)).await.is_ok() {
+    if state.serial_tx.send(cmd).await.is_ok() {
         (
             StatusCode::OK,
             Json(json!({"status": "success", "message": format!("Bluetooth {} avec succès", if payload.enabled { "activé" } else { "désactivé" })}))

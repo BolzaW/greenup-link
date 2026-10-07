@@ -17,7 +17,7 @@ async fn main() {
     greenup_driver::logger::log("SYS", &format!("               GREEN'UP LINK v{:<15}     ", pkg_version));
     greenup_driver::logger::log("SYS", "===================================================");
 
-    let (tx, rx) = mpsc::channel::<String>(32);
+    let (tx, rx) = mpsc::channel::<greenup_protocol::Command>(32);
 
     let mut initial_info = BoardInfo::default();
     initial_info.link_version = pkg_version.to_string();
