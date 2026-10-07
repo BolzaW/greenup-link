@@ -1,10 +1,8 @@
 use crate::logger;
 use crate::state::SharedState;
 use greenup_protocol::{commands::FunctioningMode, Command, parser::{parse_line, ProtocolEvent}};
-use serialport::SerialPort;
 use std::io::{BufRead, BufReader, Write};
 use std::time::Duration;
-use tokio::sync::mpsc;
 
 const TICTM_MAX_ZEROS: u32 = 5;
 
@@ -70,7 +68,7 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
         .open()
         .expect("Impossible d'ouvrir le port série /dev/ttyUSB0");
 
-    let mut clone_port = port.try_clone().expect("Echec clone port serie");
+    let clone_port = port.try_clone().expect("Echec clone port serie");
 
     // Canal interne pour envoyer les lignes lues au thread TX pour acquittement
     let (internal_tx, internal_rx) = std::sync::mpsc::channel::<String>();
