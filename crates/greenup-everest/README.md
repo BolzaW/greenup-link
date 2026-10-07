@@ -51,9 +51,9 @@ En raison de la nature propriétaire du firmware de la carte Legrand, certaines 
    La borne Legrand ne possède pas de véritable compteur d'énergie (certifié MID). La seule grandeur réellement mesurée par le matériel est l'intensité (`Courant_A`). La tension (`voltage_V`) remonte toujours une valeur fixe théorique de 230V. Par conséquent, les valeurs de puissance (`power_W`) et d'énergie cumulée (`energy_Wh`) exposées à EVerest sont de pures déductions mathématiques (P = U × I), basées sur l'hypothèse d'une tension parfaite. 
 
 2. **L'Auto-start au branchement (Saut direct à l'état C) :**
-   Par défaut, la carte Legrand agit en mode "Plug & Charge". Dès qu'un véhicule est branché, la carte valide l'état interne (`SB:1`) de son propre chef, passant presque instantanément de l'état `B` (Connecté) à `C` (En charge).
-   Si vous configurez EVerest pour gérer les autorisations (par exemple : exiger un badge RFID avant de charger), notre adaptateur sera obligé d'intercepter ce "faux départ" et d'envoyer immédiatement un `SBNOK` (Stop) logiciel à la carte pour la forcer à suspendre la charge (`State:M`). 
-   Il est donc normal d'entendre un "clac" de relais suivi d'une micro-charge d'une seconde lors du branchement, avant que le gestionnaire d'EVerest ne reprenne la main et ne coupe le jus. C'est un bricolage inévitable face au comportement très (trop) autonome du firmware Legrand.
+   La carte Legrand (ATmega) est conçue physiquement pour fonctionner exclusivement en "Plug & Charge". Lors du branchement d'un véhicule (passage de l'état A à B), **le firmware Legrand force de lui-même l'état interne à `SB:1` et passe immédiatement en charge (état C)**, et ce, *peu importe* si on lui avait envoyé un ordre d'arrêt (`SBNOK`) au préalable !
+   Notre adaptateur MQTT ne fait pas de magie pour intercepter cela : il se contente de remonter le passage en état C à EVerest. Si EVerest est configuré avec un profil d'autorisation (ex: exiger un badge RFID avant de charger), EVerest constatera que la charge a démarré sans sa permission et réagira en envoyant immédiatement une commande de coupure (`allow_power_on(false)` ce qui déclenche un `SBNOK`). 
+   Il est donc tout à fait normal d'entendre un "clac" de relais et d'observer une micro-charge d'une seconde lors du branchement, le temps qu'EVerest réagisse pour suspendre la charge (`State:M`). C'est un comportement inévitable lié à l'obstination du firmware Legrand à démarrer la charge tout seul.
 
 ## Architecture de l'Adaptateur
 
