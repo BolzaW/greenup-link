@@ -277,7 +277,7 @@ impl Command {
             Command::SetTicTestMode(true) => Some("TICTM:1"),
             Command::SetTicTestMode(false) => Some("TICTM:0"),
 
-            Command::SetCurrentLimit(_) => Some("CC:"),
+            Command::SetCurrentLimit(_) => Some("CCEl:"),
             Command::SetSchukoCurrentLimit(_) => Some("CCS:"),
             Command::AuthorizeType2(true) => Some("T2C:1"),
             Command::AuthorizeType2(false) => Some("T2C:0"),
