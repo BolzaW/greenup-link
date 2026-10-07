@@ -287,7 +287,7 @@ impl Command {
             Command::ForceType2(false) => Some("T2F:0"),
             Command::ForceDomestic(true) => Some("2PF:1"),
             Command::ForceDomestic(false) => Some("2PF:0"),
-            Command::SetSleep(_) => Some("S:"), // À vérifier
+            Command::SetSleep(_) => Some("Slp:"),
             Command::SetStartButton(_) => Some("SB:"),
             Command::Unlock => None, // À vérifier
 
