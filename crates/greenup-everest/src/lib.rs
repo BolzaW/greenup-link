@@ -108,7 +108,7 @@ impl EverestAdapter {
         let cmd = Command::SetStartButton(allow);
         self.driver_state
             .serial_tx
-            .send(cmd.encode())
+            .send(cmd)
             .await
             .map_err(|_| "Erreur d'envoi TX".to_string())
     }
@@ -129,7 +129,7 @@ impl EverestAdapter {
         if let Ok(cmd) = Command::set_current_limit(amps) {
             self.driver_state
                 .serial_tx
-                .send(cmd.encode())
+                .send(cmd)
                 .await
                 .map_err(|_| "Erreur d'envoi TX".to_string())
         } else {
@@ -141,7 +141,7 @@ impl EverestAdapter {
     pub async fn hardware_reset(&self) -> Result<(), String> {
         self.driver_state
             .serial_tx
-            .send(Command::Reset.encode())
+            .send(Command::Reset)
             .await
             .map_err(|_| "Erreur d'envoi TX".to_string())
     }

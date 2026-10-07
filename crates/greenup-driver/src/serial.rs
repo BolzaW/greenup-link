@@ -1,133 +1,98 @@
-use crate::state::SharedState;
 use crate::logger;
-use std::io::{Read, Write};
+use crate::state::SharedState;
+use greenup_protocol::{commands::FunctioningMode, Command, parser::{parse_line, ProtocolEvent}};
+use serialport::SerialPort;
+use std::io::{BufRead, BufReader, Write};
 use std::time::Duration;
 use tokio::sync::mpsc;
-use greenup_protocol::{parse_line, Command, FunctioningMode, ProtocolEvent};
 
-const TICTM_MAX_ZEROS: u32 = 5;
 
 pub async fn trigger_init_sequence(state: &SharedState) {
-    let hello = Command::RaspberryPiModeOk;
-    let _ = state.serial_tx.send(hello.encode()).await;
-    tokio::time::sleep(Duration::from_millis(200)).await;
-
     for cmd in Command::startup_queries() {
-        let _ = state.serial_tx.send(cmd.encode()).await;
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        let _ = state.serial_tx.send(cmd).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
 }
 
-/// Raison pour laquelle la détection TIC n'a pas été lancée.
-#[derive(Debug)]
-pub enum TicStartError {
-    /// La borne n'est pas en `State:A` (contient l'état Legrand courant).
-    NotInStateA(String),
-    /// Le canal vers le port série est fermé.
-    Serial,
-}
+pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Receiver<Command>) {
+    let mut port = serialport::new("/dev/ttyUSB0", 115_200)
+        .timeout(Duration::from_millis(100))
+        .open()
+        .expect("Impossible d'ouvrir le port série /dev/ttyUSB0");
 
-/// Lance la détection TIC (`TICTM:1`), UNIQUEMENT si l'état Legrand est `A`.
-///
-/// Garde-fou centralisé : si la borne n'est pas en `State:A`, la fonction ne fait
-/// strictement rien (aucune trame envoyée, aucun état modifié). Le driver se charge
-/// ensuite d'envoyer `TICTM:0` à la fin de la détection.
-pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartError> {
-    let current_state = match state.telemetry.lock() {
-        Ok(tel) => tel.greenup_state.clone(),
-        Err(_) => String::from("Unknown"),
-    };
+    let mut clone_port = port.try_clone().expect("Echec clone port serie");
 
-    if current_state != "A" {
-        logger::log("SERIE", &format!("⛔ Détection TIC ignorée : borne non libre (State: {})", current_state));
-        return Err(TicStartError::NotInStateA(current_state));
-    }
+    // Canal interne pour envoyer les lignes lues au thread TX pour acquittement
+    let (internal_tx, internal_rx) = std::sync::mpsc::channel::<String>();
 
-    if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
-    if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "detecting".to_string(); }
-    state
-        .serial_tx
-        .send(Command::SetTicTestMode(true).encode())
-        .await
-        .map_err(|_| TicStartError::Serial)
-}
+    let state_rx = state.clone();
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(clone_port);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match reader.read_line(&mut line) {
+                Ok(n) if n > 0 => {
+                    let clean_line = line.trim();
+                    if clean_line.is_empty() { continue; }
+                    
+                    // On envoie une copie au TX pour le matching
+                    let _ = internal_tx.send(clean_line.to_string());
+                    
+                    // On parse pour mettre a jour la telemetrie
+                    parse_incoming_line(clean_line, &state_rx);
+                }
+                _ => {}
+            }
+        }
+    });
 
-
-pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, _state: &SharedState) {
-    let hello = Command::RaspberryPiModeOk;
-    let _ = port.write_all(hello.encode().as_bytes());
-    logger::log("SERIE_TX", &hello.as_frame());
-    std::thread::sleep(Duration::from_millis(200));
-
-    for cmd in Command::startup_queries() {
-        let _ = port.write_all(cmd.encode().as_bytes());
-        logger::log("SERIE_TX", &cmd.as_frame());
-        std::thread::sleep(Duration::from_millis(150));
-    }
-
-
-}
-
-pub fn run_serial_loop(state: SharedState, mut rx: mpsc::Receiver<String>) {
-    let port_name = "/dev/ttyUSB0";
-    let baud_rate = 115200;
-
-    loop {
-        logger::log("SERIE", &format!("Tentative d'ouverture de {}...", port_name));
+    // Boucle TX (Thread courant)
+    while let Some(cmd) = rx_channel.blocking_recv() {
+        let encoded = cmd.encode();
+        let expected_prefix = cmd.expected_rx_prefix();
         
-        match serialport::new(port_name, baud_rate)
-            .timeout(Duration::from_millis(50))
-            .open()
-        {
-            Ok(mut port) => {
-                logger::log("SERIE", "✅ Port ouvert. Envoi de la séquence d'initialisation...");
+        let mut retries = 1;
+        let mut success = false;
 
-                // Séquence de démarrage (trame magique + requêtes d'état).
-                // La détection TIC n'est PLUS lancée automatiquement : elle doit être
-                // demandée explicitement via start_tic_detection() (POST /api/tic/refresh).
-                send_init_sequence_sync(&mut port, &state);
+        while retries >= 0 && !success {
+            // Vider le canal des vieux messages
+            while let Ok(_) = internal_rx.try_recv() {}
 
-                let mut read_buf = [0u8; 1024];
-                let mut line_buffer = String::new();
+            logger::log("SERIE_TX", encoded.trim());
+            if let Err(e) = port.write_all(encoded.as_bytes()) {
+                logger::log("SERIE", &format!("Erreur d'ecriture serie: {}", e));
+            }
 
-                loop {
-                    // 1. Lire s'il y a des commandes HTTP en attente d'envoi vers la borne
-                    while let Ok(cmd) = rx.try_recv() {
-                        let trimmed = cmd.trim().to_string();
-                        logger::log("SERIE_TX", &trimmed);
-                        if let Err(e) = port.write_all(cmd.as_bytes()) {
-                            logger::log("SERIE", &format!("⚠️ Erreur d'envoi: {:?}", e));
-                        }
-                    }
+            if let Some(prefix) = expected_prefix {
+                let start_wait = std::time::Instant::now();
+                let mut matched = false;
+                let mut got_default = false;
 
-                    // 2. Écouter la borne
-                    match port.read(&mut read_buf) {
-                        Ok(bytes_read) if bytes_read > 0 => {
-                            if let Ok(text) = std::str::from_utf8(&read_buf[..bytes_read]) {
-                                line_buffer.push_str(text);
-                                
-                                while let Some(pos) = line_buffer.find('\n') {
-                                    let line = line_buffer[..pos].trim_end_matches('\r').to_string();
-                                    line_buffer = line_buffer[pos + 1..].to_string();
-                                    
-                                    if !line.is_empty() {
-                                        parse_incoming_line(&line, &state);
-                                    }
-                                }
-                            }
-                        }
-                        Ok(_) => {}
-                        Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {}
-                        Err(e) => {
-                            logger::log("SERIE", &format!("⚠️ Erreur de lecture : {:?}. Reconnexion...", e));
+                while start_wait.elapsed() < Duration::from_millis(1000) {
+                    if let Ok(rx_line) = internal_rx.recv_timeout(Duration::from_millis(50)) {
+                        if rx_line.starts_with(prefix) {
+                            matched = true;
+                            break;
+                        } else if rx_line.starts_with("Default:") {
+                            got_default = true;
                             break;
                         }
                     }
                 }
-            }
-            Err(e) => {
-                logger::log("SERIE", &format!("Impossible d'ouvrir {}: {:?}. Réessai dans 5s...", port_name, e));
-                std::thread::sleep(Duration::from_secs(5));
+
+                if matched {
+                    success = true;
+                } else {
+                    if got_default {
+                        logger::log("SERIE", &format!("❌ Commande {} refusee (Default), retry: {}", cmd.as_frame(), retries));
+                    } else {
+                        logger::log("SERIE", &format!("⏳ Commande {} timeout, retry: {}", cmd.as_frame(), retries));
+                    }
+                    retries -= 1;
+                }
+            } else {
+                success = true; // Pas d'acquittement attendu
             }
         }
     }
@@ -173,7 +138,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
     match event {
         ProtocolEvent::Ping => {
             logger::log("SERIE", "🤝 Ping matériel détecté, envoi de RaspberryPiModeOK");
-            let _ = state.serial_tx.try_send(Command::RaspberryPiModeOk.encode());
+            let _ = state.serial_tx.try_send(Command::RaspberryPiModeOk);
         }
         ProtocolEvent::SoftwareVersion(v) => {
             if let Ok(mut info) = state.info.lock() { info.software_version = v; }
@@ -230,7 +195,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if FunctioningMode::from_code(&fm_val) != Some(FunctioningMode::DirectCharge) {
                 logger::log("SERIE", &format!("⚠️ Mode FM détecté = {}, forçage en FM:1", fm_val));
                 let _ = state.serial_tx.try_send(
-                    Command::SetFunctioningMode(FunctioningMode::DirectCharge).encode(),
+                    Command::SetFunctioningMode(FunctioningMode::DirectCharge),
                 );
             }
         }
@@ -261,7 +226,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
 
             if should_stop_test {
                 logger::log("SERIE", "Fin de la détection automatique du TIC, envoi de TICTM:0");
-                let _ = state.serial_tx.try_send(Command::SetTicTestMode(false).encode());
+                let _ = state.serial_tx.try_send(Command::SetTicTestMode(false));
             }
         }
         ProtocolEvent::TicTestInit => {}

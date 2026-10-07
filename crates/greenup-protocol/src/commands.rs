@@ -166,6 +166,10 @@ pub enum Command {
     GetEcoStart,
     /// `FM2:1` / `FM2:0` – Active/désactive l'Éco-démarrage (équivalent DIP2).
     SetEcoStart(bool),
+
+    // --- 8. Debug ---
+    /// Envoi d'une commande brute sans acquittement attendu (API de debug).
+    Raw(String),
 }
 
 fn ok_nok(prefix: &str, enabled: bool) -> String {
@@ -238,12 +242,71 @@ impl Command {
             Command::SetFunctioningMode(m) => format!("FM:{}", m.code()),
             Command::GetEcoStart => "FM2?".into(),
             Command::SetEcoStart(on) => format!("FM2:{}", *on as u8),
+            Command::Raw(s) => s.clone(),
         }
     }
 
     /// Trame complète prête à être écrite sur le lien série (avec `\r`).
     pub fn encode(&self) -> String {
         format!("{}{}", self.as_frame(), FRAME_TERMINATOR)
+    }
+
+    /// Détermine le préfixe attendu en réponse pour acquitter cette commande.
+    /// Si `None`, la commande ne nécessite pas d'acquittement ou est de type "fire-and-forget" (ex: Raw).
+    pub fn expected_rx_prefix(&self) -> Option<&'static str> {
+        match self {
+            Command::RaspberryPiModeOk => None,
+            Command::GetSoftwareVersion => Some("SoftwareVersion:"),
+            Command::GetHardwareVersion => Some("HardwareVersion:"),
+            Command::GetSerialNumber => Some("SerialNumber:"),
+            Command::GetReference => Some("Reference:"),
+            Command::GetWeekYearProduction => Some("WeekYearProduction:"),
+            Command::GetSide => Some("Side:"),
+            Command::Reset => Some("State:"), // Reset renvoie l'état après le reboot
+            Command::FactoryTest => None,
+            Command::Ping => None,
+
+            Command::GetState => Some("State:"),
+            Command::GetErrors => Some("E:"),
+            Command::GetCurrentLimit => Some("CC:"),
+            Command::GetEliotCurrentLimit => Some("CCEl:"),
+            Command::GetCpVoltage => Some("CP:"),
+            Command::GetT2CEnabled => Some("T2C:"),
+            Command::GetSbState => Some("SB:"),
+            Command::GetTicCurrentLimit => Some("CCTIC:"),
+            Command::SetTicTestMode(true) => Some("TICTM:1"),
+            Command::SetTicTestMode(false) => Some("TICTM:0"),
+
+            Command::SetCurrentLimit(_) => Some("CC:"),
+            Command::SetSchukoCurrentLimit(_) => Some("CCS:"),
+            Command::AuthorizeType2(true) => Some("T2C:1"),
+            Command::AuthorizeType2(false) => Some("T2C:0"),
+            Command::AuthorizeDomestic(true) => Some("2PC:1"),
+            Command::AuthorizeDomestic(false) => Some("2PC:0"),
+            Command::ForceType2(true) => Some("T2F:1"),
+            Command::ForceType2(false) => Some("T2F:0"),
+            Command::ForceDomestic(true) => Some("2PF:1"),
+            Command::ForceDomestic(false) => Some("2PF:0"),
+            Command::SetSleep(_) => Some("S:"), // À vérifier
+            Command::SetStartButton(_) => Some("SB:"),
+            Command::Unlock => None, // À vérifier
+
+            Command::GetOcppParameters => Some("OCPPPS:"),
+            Command::SetPlugAndCharge(_) => Some("OCPPPAC:"),
+            Command::SendRfidId(_) => Some("RFIDId:"),
+            Command::SendRfidAuthorization(_) => Some("RFIDA:"),
+            Command::SetOcppConnectionTimeout(_) => Some("OCPPCTO:"),
+
+            Command::GetBluetooth => Some("BT:"),
+            Command::SetBluetooth(true) => Some("BT:1"),
+            Command::SetBluetooth(false) => Some("BT:0"),
+
+            Command::GetFunctioningMode => Some("FM:"),
+            Command::SetFunctioningMode(_) => Some("FM:"),
+            Command::GetEcoStart => Some("FM2:"),
+            Command::SetEcoStart(_) => Some("FM2:"),
+            Command::Raw(_) => None,
+        }
     }
 
     /// Séquence d'interrogation recommandée au démarrage (hors `RaspberryPiModeOK` et TIC).
