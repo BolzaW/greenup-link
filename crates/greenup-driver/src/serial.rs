@@ -8,9 +8,6 @@ const TICTM_MAX_ZEROS: u32 = 5;
 
 
 pub async fn trigger_init_sequence(state: &SharedState) {
-    let _ = state.serial_tx.send(Command::RaspberryPiModeOk).await;
-    tokio::time::sleep(Duration::from_millis(200)).await;
-
     for cmd in Command::startup_queries() {
         let _ = state.serial_tx.send(cmd).await;
         tokio::time::sleep(Duration::from_millis(200)).await;

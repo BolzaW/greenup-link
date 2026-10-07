@@ -152,7 +152,7 @@ async fn stop_charge(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// POST /api/command
 async fn send_raw_command(State(state): State<SharedState>, body: String) -> impl IntoResponse {
-    let cmd = format!("{}\r", body.trim());
+    let cmd = body.trim().to_string();
     logger::log("API", &format!("🔧 Commande brute: {}", body.trim()));
     if state.serial_tx.send(Command::Raw(cmd)).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Commande envoyée"})))
