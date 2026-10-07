@@ -36,6 +36,14 @@ async fn main() {
         greenup_driver::run_serial_loop(state_for_serial, rx);
     });
 
+    // Envoyer la séquence d'initialisation au démarrage
+    let state_for_init = app_state.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        greenup_driver::logger::log("SYS", "🔄 Envoi séquence initialisation Legrand...");
+        greenup_driver::serial::trigger_init_sequence(&state_for_init).await;
+    });
+
     // 2. Démarrer le serveur HTTP Axum
     let router = api::build_router(app_state);
     
