@@ -255,7 +255,7 @@ impl Command {
     /// Si `None`, la commande ne nécessite pas d'acquittement ou est de type "fire-and-forget" (ex: Raw).
     pub fn expected_rx_prefix(&self) -> Option<&'static str> {
         match self {
-            Command::RaspberryPiModeOk => None,
+            Command::RaspberryPiModeOk => Some("Side:"),
             Command::GetSoftwareVersion => Some("SoftwareVersion:"),
             Command::GetHardwareVersion => Some("HardwareVersion:"),
             Command::GetSerialNumber => Some("SerialNumber:"),
@@ -264,7 +264,7 @@ impl Command {
             Command::GetSide => Some("Side:"),
             Command::Reset => Some("State:"), // Reset renvoie l'état après le reboot
             Command::FactoryTest => None,
-            Command::Ping => None,
+            Command::Ping => Some("pong"),
 
             Command::GetState => Some("State:"),
             Command::GetErrors => Some("E:"),
