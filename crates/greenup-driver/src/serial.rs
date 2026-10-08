@@ -261,8 +261,8 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                 logger::log("SERIAL", &format!("⚠️ Unknown FM Mode detected = {}", fm_val));
             }
         }
-        ProtocolEvent::EcoStart(enabled) => {
-            logger::log("SERIAL", &format!("ℹ️ FM2 (Eco-Start/External) = {}", if enabled { "ON" } else { "OFF" }));
+        ProtocolEvent::ExternalSignal(enabled) => {
+            logger::log("SERIAL", &format!("ℹ️ FM2 (External Signal) = {}", if enabled { "1 (BLOCK CHARGE)" } else { "0 (ALLOW CHARGE)" }));
         }
         ProtocolEvent::Derogation(enabled) => {
             logger::log("SERIAL", &format!("ℹ️ Front button derogation = {}", if enabled { "ON" } else { "OFF" }));

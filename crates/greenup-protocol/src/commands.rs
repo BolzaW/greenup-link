@@ -163,9 +163,9 @@ pub enum Command {
     /// `FM:X`
     SetFunctioningMode(FunctioningMode),
     /// `FM2?` – Eco-Start state.
-    GetEcoStart,
+    GetExternalSignal,
     /// `FM2:1` / `FM2:0` – Enables/disables Eco-Start (DIP2 equivalent).
-    SetEcoStart(bool),
+    SetExternalSignal(bool),
     /// `D?` – Derogation state (front button force charge).
     GetDerogation,
     /// `D:1` / `D:0` – Enables/disables derogation (front button force charge).
@@ -244,10 +244,10 @@ impl Command {
 
             Command::GetFunctioningMode => "FM?".into(),
             Command::SetFunctioningMode(m) => format!("FM:{}", m.code()),
-            Command::GetEcoStart => "FM2?".into(),
-            Command::SetEcoStart(on) => format!("FM2:{}", *on as u8),
+            Command::GetExternalSignal => "FM2?".into(),
+            Command::SetExternalSignal(on) => format!("FM2:{}", *on as u8),
             Command::GetDerogation => "D?".into(),
-            Command::SetDerogation(on) => format!("D:{}", *on as u8),
+            Command::SetDerogation(accept) => if *accept { "DOK".into() } else { "DNOK".into() },
             Command::Raw(s) => s.clone(),
         }
     }
@@ -309,8 +309,8 @@ impl Command {
 
             Command::GetFunctioningMode => Some("FM:"),
             Command::SetFunctioningMode(_) => Some("FM:"),
-            Command::GetEcoStart => Some("FM2:"),
-            Command::SetEcoStart(_) => Some("FM2:"),
+            Command::GetExternalSignal => Some("FM2:"),
+            Command::SetExternalSignal(_) => Some("FM2:"),
             Command::GetDerogation => Some("D:"),
             Command::SetDerogation(_) => Some("D:"),
             Command::Raw(_) => None,
@@ -327,7 +327,7 @@ impl Command {
             Command::GetWeekYearProduction,
             Command::GetState,
             Command::GetFunctioningMode,
-            Command::GetEcoStart,
+            Command::GetExternalSignal,
             Command::GetDerogation,
             Command::GetCurrentLimit,
             Command::GetEliotCurrentLimit,
@@ -375,7 +375,7 @@ mod tests {
         assert_eq!(Command::SetCurrentLimit(16).as_frame(), "CCEl:16");
         assert_eq!(Command::SetSchukoCurrentLimit(10).as_frame(), "CCS:10");
         assert_eq!(Command::SetTicTestMode(true).as_frame(), "TICTM:1");
-        assert_eq!(Command::SetEcoStart(false).as_frame(), "FM2:0");
+        assert_eq!(Command::SetExternalSignal(false).as_frame(), "FM2:0");
         assert_eq!(
             Command::SetFunctioningMode(FunctioningMode::DirectCharge).as_frame(),
             "FM:1"
