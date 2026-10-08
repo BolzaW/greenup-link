@@ -1,6 +1,6 @@
 # Legrand Serial Protocol (GreenUp Power Board)
 
-This document lists the ASCII commands used to communicate with the power board.
+This document lists the ASCII commands used to communicate with the power board (which is based on an **ATmega** micro-controller).
 These commands were deduced from reverse-engineering activities and decompilation of the original software (.jar) and firmware (.hex).
 All these commands must be sent to the power board followed by a "Carriage Return" character, i.e., `\r` (ASCII code 0x0D).
 
