@@ -35,6 +35,7 @@ Commands to query the real-time behavioral state and errors of the station.
 | `State?` | `State:` | Requests the transactional/behavioral state of the charge (A, B, C, D, E, I, W, M). *See `STATE_MACHINE.md` for full details.* |
 | `E?` | `E:` | Requests current errors. `E:0000` means no error. Errors `E:0001` to `E:0015` indicate hardware faults. *See Chapter 5 of STATE_MACHINE.md for the full error codes table.* |
 | `CP?` | `CP:` | Raw voltage measured on the Control Pilot pin. Reveals the actual physical connection state (`12`=unplugged, `9`=plugged, `6`=charging). Vital to bypass the software state machine lock. |
+| `PP?` | `PP:` | Raw value measured on the Proximity Pilot pin. Used to detect the maximum current capacity of the connected Type 2 cable. |
 | `SB?` | `SB:` | Reads the current state of the front panel START/STOP button. |
 | `T2C?` | `T2C:` | Reads the current authorization state of the Type 2 socket. |
 
