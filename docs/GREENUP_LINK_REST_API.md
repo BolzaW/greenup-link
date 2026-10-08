@@ -75,7 +75,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
     "tic_mode": "9600"
   }
   ```
-  - `greenup_state`: Legrand proprietary state (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). See `docs/MACHINE_A_ETATS.md`.
+  - `greenup_state`: Legrand proprietary state (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). See `docs/STATE_MACHINE.md`.
   - `iec_state`: Deduced standard IEC state: `Disconnected_A`, `Connected_B`, `Charging_C`, `Error_E`, `Faulted_F`. Returns `null` if it cannot be deduced.
   - `cp_voltage` (`CP?`): Control Pilot voltage in volts (`12`, `9`, `6`).
   - `t2c_enabled` (`T2C?`) / `sb_state` (`SB?`): Software states of the T2 socket and the Start/Stop button.
@@ -183,7 +183,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
 - **URL**: `/api/command`
 - **Method**: `POST`
 - **Body (Plain text)**: the command to send (e.g., `State?`)
-- **Description**: Directly transmits the string on the serial port. Reserved for testing and debugging. See [PROTOCOLE_SERIE_LEGRAND.md](PROTOCOLE_SERIE_LEGRAND.md) for the list of known commands.
+- **Description**: Directly transmits the string on the serial port. Reserved for testing and debugging. See [LEGRAND_SERIAL_PROTOCOL.md](LEGRAND_SERIAL_PROTOCOL.md) for the list of known commands.
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Command sent" }

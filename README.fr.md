@@ -139,7 +139,7 @@ Pour lancer l'application automatiquement, créez un service Systemd :
 ### 6. Utilisation
 - **Interface Graphique** : Ouvrez simplement l'adresse IP de la borne sur le port 8080 depuis votre navigateur (ex: `http://192.168.1.xxx:8080`).
 - **Tests & CLI** : Utilisez le script PowerShell fourni `cli-greenup-link.ps1` depuis votre PC pour interagir avec l'API en ligne de commande.
-- **Domotique** : Consultez la [Documentation de l'API REST](docs/API_REST_GREENUP_LINK.md) pour interfacer votre box domotique.
+- **Domotique** : Consultez la [Documentation de l'API REST](docs/GREENUP_LINK_REST_API.md) pour interfacer votre box domotique.
 
 ---
 
