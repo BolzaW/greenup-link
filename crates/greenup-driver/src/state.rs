@@ -11,7 +11,7 @@ pub use crate::telemetry::{BoardInfo, Telemetry};
 pub struct AppState {
     pub telemetry: Mutex<Telemetry>,
     pub info: Mutex<BoardInfo>,
-    // Canal utilise par l'API pour envoyer des commandes au thread Serie
+    // Channel used by the API to send commands to the Serial thread
     pub serial_tx: mpsc::Sender<greenup_protocol::Command>,
     pub tic_detection: Mutex<TicDetectionState>,
 }
