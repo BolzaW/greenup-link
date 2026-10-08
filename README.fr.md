@@ -13,7 +13,7 @@ Il communique avec la carte de puissance de la borne via la liaison série USB i
 - Une **IHM Web locale** claire et réactive.
 - Une **API REST** complète et documentée, parfaite pour l'intégration en domotique (Home Assistant, Jeedom, etc.).
 
-Le projet propose également une intégration EVerest sans API/IHM via un pont MQTT direct, permettant à la borne d'être pilotée comme un module matériel EVerest standard.
+Le projet propose également une intégration EVerest sans API/IHM via un pont MQTT direct, permettant à la borne d'être pilotée comme un module matériel EVerest standard. *(Note : Pour une implémentation native et plus "propre" d'un module EVerest remplaçant entièrement l'EvseManager, n'hésitez pas à consulter l'excellent projet communautaire [evorada/everest-greenup](https://github.com/evorada/everest-greenup) réalisé par suda).*
 
 ## 🤔 Pourquoi ce projet ?
 
