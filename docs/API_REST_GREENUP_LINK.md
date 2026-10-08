@@ -128,7 +128,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
 - **Method**: `POST`
 - **URL Parameter**: `:amps` (integer between **7** and **32**).
 - **Description**: Sets the current limit target (sends `CCEl:XX`, always 2-digit formatted).
-- **Security**: Any value outside `[7, 32]` is rejected (`400`). Below 6 A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8 A (Quirk #6).
+- **Security**: The API rejects any value outside `[7, 32]` with a `400` error. While the ATmega board can technically accept values above 32A, they have not been tested in real conditions to avoid hardware risks. Using `CCEl` (Eliot limit) instead of directly forcing `CC` is a deliberate choice: it allows the ATmega to keep its internal safeguards active, computing the final safe limit (`CC`) based on other hardware factors. Finally, note that below 6A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8A (Quirk #6).
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Current limit set to 16A" }
@@ -183,7 +183,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
 - **URL**: `/api/command`
 - **Method**: `POST`
 - **Body (Plain text)**: the command to send (e.g., `State?`)
-- **Description**: Directly transmits the string on the serial port. Reserved for testing and debugging.
+- **Description**: Directly transmits the string on the serial port. Reserved for testing and debugging. See [PROTOCOLE_SERIE_LEGRAND.md](PROTOCOLE_SERIE_LEGRAND.md) for the list of known commands.
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Command sent" }
