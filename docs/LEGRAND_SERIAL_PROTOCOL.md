@@ -5,6 +5,7 @@ These commands were deduced from reverse-engineering activities and decompilatio
 All these commands must be sent to the power board followed by a "Carriage Return" character, i.e., `\r` (ASCII code 0x0D).
 
 *Note: In the `cli_greenup-link.ps1` terminal, you do not need to type `\r`; the program adds it automatically.*
+
 *Note 2: If a command is not recognized or is malformed, the ATmega will respond with `Default:<Command>`.*
 
 ---
