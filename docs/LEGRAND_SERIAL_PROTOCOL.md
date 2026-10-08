@@ -90,8 +90,8 @@ Commands to manage functioning modes, schedules, and active sessions.
 | `FM2:1` / `FM2:0` | `FM2:` | Simulates the external signal. `FM2:1` blocks the charge. `FM2:0` authorizes the charge. **Note**: This is overridden by the TIC during Peak Hours (Heures Pleines). |
 | `D?` | `D:` | Queries the current derogation state (force charge). |
 | `DOK` / `DNOK` | `D:` | Activates (`DOK`) or deactivates (`DNOK`) the derogation. |
-| `Dec?` | `Dec:` | **TBD**: Queries the current delayed start (décalage). |
-| `Dec:X` | `Dec:` | **TBD**: Sets the delayed start to `X` (Unknown range/unit, possibly hours). |
+| `Dec?` | `Dec:` | **TBD**: Queries the current `Dec` value (hypothesis: duration of the derogation / delay). |
+| `Dec:X` | `Dec:` | **TBD**: Sets the `Dec` value to `X` (Unknown range/unit, possibly hours/minutes). |
 | `SOK` / `SNOK` | `Slp:` | **Sleep**: `SOK` forces the station into deep sleep (`State:Y`). `SNOK` wakes the station up. |
 
 ---
