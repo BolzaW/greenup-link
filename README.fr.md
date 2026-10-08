@@ -153,10 +153,10 @@ La feuille de route inclut (sans date garantie) :
 - Intégration MQTT pour la domotique
 - Compatibilité avec les OS récents de Raspberry Pi
 - Firmware ATmega custom avec plus de capacités (comme plus d'infos télémétriques depuis le signal TIC)
-- Compatibilité prise Schuko (domestique)
-- Support du Triphasé
-- Support des bornes double point de charge
 - Le support du mode de communication OCPP.
-- L'élargissement de la compatibilité aux autres modèles de bornes de la gamme.
+- L'élargissement de la compatibilité aux autres modèles de bornes de la gamme :
+  - Compatibilité prise Schuko (domestique)
+  - Support du Triphasé
+  - Support des bornes double point de charge
 
 *Note : N'hésitez pas à utiliser les "Issues" GitHub pour suggérer ou demander des fonctionnalités spécifiques dont vous auriez besoin !*
