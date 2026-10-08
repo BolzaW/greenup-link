@@ -1,122 +1,118 @@
-# Serial Protocol - Legrand GreenUp Power Board
+# Legrand Serial Protocol (GreenUp Power Board)
 
 This document lists the ASCII commands used to communicate with the power board.
 These commands were deduced from reverse-engineering activities and decompilation of the original software (.jar) and firmware (.hex).
-All these commands must be sent to the power board followed by a "Carriage Return" character, i.e. `\r` (ASCII code 0x0D).
+All these commands must be sent to the power board followed by a "Carriage Return" character, i.e., `\r` (ASCII code 0x0D).
 
-## 🔌 1. Initialization & System
-These commands are used at startup to establish dialogue.
+*Note: In the `cli_greenup-link.ps1` terminal, you do not need to type `\r`; the program adds it automatically.*
 
-| Command | Supposed explanation |
-| :--- | :--- |
-| `RaspberryPiModeOK` | Magic frame that tells the power board that the Pi has taken control. |
-| `SoftwareVersion?` | Requests the power board's firmware version. |
-| `HardwareVersion?` | Requests the board's hardware version. |
-| `SerialNumber?` | Requests the station's serial number. |
-| `Reference?` | Requests the Legrand product reference. |
-| `WeekYearProduction?`| Requests the manufacturing date (Week/Year). |
-| `Side?` | Requests the active side (Side 1 or 2). Often useful on dual-socket stations. |
-| `Reset` | Reboots the power board. |
-| `Test` | Puts the board into a factory or lab "Test" mode. |
-| `ping` | Basic ping (probably to check if the board is still alive). Replies `pong`. |
+---
 
-## 📊 2. Status & Telemetry
-These commands are used to query the station about its current state.
+## 1. System & Initialization
+Commands used at startup to establish dialogue and identify the board.
 
-| Command | Supposed explanation |
-| :--- | :--- |
-| `State?` | Requests the transactional/behavioral state of the charge (A, B, C, D, E, I, W, M). Warning: this is NOT the raw IEC 61851 physical state. See docs/STATE_MACHINE.md for full details. |
-| `E?` | Requests current errors (returns `E:0000` if all is well). Here is the official interpretation table of error codes extracted from the Java code (OCPP mapping):<br>• **`E:0000`** : `NoError`<br>• **`E:0001`** : `ConnectorLockFailure` (T2S socket locking error)<br>• **`E:0002`** : `ConnectorLockFailure` (T2S socket unlocking error)<br>• **`E:0003`** : `OtherError` (Control Pilot short-circuit detected on socket, cable or vehicle side)<br>• **`E:0004`** : `OtherError` (Control Pilot short-circuit detected on board side)<br>• **`E:0005`** : `PowerSwitchFailure` (Domestic socket contactor opening error)<br>• **`E:0006`** : `PowerSwitchFailure` (Domestic socket contactor closing error)<br>• **`E:0007`** : `PowerSwitchFailure` (T2S socket contactor opening error)<br>• **`E:0008`** : `PowerSwitchFailure` (T2S socket contactor closing error)<br>• **`E:0009`** : `OtherError` (Diode not detected on vehicle side)<br>• **`E:0010`** : `OverCurrentFailure` (Current overload on T2S socket. *Also triggered in case of PWM crash / setpoint < 6A!*)<br>• **`E:0011`** : `OverCurrentFailure` (Current overload on Domestic socket)<br>• **`E:0012`** : `UnderVoltage` (Power outage / Electrical power failure)<br>• **`E:0013`** : `OtherError` (Internal USB communication error)<br>• **`E:0015`** : `OtherError` (6mA DC leakage fault detected) |
-| `CC?` | Requests the configured current limit (e.g., returns `CC:16`). |
-| `CCTIC?` | Requests the current limit value deduced by the TIC. Returns `32` even if the TIC is disconnected. |
-| `TICTM:1` / `TICTM:0` | Enables (`1`) or disables (`0`) the TIC Test mode. In test mode, the station returns `TICTestC:Init` then periodically `TICTestB:X` where `X` is the baud rate (`0` if absent, `1200` if Historic, `9600` if Standard). Then, it continuously broadcasts `TICTestC:XX` where `XX` is the dynamic charging limit (CCTIC) calculated by the board for load balancing. |
-
-## ⚡ 3. Current / Power Measurements and Setpoints
-These variables help exactly understand what limits are imposed and what is consumed.
-
-**Queryable variables (with `?`) or received as echo:**
-*   **`CCCa`** (*max current cable*): Hardware capacity of the cable (read via the PP resistor). Ex: `CCCa:32` for 32A.
-*   **`CCS`** (*max current station*): Hardware capacity of the station (set via internal DIP switches). Ex: `CCS:32`.
-*   **`CCEl`** (*max current eliot*): Limit imposed by the Cloud (Eliot / Legrand App).
-*   **`CC`** (*charging current*): The final setpoint retained and imposed by the ATmega (often the minimum of the previous limits).
-*   **`CP`** (*control pilot*): Raw voltage measured on the Control Pilot pin. **Vital:** Querying `CP?` reveals the actual physical connection state (`12`=unplugged, `9`=plugged, `6`=charging) and bypasses the state machine software lock caused by `T2CNOK`.
-
-**Spontaneous variables (emitted by the station):**
-*   **`CCI:X.XX`** (*current instantaneous*): Actual instantaneous current drawn by the vehicle (in Amperes). Drops at the end of the charge.
-*   **`CPh:Mono` / `CPh:Tri`** (*charge phases*): Automatic detection of the number of phases used by the vehicle. Emitted just before the charge ramps up.
-
-## 🎮 4. Charge Control (The most important!)
-These commands directly control power delivery.
-
-| Command | Supposed explanation |
-| :--- | :--- |
-| `CC:16` | **Charge Current** : Sets the power limit of the main socket to X Amps (e.g. 16, 32). |
-| `CCEl:16` | **Charge Current Eliot** : Sets the Cloud power limit. Safer than `CC:` because the ATmega guards its minimum hardware values. |
-| `CCS:16` | **Charge Current Schuko** : Sets the power limit for the domestic socket (Schuko). |
-| `T2COK` / `T2CNOK` | Authorizes (`OK`) or Blocks (`NOK`) charging on the **Type 2** (T2) socket. Warning: `T2CNOK` blinds the state machine. |
-| `2PCOK` / `2PCNOK` | Authorizes (`OK`) or Blocks (`NOK`) charging on the **Domestic** (2 Pins) socket. |
-| `T2FOK` / `T2FNOK` | **Forces** charging on the Type 2 socket (bypasses safety or schedule?). |
-| `2PFOK` / `2PFNOK` | **Forces** charging on the domestic socket. |
-| `SOK` / `SNOK` | **Sleep**: `SOK` forces the station into deep sleep mode (`State:Y`, LEDs off with slow flash, answers `Slp:1`). This mode can only be reached from `State:A`. `SNOK` wakes the station up (`Slp:0`, `State:A`). |
-| `SBOK` / `SBNOK` | **Absolute software control commands (Pause/Resume)**. Simulates pressing the physical START/STOP button on the front panel. `SBNOK` cleanly stops the charge and stabilizes the station in `State:M`. `SBOK` wakes the station up and restarts the cycle (`State:B` -> `State:C`). Not to be confused with the `SBF` read event. |
-| `Unlock` | Orders the **physical unlocking** of the cable (if the station has a Type 2 socket lock). |
-
-## 💳 5. OCPP / RFID Management
-These commands manage interactions with the user badge or software supervision.
-
-| Command | Supposed explanation |
-| :--- | :--- |
-| `OCPPPS?` | OCPP Status : Requests the station's OCPP status. It replies with an OCPP state (e.g. `OCPPStatus:Available` or `OCPPStatus:SuspendedEVSE`). |
-| `OCPPPACOK` / `OCPPPACNOK` | **P**lug **A**nd **C**harge : Indicates to the board whether the badge-less "Plug and Charge" function is enabled. |
-| `RFIDId:XXXXX` | Transmits the RFID badge ID (read by the Pi) to the power board. |
-| `RFIDA:XXXXX` | Sends the RFID authorization status. |
-| `OCPPCTO:XXX` | Connection Time Out : Sets the connection timeout. |
-
-*Note for tests: In the `cli_greenup-link.ps1` terminal, you do not need to type `\r`, the program adds it automatically upon pressing Enter.*
-
-## 📻 6. Bluetooth (BLE) Module Management
-The station has an integrated Bluetooth module (used by the smartphone app). It can be enabled or disabled to avoid command conflicts with the Raspberry Pi.
-
-| Command (TX) | Reply (RX) | Explanation |
+| Command (TX) | Expected Reply Prefix (RX) | Explanation |
 | :--- | :--- | :--- |
-| `BT?` | `BT:1` or `BT:0` | Requests the current state of the Bluetooth module (1 = On, 0 = Off). |
+| `RaspberryPiModeOK` | `Side:` | Magic frame that tells the power board that the Pi has taken control. Acknowledged by the board dumping its active side. |
+| `SoftwareVersion?` | `SoftwareVersion:` | Requests the power board's firmware version. |
+| `HardwareVersion?` | `HardwareVersion:` | Requests the board's hardware version. |
+| `SerialNumber?` | `SerialNumber:` | Requests the station's serial number. |
+| `Reference?` | `Reference:` | Requests the Legrand product reference. |
+| `WeekYearProduction?`| `WeekYearProduction:`| Requests the manufacturing date (Week/Year). |
+| `Side?` | `Side:` | Requests the active side (Side 1 or 2). Often useful on dual-socket stations. |
+| `Reset` | `State:` | Reboots the power board. Acknowledged by the board's first state upon rebooting. |
+| `Test` | None | Puts the board into a factory or lab "Test" mode. **⚠️ WARNING: Never tested, potentially dangerous. It is suspected this command might initiate an ATmega flashing sequence or factory reset.** |
+| `ping` | `pong` | Basic ping to check if the board's serial interface is responsive. |
+
+---
+
+## 2. Charge Telemetry & Status
+Commands to query the real-time behavioral state and errors of the station.
+
+| Command (TX) | Expected Reply Prefix (RX) | Explanation |
+| :--- | :--- | :--- |
+| `State?` | `State:` | Requests the transactional/behavioral state of the charge (A, B, C, D, E, I, W, M). *See `STATE_MACHINE.md` for full details.* |
+| `E?` | `E:` | Requests current errors. `E:0000` means no error. Errors `E:0001` to `E:0015` indicate hardware faults (contactor, overcurrent `E:0010`, undervoltage `E:0012`, etc.). |
+| `CP?` | `CP:` | Raw voltage measured on the Control Pilot pin. Reveals the actual physical connection state (`12`=unplugged, `9`=plugged, `6`=charging). Vital to bypass the software state machine lock. |
+| `SB?` | `SB:` | TBD. Possibly reads the current state of the front panel START/STOP button. |
+| `T2C?` | `T2C:` | TBD. Possibly reads the current authorization state of the Type 2 socket. |
+
+---
+
+## 3. Current & Power Configuration
+Commands to read or set charging current limits.
+*Note: The final charging current (`CC`) is determined by the ATmega as the minimum of the hardware capability (`CCCa`, `CCS`) and software limits (`CCEl`, `CCTIC`).*
+
+| Command (TX) | Expected Reply Prefix (RX) | Explanation |
+| :--- | :--- | :--- |
+| `CC?` | `CC:` | Requests the final calculated charging current limit imposed by the ATmega (e.g., `CC:16`). |
+| `CCEl?` | `CCEl:` | Requests the software current limit imposed by the Cloud (Eliot / Legrand App). |
+| `CCEl:XX` | `CCEl:` | Sets the Cloud power limit (e.g., `CCEl:16`). Safer than overriding `CC` directly. |
+| `CCS?` | `CCS:` | TBD. Requests the maximum current capacity configured for the Schuko socket. |
+| `CCS:XX` | `CCS:` | Sets the power limit for the domestic socket (Schuko). |
+| `CCTIC?` | `CCTIC:` | Requests the dynamic current limit deduced by the TIC. Returns `32` if the TIC is disconnected. |
+| `TICTM:1` / `TICTM:0` | `TICTM:1` / `TICTM:0` | Enables (`1`) or disables (`0`) the TIC Test mode. When enabled, the station broadcasts TIC baud rates and calculated limits (`CCTIC`). |
+
+---
+
+## 4. Hardware Socket Control (T2 / Schuko)
+Low-level commands to enable, disable, or force the physical sockets.
+
+| Command (TX) | Expected Reply Prefix (RX) | Explanation |
+| :--- | :--- | :--- |
+| `T2COK` / `T2CNOK` | `T2C:1` / `T2C:0` | Authorizes (`OK`) or Blocks (`NOK`) charging on the **Type 2** socket. *Warning: `T2CNOK` blinds the state machine.* |
+| `2PCOK` / `2PCNOK` | `2PC:1` / `2PC:0` | Authorizes (`OK`) or Blocks (`NOK`) charging on the **Domestic** (Schuko / 2 Pins) socket. |
+| `T2FOK` / `T2FNOK` | `T2F:1` / `T2F:0` | **Forces** charging on the Type 2 socket (bypasses safety or schedule?). |
+| `2PFOK` / `2PFNOK` | `2PF:1` / `2PF:0` | **Forces** charging on the domestic socket. |
+| `Unlock` | None | Orders the **physical unlocking** of the cable (if the station has a Type 2 socket lock mechanism). |
+
+---
+
+## 5. Smart Charging & Session Control
+Commands to manage functioning modes, schedules, and active sessions.
+
+| Command (TX) | Expected Reply Prefix (RX) | Explanation |
+| :--- | :--- | :--- |
+| `FM?` | `FM:` | Requests the main Functioning Mode (1=Direct Charge, 2=Auto-hours/TIC, 4=Planning, 5=Modbus, 6=OCPP). |
+| `FM:X` | `FM:` | Sets the main Functioning Mode to `X` (e.g., `FM:1` for permanent direct charge). |
+| `FM2?` | `FM2:` | Queries the current state of the external signal (Dry Contact / TIC Peak/Off-Peak). |
+| `FM2:1` / `FM2:0` | `FM2:` | Overrides the external signal. `FM2:0` simulates Peak Hours (suspends charge in `FM:2`). `FM2:1` simulates Off-Peak Hours (authorizes charge). |
+| `SOK` / `SNOK` | `Slp:` | **Sleep**: `SOK` forces the station into deep sleep (`State:Y`). `SNOK` wakes the station up. |
+| `SBOK` / `SBNOK` | `SB:` | **Pause/Resume**: Simulates pressing the physical START/STOP button. `SBNOK` cleanly stops the charge (`State:M`). `SBOK` wakes the station and restarts the cycle. |
+
+---
+
+## 6. OCPP & RFID
+Commands managing interactions with user badges or Cloud supervision.
+
+| Command (TX) | Expected Reply Prefix (RX) | Explanation |
+| :--- | :--- | :--- |
+| `OCPPPS?` | `OCPPPS:` | Requests the station's OCPP status (e.g., `OCPPStatus:Available`). |
+| `OCPPPACOK` / `OCPPPACNOK` | `OCPPPAC:` | **P**lug **A**nd **C**harge: Enables/disables the badge-less "Plug and Charge" function. |
+| `RFIDId:XXXXX` | `RFIDId:` | Transmits the RFID badge ID (read by the Pi) to the power board. |
+| `RFIDA:XXXXX` | `RFIDA:` | Sends the RFID authorization status. |
+| `OCPPCTO:XXX` | `OCPPCTO:` | Connection Time Out: Sets the connection timeout. |
+
+---
+
+## 7. Bluetooth Module (BLE)
+The station has an integrated Bluetooth module (for the smartphone app) which can be toggled to avoid serial conflicts.
+
+| Command (TX) | Expected Reply Prefix (RX) | Explanation |
+| :--- | :--- | :--- |
+| `BT?` | `BT:` | Requests the current state of the Bluetooth module (`BT:1` = On, `BT:0` = Off). |
 | `BTOK` | `BT:1` | Orders the Bluetooth module to turn on. |
 | `BTNOK`| `BT:0` | Orders the Bluetooth module to turn off. |
 
-## 🧾 7. End of Charge Reports (Session Tickets)
-At the end of a charging session (when the station passes through states W then M before returning to A), the power board automatically emits a summary frame containing the session data.
+---
 
-**Example RX frame:**
-`\WT:0:0:5:CT:0:6:58:EVplug:4485.20:0.00:\`
+## 8. Spontaneous Telemetry (Emitted by ATmega)
+The ATmega sends unsolicited messages over the serial line during specific events.
 
-**Decryption (deduced from the original Java source code):**
-This frame is separated by colons (`:`).
-*   `WT` : **Waiting Time**.
-*   `0:0:5` : Waiting duration in Hours:Minutes:Seconds (here 5 seconds).
-*   `CT` : **Charging Time**.
-*   `0:6:58` : Effective charging duration in Hours:Minutes:Seconds.
-*   `EVplug` : Identifier of the socket used (`EVplug` = Type 2, `DOMplug` = Domestic E/F socket).
-*   `4485.20` : **Average Power (in Watts)** delivered during Peak Hours (HP).
-*   `0.00` : **Average Power (in Watts)** delivered during Off-Peak Hours (HC).
-
-*Note on energy: The board does not directly report Wh, but average power. To obtain the total session energy in Wh, the original Java daemon applied the formula: `Energy (Wh) = Average Power (W) * (Charging Time (min) / 60)`.*
-
-## ⚙️ 8. Functioning Modes (FM)
-The ATmega has several internal functioning modes. The main mode can be modified by sending `FM:X` (where X is the mode number) and verified with `FM?`.
-
-| Mode | Official designation | Explanation of the mode |
-| :--- | :--- | :--- |
-| `FM:1` | **Direct Charge (Permanent)** | The station charges as soon as a vehicle is plugged in, without any condition. This is the "dumb executor" mode we force by default in Green'Up Link. |
-| `FM:2` | **Remote controls (Auto-hours)** | "Peak / Off-Peak" mode, relying on the station's contactor input (Dry contact) or TIC to start/stop the charge. |
-| `FM:3` | **Smart meter (TIC Linky)** | Intelligent control based on the Linky meter's tele-information. **Note:** This mode is actually **not implemented in the ATmega code** (firmware 18.04), which explains why Legrand hid it (commented it out) in the original Web interface code. |
-| `FM:4` | **Programming (Planning)** | Internal time programming mode. The ATmega relies on calendar files to trigger the charge. |
-| `FM:5` | **Modbus (DLM)** | In this mode, the station is controlled via the RS485 bus (Modbus protocol) by an external energy manager (Load Management). |
-| `FM:6` | **OCPP** | Cloud supervision mode. The station awaits its orders from the central OCPP server. **Warning:** this mode alters the ATmega's internal behavior (disables TIC auto-detection, imposes a 30s blocking authorization wait after presenting a badge, modifies the `Unlock` command logic, and forces RFID flags to 1 at startup). |
-
-### External Signal (FM2)
-In addition to the main mode, the station manages a secondary parameter (`FM2`) which corresponds to the external signal (Dry Contact or TIC Peak/Off-Peak):
-*   `FM2?` : Queries the current state of the external signal.
-*   `FM2:0` : Simulates an Open contact (Peak Hours - HP). If the station is in `FM:2` without a TIC, this suspends the charge (`State:B`).
-*   `FM2:1` : Simulates a Closed contact (Off-Peak Hours - HC). If the station is in `FM:2` without a TIC, this authorizes the charge (`State:C`). 
-
-*(Technical note: The Java code logs `FM2` as `external signal`. Sending `FM2:0` was previously mistakenly thought to disable the Eco-Start feature, but it actually injects a software state for Peak Hours, which can unexpectedly freeze the state machine in `State:B` if not careful).*
+| Unsolicited Frame (RX) | Explanation |
+| :--- | :--- |
+| `RaspberryPi?` | Emitted spontaneously when the ATmega boots. It expects the Pi to answer `RaspberryPiModeOK` to confirm its presence. |
+| `CCI:X.XX` | *Current Instantaneous*. Emitted periodically while charging to report the actual current drawn by the vehicle (in Amperes). |
+| `CPh:Mono` / `CPh:Tri` | *Charge Phases*. Emitted just before the charge ramps up to indicate the automatically detected number of phases used by the vehicle. |
+| `\WT:...:CT:...:\` | **Session Ticket**. Emitted at the end of a charging session (when passing through states W then M). Example: `\WT:0:0:5:CT:0:6:58:EVplug:4485.20:0.00:\`. It contains Waiting Time (`WT`), Charging Time (`CT`), the socket used (`EVplug` or `DOMplug`), and the Average Power during Peak and Off-Peak hours. |
+| `TICTestC:Init` / `TICTestB:X` | Spontaneous debugging frames emitted when TIC Test mode is enabled (`TICTM:1`), reporting baud rate and calculated limits. |
