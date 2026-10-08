@@ -32,7 +32,7 @@ Commands to query the real-time behavioral state and errors of the station.
 | Command (TX) | Expected Reply Prefix (RX) | Explanation |
 | :--- | :--- | :--- |
 | `State?` | `State:` | Requests the transactional/behavioral state of the charge (A, B, C, D, E, I, W, M). *See `STATE_MACHINE.md` for full details.* |
-| `E?` | `E:` | Requests current errors. `E:0000` means no error. Errors `E:0001` to `E:0015` indicate hardware faults (contactor, overcurrent `E:0010`, undervoltage `E:0012`, etc.). |
+| `E?` | `E:` | Requests current errors. `E:0000` means no error. Errors `E:0001` to `E:0015` indicate hardware faults. *See Chapter 5 of STATE_MACHINE.md for the full error codes table.* |
 | `CP?` | `CP:` | Raw voltage measured on the Control Pilot pin. Reveals the actual physical connection state (`12`=unplugged, `9`=plugged, `6`=charging). Vital to bypass the software state machine lock. |
 | `SB?` | `SB:` | TBD. Possibly reads the current state of the front panel START/STOP button. |
 | `T2C?` | `T2C:` | TBD. Possibly reads the current authorization state of the Type 2 socket. |
