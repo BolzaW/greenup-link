@@ -1,69 +1,69 @@
-# Module EVerest - GreenUp Driver (`greenup-everest`)
+# EVerest Module - GreenUp Driver (`greenup-everest`)
 
-Ce module a pour but d'exposer la borne Legrand Green'Up Premium comme un module `evse_board_support` (BSP) et `powermeter` standardisés pour le framework EVerest.
+The goal of this module is to expose the Legrand Green'Up Premium charging station as a standardized `evse_board_support` (BSP) and `powermeter` module for the EVerest framework.
 
-## Objectif
+## Objective
 
-EVerest s'attend à piloter un contrôleur de charge "muet" (envoyer des impulsions PWM, fermer le contacteur, lire la tension CP). Or, la borne Legrand embarque sa propre machine à états (elle gère elle-même la sécurité, le contacteur et les heures creuses).
+EVerest expects to drive a "dumb" charge controller (sending PWM pulses, closing the contactor, reading CP voltage). However, the Legrand board embeds its own state machine (it manages its own safety, contactor, and off-peak hours logic).
 
-La crate `greenup-everest` joue donc le rôle de **Façade / Adaptateur** :
-1. **Événements (BSP Events)** : Traduit l'état logique déduit (`Disconnected_A`, `Charging_C`...) en événements EVerest reconnus.
-2. **Commandes (Allow Power On)** : Mappe la commande EVerest d'autorisation de charge (`allow_power_on`) vers des appuis logiciels sur les boutons START/STOP (`SBOK` / `SBNOK`), qui mettent proprement en pause la machine Legrand.
-3. **Limite de courant (Set PWM)** : Convertit le rapport cyclique demandé par le gestionnaire d'énergie d'EVerest (`duty_cycle_pct`) en Ampères matériels pour la borne (`CC:XX`).
-4. **Télémétrie (Powermeter)** : Publie la puissance, la tension et l'énergie sous un format digeste pour EVerest.
+The `greenup-everest` crate acts as a **Facade / Adapter**:
+1. **Events (BSP Events)**: Translates the deduced logical state (`Disconnected_A`, `Charging_C`...) into recognized EVerest events.
+2. **Commands (Allow Power On)**: Maps the EVerest charge authorization command (`allow_power_on`) to software presses on the START/STOP buttons (`SBOK` / `SBNOK`), which cleanly pause the Legrand machine.
+3. **Current Limit (Set PWM)**: Converts the duty cycle requested by the EVerest energy manager (`duty_cycle_pct`) into hardware Amperes for the board (`CC:XX`).
+4. **Telemetry (Powermeter)**: Publishes power, voltage, and energy in a format digestible by EVerest.
 
-## Intégration Finale (Pont MQTT)
+## Final Integration (MQTT Bridge)
 
-Actuellement, ce crate fonctionne comme un **exécutable autonome (Daemon MQTT)**. Il se connecte à un broker MQTT local et agit comme un pont de traduction entre le port série Legrand et le monde extérieur.
+Currently, this crate works as a **standalone executable (MQTT Daemon)**. It connects to a local MQTT broker and acts as a translation bridge between the Legrand serial port and the outside world.
 
-### API MQTT (Topics standards)
+### MQTT API (Standard Topics)
 
-Pour intégrer cette borne dans EVerest, utilisez les modules génériques MQTT d'EVerest et configurez-les pour écouter/publier sur les topics suivants :
+To integrate this station into EVerest, use EVerest's generic MQTT modules and configure them to subscribe/publish to the following topics:
 
-#### Émission (Legrand ➔ EVerest)
+#### Emission (Legrand ➔ EVerest)
 *   **Topic:** `everest/board_support/event`
-    *   **Payload (Texte) :** `A`, `B`, `C`, `Error`, `Faulted`
-    *   **Description :** État de la machine IEC 61851 (câble branché, charge en cours, etc.).
+    *   **Payload (Text):** `A`, `B`, `C`, `Error`, `Faulted`
+    *   **Description:** IEC 61851 machine state (cable plugged, charging in progress, etc.).
 *   **Topic:** `everest/powermeter/telemetry`
-    *   **Payload (JSON) :** `{"voltage_V": 230.0, "current_A": 16.0, "power_W": 3680.0, "energy_Wh": 15000.0}`
-    *   **Description :** Remontée des compteurs d'énergie et puissances instantanées.
+    *   **Payload (JSON):** `{"voltage_V": 230.0, "current_A": 16.0, "power_W": 3680.0, "energy_Wh": 15000.0}`
+    *   **Description:** Reporting of energy counters and instantaneous power.
 
-#### Réception (EVerest ➔ Legrand)
+#### Reception (EVerest ➔ Legrand)
 *   **Topic:** `everest/board_support/cmd/allow_power_on`
-    *   **Payload (Texte) :** `true` ou `false`
-    *   **Description :** Autorise ou suspend la charge (simule un appui sur Start/Stop).
+    *   **Payload (Text):** `true` or `false`
+    *   **Description:** Authorizes or suspends charging (simulates a Start/Stop button press).
 *   **Topic:** `everest/board_support/cmd/set_pwm`
-    *   **Payload (Texte) :** Rapport cyclique en pourcentage (ex: `26.6` pour 16A).
-    *   **Description :** Modifie la consigne de courant. La borne Legrand ne gère pas le vrai PWM, ce pourcentage est converti en Ampères (`Amps = PWM * 0.6`) et envoyé à la carte. Limite bridée entre 7A et 32A.
+    *   **Payload (Text):** Duty cycle in percentage (e.g., `26.6` for 16A).
+    *   **Description:** Modifies the current setpoint. The Legrand board does not manage actual PWM; this percentage is converted to Amperes (`Amps = PWM * 0.6`) and sent to the board. Limit is bounded between 7A and 32A.
 *   **Topic:** `everest/board_support/cmd/reset`
-    *   **Payload (Texte) :** N'importe quelle valeur (ex: `1`).
-    *   **Description :** Déclenche un redémarrage matériel (Reset ATmega).
+    *   **Payload (Text):** Any value (e.g., `1`).
+    *   **Description:** Triggers a hardware reboot (ATmega Reset).
 
-### Configuration EVerest
+### EVerest Configuration
 
-Dans votre fichier `config.json` d'EVerest, vous devrez configurer les modules de type "Generic MQTT" pour faire correspondre les entrées/sorties avec ces topics.
+In your EVerest `config.json` file, you will need to configure the "Generic MQTT" modules to match inputs/outputs with these topics.
 
-## Limites et Avertissements (Hardware Quirks)
+## Limitations and Warnings (Hardware Quirks)
 
-En raison de la nature propriétaire du firmware de la carte Legrand, certaines contraintes physiques s'imposent à ce module et à EVerest :
+Due to the proprietary nature of the Legrand board firmware, certain physical constraints are imposed on this module and on EVerest:
 
-1. **Le Powermeter est largement falsifié (émulé) :**
-   La borne Legrand ne possède pas de véritable compteur d'énergie (certifié MID). La seule grandeur réellement mesurée par le matériel est l'intensité (`Courant_A`). La tension (`voltage_V`) remonte toujours une valeur fixe théorique de 230V. Par conséquent, les valeurs de puissance (`power_W`) et d'énergie cumulée (`energy_Wh`) exposées à EVerest sont de pures déductions mathématiques (P = U × I), basées sur l'hypothèse d'une tension parfaite. 
+1. **The Powermeter is largely falsified (emulated):**
+   The Legrand station does not have a real (MID certified) energy meter. The only value actually measured by the hardware is the current (`current_A`). The voltage (`voltage_V`) always returns a fixed theoretical value of 230V. Consequently, the power (`power_W`) and cumulative energy (`energy_Wh`) values exposed to EVerest are pure mathematical deductions (P = U × I), based on the assumption of perfect voltage.
 
-2. **L'Auto-start au branchement (Saut direct à l'état C) :**
-   La carte Legrand (ATmega) est conçue physiquement pour fonctionner exclusivement en "Plug & Charge". Lors du branchement d'un véhicule (passage de l'état A à B), **le firmware Legrand force de lui-même l'état interne à `SB:1` et passe immédiatement en charge (état C)**, et ce, *peu importe* si on lui avait envoyé un ordre d'arrêt (`SBNOK`) au préalable !
-   Notre adaptateur MQTT ne fait pas de magie pour intercepter cela : il se contente de remonter le passage en état C à EVerest. Si EVerest est configuré avec un profil d'autorisation (ex: exiger un badge RFID avant de charger), EVerest constatera que la charge a démarré sans sa permission et réagira en envoyant immédiatement une commande de coupure (`allow_power_on(false)` ce qui déclenche un `SBNOK`). 
-   Il est donc tout à fait normal d'entendre un "clac" de relais et d'observer une micro-charge d'une seconde lors du branchement, le temps qu'EVerest réagisse pour suspendre la charge (`State:M`). C'est un comportement inévitable lié à l'obstination du firmware Legrand à démarrer la charge tout seul.
+2. **Auto-start on plug (Direct jump to state C):**
+   The Legrand board (ATmega) is physically designed to operate exclusively in "Plug & Charge". When a vehicle is plugged in (transition from state A to B), **the Legrand firmware automatically forces its internal state to `SB:1` and immediately starts charging (state C)**, *regardless* of whether a stop order (`SBNOK`) was previously sent to it!
+   Our MQTT adapter does not perform magic to intercept this: it merely reports the transition to state C to EVerest. If EVerest is configured with an authorization profile (e.g., requiring an RFID badge before charging), EVerest will notice that the charge started without its permission and will react by immediately sending a cutoff command (`allow_power_on(false)` which triggers an `SBNOK`).
+   It is therefore perfectly normal to hear a relay "click" and observe a one-second micro-charge upon plugging in, while EVerest reacts to suspend the charge (`State:M`). This is an unavoidable behavior linked to the Legrand firmware's persistence in starting the charge on its own.
 
-## Architecture de l'Adaptateur
+## Adapter Architecture
 
 ```rust
 pub struct EverestAdapter {
-    // Écoute des événements traduits pour EVerest
+    // Listens to translated events for EVerest
     pub fn subscribe_events(&self) -> broadcast::Receiver<EverestBspEvent>;
     pub fn subscribe_telemetry(&self) -> broadcast::Receiver<EverestTelemetry>;
 
-    // Commandes traduites depuis EVerest vers Legrand
+    // Commands translated from EVerest to Legrand
     pub async fn allow_power_on(&self, allow: bool) -> Result<(), String>;
     pub async fn set_pwm(&self, duty_cycle_pct: f32) -> Result<(), String>;
 }
