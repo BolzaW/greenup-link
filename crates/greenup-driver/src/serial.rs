@@ -36,7 +36,7 @@ pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartErro
     };
 
     if current_state != "A" {
-        logger::log("SERIE", &format!("⛔ TIC detection ignored: charging station not free (State: {})", current_state));
+        logger::log("SERIAL", &format!("⛔ TIC detection ignored: charging station not free (State: {})", current_state));
         return Err(TicStartError::NotInStateA(current_state));
     }
 
@@ -53,12 +53,12 @@ pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartErro
 pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, _state: &SharedState) {
     let hello = Command::RaspberryPiModeOk;
     let _ = port.write_all(hello.encode().as_bytes());
-    logger::log("SERIE_TX", &hello.as_frame());
+    logger::log("SERIAL_TX", &hello.as_frame());
     std::thread::sleep(Duration::from_millis(200));
 
     for cmd in Command::startup_queries() {
         let _ = port.write_all(cmd.encode().as_bytes());
-        logger::log("SERIE_TX", &cmd.as_frame());
+        logger::log("SERIAL_TX", &cmd.as_frame());
         std::thread::sleep(Duration::from_millis(150));
     }
 
@@ -102,7 +102,7 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
                 }
                 Err(e) => {
                     // Other error
-                    crate::logger::log("SERIE", &format!("Serial read error: {:?}", e));
+                    crate::logger::log("SERIAL", &format!("Serial read error: {:?}", e));
                     line.clear();
                     std::thread::sleep(Duration::from_millis(100));
                 }
@@ -122,9 +122,9 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
             // Empty the channel of old messages
             while let Ok(_) = internal_rx.try_recv() {}
 
-            logger::log("SERIE_TX", encoded.trim());
+            logger::log("SERIAL_TX", encoded.trim());
             if let Err(e) = port.write_all(encoded.as_bytes()) {
-                logger::log("SERIE", &format!("Serial write error: {}", e));
+                logger::log("SERIAL", &format!("Serial write error: {}", e));
             }
 
             if let Some(prefix) = expected_prefix {
@@ -148,9 +148,9 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
                     success = true;
                 } else {
                     if got_default {
-                        logger::log("SERIE", &format!("❌ Command {} rejected (Default), retry: {}", cmd.as_frame(), retries));
+                        logger::log("SERIAL", &format!("❌ Command {} rejected (Default), retry: {}", cmd.as_frame(), retries));
                     } else {
-                        logger::log("SERIE", &format!("⏳ Command {} timeout, retry: {}", cmd.as_frame(), retries));
+                        logger::log("SERIAL", &format!("⏳ Command {} timeout, retry: {}", cmd.as_frame(), retries));
                     }
                     retries -= 1;
                 }
@@ -194,13 +194,13 @@ fn update_iec_state(tel: &mut Telemetry) {
 }
 
 fn parse_incoming_line(line: &str, state: &SharedState) {
-    logger::log("SERIE_RX", line);
+    logger::log("SERIAL_RX", line);
 
     let event = parse_line(line);
 
     match event {
         ProtocolEvent::Ping => {
-            logger::log("SERIE", "🤝 Hardware ping detected, sending RaspberryPiModeOK");
+            logger::log("SERIAL", "🤝 Hardware ping detected, sending RaspberryPiModeOK");
             let _ = state.serial_tx.try_send(Command::RaspberryPiModeOk);
         }
         ProtocolEvent::SoftwareVersion(v) => {
@@ -216,9 +216,9 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut info) = state.info.lock() {
                 let spec = crate::hardware_specs::HardwareCapabilities::from_reference(&v);
                 if !spec.is_known {
-                    logger::log("SERIE", &format!("⚠️ Unknown reference ({}), assuming basic model (Single-phase 4.6kW)", v));
+                    logger::log("SERIAL", &format!("⚠️ Unknown reference ({}), assuming basic model (Single-phase 4.6kW)", v));
                 } else {
-                    logger::log("SERIE", &format!("ℹ️ Model identified: {}", spec.name));
+                    logger::log("SERIAL", &format!("ℹ️ Model identified: {}", spec.name));
                 }
                 info.reference = v;
                 info.capabilities = Some(spec);
@@ -256,7 +256,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::FmMode(fm_val) => {
             if FunctioningMode::from_code(&fm_val) != Some(FunctioningMode::DirectCharge) {
-                logger::log("SERIE", &format!("⚠️ FM Mode detected = {}, forcing FM:1", fm_val));
+                logger::log("SERIAL", &format!("⚠️ FM Mode detected = {}, forcing FM:1", fm_val));
                 let _ = state.serial_tx.try_send(
                     Command::SetFunctioningMode(FunctioningMode::DirectCharge),
                 );
@@ -280,15 +280,15 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             }
 
             if val != "0" {
-                logger::log("SERIE", &format!("🔌 TIC detected: {} baud", val));
+                logger::log("SERIAL", &format!("🔌 TIC detected: {} baud", val));
                 if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = val; }
             } else if should_stop_test {
-                logger::log("SERIE", "🔌 TIC not detected (absent)");
+                logger::log("SERIAL", "🔌 TIC not detected (absent)");
                 if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "0".to_string(); }
             }
 
             if should_stop_test {
-                logger::log("SERIE", "End of automatic TIC detection, sending TICTM:0");
+                logger::log("SERIAL", "End of automatic TIC detection, sending TICTM:0");
                 let _ = state.serial_tx.try_send(Command::SetTicTestMode(false));
             }
         }
@@ -337,7 +337,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut tel) = state.telemetry.lock() { tel.frequency = f; }
         }
         ProtocolEvent::CommandNotUnderstood(cmd) => {
-            logger::log("SERIE", &format!("⚠️ Command not recognized by the charging station: {}", cmd));
+            logger::log("SERIAL", &format!("⚠️ Command not recognized by the charging station: {}", cmd));
         }
         ProtocolEvent::Unknown(_) => {}
     }

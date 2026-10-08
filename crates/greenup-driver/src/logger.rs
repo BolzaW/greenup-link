@@ -30,7 +30,7 @@ pub fn init() {
 }
 
 /// Writes an entry to the log file AND to stdout.
-///   category : "SERIE_RX", "SERIE_TX", "API", "IHM", "SYS"
+///   category : "SERIAL_RX", "SERIAL_TX", "API", "IHM", "SYS"
 ///   message  : the content to log
 pub fn log(category: &str, message: &str) {
     let now = Local::now();
