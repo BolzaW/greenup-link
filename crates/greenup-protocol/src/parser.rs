@@ -11,6 +11,8 @@ pub enum ProtocolEvent {
     ErrorChange(String),
     ChargeComplete,
     FmMode(String),
+    EcoStart(bool),
+    Derogation(bool),
     TicTestBaud(String),
     TicTestInit,
     Voltage(f32),
@@ -50,6 +52,10 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         ProtocolEvent::ChargeComplete
     } else if line.starts_with("FM:") {
         ProtocolEvent::FmMode(line.replace("FM:", ""))
+    } else if line.starts_with("FM2:") {
+        ProtocolEvent::EcoStart(line.replace("FM2:", "") == "1")
+    } else if line.starts_with("D:") {
+        ProtocolEvent::Derogation(line.replace("D:", "") == "1")
     } else if line.starts_with("TICTestB:") {
         ProtocolEvent::TicTestBaud(line.replace("TICTestB:", ""))
     } else if line.starts_with("TICTestC:") {
