@@ -12,7 +12,7 @@ It communicates with the charging station's power board via the internal USB ser
 - A clean, responsive **local Web GUI**.
 - A comprehensive and documented **REST API**, perfect for home automation integration (Home Assistant, Jeedom, etc.).
 
-It also provides an EVerest integration without API/UI via a direct MQTT bridge, allowing the station to be controlled as a standard EVerest hardware module.
+It also provides an EVerest integration without API/UI via a direct MQTT bridge, allowing the station to be controlled as a standard EVerest hardware module. *(Note: For a cleaner, native EVerest module implementation that replaces EvseManager entirely, check out the excellent community project [evorada/everest-greenup](https://github.com/evorada/everest-greenup) by suda).*
 
 ## 🤔 Why this project?
 
@@ -155,7 +155,7 @@ The roadmap includes (with no guaranteed timeline):
 - OCPP communication mode support
 - Extending compatibility to other station models in the range:
   - Schuko (domestic socket) compatibility
-  - Three-phase (Triphasé) support
+  - Three-phase equipment support
   - Dual charge points wallbox support
 
 *Note: Feel free to use GitHub "Issues" to suggest or request specific features you might need!*
