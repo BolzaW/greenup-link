@@ -1,116 +1,118 @@
 # Green'Up Link
 
+[🇫🇷 Lire en Français](README.fr.md)
+
 > **Disclaimer :** Green'Up Link is an independent, community-developed project and is not affiliated with, sponsored or endorsed by Legrand. "Green'Up" and "Legrand" are trademarks of their respective owners.
 
-## 📖 Résumé du projet
+## 📖 Project Overview
 
-**Green'Up Link** est un logiciel léger, performant et indépendant écrit en Rust. Il s'installe directement sur le Kit de Communication officiel Legrand (référence 059056) en remplacement du logiciel ("KitCom") fourni par le constructeur. 
+**Green'Up Link** is a lightweight, high-performance, independent software written in Rust. It installs directly on the official Legrand Communication Kit (reference 059056) to replace the software ("KitCom") provided by the manufacturer. 
 
-Il communique avec la carte de puissance de la borne via la liaison série USB interne et expose :
-- Une **IHM Web locale** claire et réactive.
-- Une **API REST** complète et documentée, parfaite pour l'intégration en domotique (Home Assistant, Jeedom, etc.).
+It communicates with the charging station's power board via the internal USB serial link and exposes:
+- A clean, responsive **local Web GUI**.
+- A comprehensive and documented **REST API**, perfect for home automation integration (Home Assistant, Jeedom, etc.).
 
-## 🤔 Pourquoi ce projet ?
+## 🤔 Why this project?
 
-Le logiciel fourni avec le Kit de Communication officiel s'apparente à une "usine à gaz". Il est truffé de bugs, peu réactif, et s'avère très difficilement utilisable pour de l'automatisation domotique standard. 
+The software provided with the official Communication Kit is bloated. It is buggy, unresponsive, and very difficult to use for standard home automation. 
 
-De plus, il repose sur un Raspberry Pi 3 équipé d'une version obsolète du système d'exploitation (Raspbian 9 "Stretch"), vulnérable sur le plan de la sécurité. Ce projet permet de reprendre le contrôle total de son matériel de manière beaucoup plus saine et réactive.
+Moreover, it relies on a Raspberry Pi 3 running an obsolete operating system (Raspbian 9 "Stretch"), which is highly vulnerable from a security standpoint. This project allows you to take back full control of your hardware in a much healthier and more responsive way.
 
-## ⚠️ Limitations actuelles
+## ⚠️ Current Limitations
 
-Ce projet est en cours de développement. Les fonctionnalités seront ajoutées au fur et à mesure. Pour le moment :
-- Ne gère que la **charge directe**.
-- Ne gère que la borne référence **058001** (1 seul côté Type 2, sans prise domestique Shuko, 7kW). *C'est le modèle que je possède et sur lequel j'ai pu tester.*
-- **NE GÈRE PAS** le lecteur de badge RFID.
-- **NE GÈRE PAS** les plannings (programmation horaire).
-- **NE GÈRE PAS** la communication Modbus.
-- **NE GÈRE PAS** le protocole OCPP.
+This project is actively in development. Features will be added progressively. For now:
+- Only manages **direct charging**.
+- Only manages the **058001** charging station reference (1 Type 2 side, no Shuko domestic socket, 7kW). *This is the model I own and on which I could test.*
+- **DOES NOT MANAGE** the RFID badge reader.
+- **DOES NOT MANAGE** schedules (time programming).
+- **DOES NOT MANAGE** Modbus communication.
+- **DOES NOT MANAGE** the OCPP protocol.
 
-## ✅ Compatibilité
+## ✅ Compatibility
 
-- **Système d'exploitation** : Image officielle Legrand "Raspbian GNU/Linux 9 (stretch)" (pour le moment).
-- **Firmware de la carte de puissance** :
-  - `FirmwareBoardA-V01;18;10.hex` (Testé et validé)
-  - `FirmwareBoardA-V01;18;04.hex` (Théoriquement compatible)
+- **Operating System**: Legrand official image "Raspbian GNU/Linux 9 (stretch)" (for now).
+- **Power board firmware**:
+  - `FirmwareBoardA-V01;18;10.hex` (Tested and validated)
+  - `FirmwareBoardA-V01;18;04.hex` (Theoretically compatible)
 
 ---
 
-## 🛠️ Compiler le projet (Pour les développeurs)
+## 🛠️ Compiling the project (For developers)
 
-Le projet a été développé sous Windows 11 en utilisant le sous-système Linux (WSL2), ce qui permet la compilation croisée vers l'architecture ARM du Raspberry Pi de manière transparente. Les étapes ci-dessous assument un environnement Windows, mais peuvent facilement être adaptées pour Linux.
+The project was developed on Windows 11 using the Windows Subsystem for Linux (WSL2), which allows seamless cross-compilation to the Raspberry Pi's ARM architecture. The steps below assume a Windows environment but can easily be adapted for Linux.
 
-1. **Installer WSL2** sur Windows (ex: `wsl --install -d Ubuntu`).
-2. **Installer Rust** dans l'environnement WSL (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`).
-3. **Installer les dépendances Linux (WSL)** nécessaires à la compilation croisée. Sous Debian/Ubuntu, exécutez :
+1. **Install WSL2** on Windows (e.g. `wsl --install -d Ubuntu`).
+2. **Install Rust** in the WSL environment (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`).
+3. **Install Linux dependencies (WSL)** required for cross-compilation. On Debian/Ubuntu, run:
    ```bash
    sudo apt update
    sudo apt install -y gcc-arm-linux-gnueabihf pkg-config
    ```
-4. **Installer Cargo Zigbuild** : `cargo install cargo-zigbuild` (permet de cross-compiler facilement vers ARM).
-5. Exécuter le script **`.\build_pi.bat`** (depuis PowerShell ou l'invite de commande Windows). Ce script va invoquer WSL et générer le binaire optimisé pour la borne.
+4. **Install Cargo Zigbuild**: `cargo install cargo-zigbuild` (allows easy cross-compilation to ARM).
+5. Run the **`.\build_pi.bat`** script (from PowerShell or Windows Command Prompt). This script invokes WSL and generates the optimized binary for the charging station.
 
 ---
 
-## 🚀 Installation sur la borne (Raspberry Pi)
+## ⚙️ Installation on the charging station (Raspberry Pi)
 
-> **ATTENTION :** Sauvegardez l'image (clone de la carte SD) officielle Legrand avant toute manipulation afin de pouvoir revenir en arrière en cas de problème.
+> **WARNING:** Backup the official Legrand image (clone the SD card) before any manipulation to be able to rollback in case of an issue.
 
-> ⚠️ **Important :** L'installation physique du Raspberry Pi dans la borne doit impérativement se faire **hors tension**.
+> ⚠️ **Important:** The physical installation of the Raspberry Pi in the station MUST be done with the **power off**.
 
-### 1. Initialisation du kit legrand
-Suivez la **[documentation officielle Legrand](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** pour initialiser le Raspberry Pi sur votre réseau.
+### 1. Legrand kit initialization
+Follow the **[official Legrand documentation](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** to initialize the Raspberry Pi on your network.
    
-### 2. Obtenir l'accès SSH (Modification de la carte SD)
-Le Raspberry Pi 3 intégré utilise une installation classique (non chiffrée) mais le port SSH est fermé et le mot de passe par défaut a été modifié par Legrand. Il faut donc intervenir directement sur la carte SD :
+### 2. Get SSH access (SD card modification)
+The embedded Raspberry Pi 3 uses a standard (unencrypted) installation, but the SSH port is closed and the default password has been changed by Legrand. You must intervene directly on the SD card:
 
-1. Démontez la borne (hors tension) pour récupérer la carte SD du Raspberry Pi et lisez-la sur votre ordinateur.
-2. **Activer le SSH** : Créez simplement un fichier vide nommé `ssh` (sans extension) à la racine de la partition `boot`.
-3. **Réinitialiser le mot de passe** : L'utilisateur `pi` existe mais son mot de passe est inconnu.
-   - Sur votre ordinateur (sous Linux ou WSL), générez le hash d'un nouveau mot de passe avec la commande : `mkpasswd -m sha-512`
-   - Ouvrez la partition principale (rootfs) de la carte SD et éditez le fichier `/etc/shadow`.
-   - Repérez la ligne commençant par `pi:` (ex: `pi:<hash-inconnu>:18508:0:99999:7:::`) et remplacez le hash existant par celui que vous venez de générer.
-4. Remettez la carte SD dans le Raspberry Pi et mettez la borne sous tension.
-5. Vous pouvez désormais vous connecter en SSH : `ssh pi@<ip_de_la_borne>` avec le mot de passe que vous avez choisi. L'utilisateur `pi` possède les droits administrateur (sudo).
+1. Dismount the station (power off) to retrieve the Raspberry Pi SD card and read it on your computer.
+2. **Enable SSH**: Create an empty file named `ssh` (no extension) at the root of the `boot` partition.
+3. **Reset password**: The `pi` user exists but its password is unknown.
+   - On your computer (under Linux or WSL), generate the hash of a new password with: `mkpasswd -m sha-512`
+   - Open the main partition (rootfs) of the SD card and edit the `/etc/shadow` file.
+   - Find the line starting with `pi:` (e.g., `pi:<unknown-hash>:18508:0:99999:7:::`) and replace the existing hash with the one you just generated.
+4. Put the SD card back into the Raspberry Pi and power on the station.
+5. You can now connect via SSH: `ssh pi@<station_ip>` using the password you set. The `pi` user has administrator (sudo) rights.
 
-### 3. Sécurisation de l'accès SSH
-Une fois connecté au Raspberry Pi en SSH, il est impératif de le sécuriser.
-🚨 **NOTE DE SÉCURITÉ :** Le Raspberry Pi tourne sur un vieil OS avec de nombreuses failles connues. Ne l'exposez **JAMAIS** sur internet (pas de redirection de port sur votre box).
+### 3. Securing SSH access
+Once connected to the Raspberry Pi via SSH, it is imperative to secure it.
+⚠️ **SECURITY NOTE:** The Raspberry Pi runs on an old OS with many known vulnerabilities. **NEVER** expose it to the internet (no port forwarding on your router).
 
-1. **Modifiez immédiatement le mot de passe root** :
+1. **Immediately change the root password**:
    ```bash
    passwd root
    ```
-2. **Sécurisez l'accès par échange de clé publique** :
-   Depuis votre PC, envoyez votre clé publique (si vous n'en avez pas, générez-la avec `ssh-keygen`) :
+2. **Secure access via public key exchange**:
+   From your PC, send your public key (if you don't have one, generate it with `ssh-keygen`):
    ```bash
    ssh-copy-id pi@192.168.1.xxx
    ```
-   > ⚠️ **Attention :** Avant de désactiver la connexion par mot de passe, vérifier que la connexion par clé fonctionne, autrement vous perdrez l'accès ssh et il faudra de nouveau démonter la carte micro SD
+   > ⚠️ **Warning:** Before disabling password authentication, verify that key-based connection works, otherwise you will lose SSH access and will have to dismount the micro SD card again.
 
-3. Désactivez l'authentification par mot de passe dans `/etc/ssh/sshd_config` (`PasswordAuthentication no`), et l'authentifcation root (`PermitRootLogin no`).
+3. Disable password authentication in `/etc/ssh/sshd_config` (`PasswordAuthentication no`), as well as root authentication (`PermitRootLogin no`).
 
-4. **Neutralisation des sécurités Legrand** : 
-   Le logiciel d'origine intègre un script de "destruction" d'urgence (`DeletAll.sh`) qui efface tout le logiciel si les adresses MAC réseau ne correspondent pas à celles attendues par Legrand.
-   - Éditez le fichier : `nano ~/Desktop/DeletAll.sh`
-   - Ajoutez la commande `exit 0` sur la deuxième ligne (juste après le `#!/bin/bash`).
-   - Retirez les droits d'exécution : `chmod -x ~/Desktop/DeletAll.sh`
+4. **Neutralize Legrand security**: 
+   The original software includes an emergency "destruction" script (`DeletAll.sh`) that erases all software if the network MAC addresses do not match Legrand's expectations.
+   - Edit the file: `nano ~/Desktop/DeletAll.sh`
+   - Add the `exit 0` command on the second line (right after `#!/bin/bash`).
+   - Remove execution rights: `chmod -x ~/Desktop/DeletAll.sh`
 
-### 4. Installation de Green'Up Link
-1. Transférez le binaire compilé (`greenup-link`) et les scripts vers la borne via SCP. Depuis votre PC :
+### 4. Installing Green'Up Link
+1. Transfer the compiled binary (`greenup-link`) and the scripts to the station via SCP. From your PC:
    ```bash
    scp target/armv7-unknown-linux-gnueabihf/debug/greenup-link pi@192.168.1.xxx:~/Desktop/rust
    scp scripts/* pi@192.168.1.xxx:~/Desktop/rust
    ```
-2. Arrêtez les services Legrand actuels en exécutant le script `stop`.
-3. **(Optionnel mais recommandé) Désactivez le démarrage automatique** du logiciel Legrand d'origine. Si vous ne le faites pas, le logiciel officiel redémarrera à chaque reboot de la borne :
+2. Stop the current Legrand services by running the `stop` script.
+3. **(Optional but recommended) Disable auto-start** of the original Legrand software. If you don't do this, the official software will restart on every reboot:
    ```bash
    sudo update-rc.d -f CommunicationArduinoRasp remove
    ```
 
-### 5. Lancement automatique de Green'Up Link au boot
-Pour lancer l'application automatiquement, créez un service Systemd :
-1. Créez le fichier de service (nécessite les droits sudo) : `sudo nano /etc/systemd/system/greenup-link.service`
-2. Collez-y cette configuration :
+### 5. Auto-start Green'Up Link at boot
+To launch the application automatically, create a Systemd service:
+1. Create the service file (requires sudo rights): `sudo nano /etc/systemd/system/greenup-link.service`
+2. Paste this configuration:
    ```ini
    [Unit]
    Description=GreenUp Link Service
@@ -127,23 +129,23 @@ Pour lancer l'application automatiquement, créez un service Systemd :
    [Install]
    WantedBy=multi-user.target
    ```
-3. Activez et démarrez le service :
+3. Enable and start the service:
    ```bash
    sudo systemctl enable greenup-link
    sudo systemctl start greenup-link
    ```
 
-### 6. Utilisation
-- **Interface Graphique** : Ouvrez simplement l'adresse IP de la borne sur le port 8080 depuis votre navigateur (ex: `http://192.168.1.xxx:8080`).
-- **Tests & CLI** : Utilisez le script PowerShell fourni `cli-greenup-link.ps1` depuis votre PC pour interagir avec l'API en ligne de commande.
-- **Domotique** : Consultez la [Documentation de l'API REST](API_REST_LEGRAND.md) pour interfacer votre box domotique.
+### 6. Usage
+- **Web GUI**: Simply open the station's IP address on port 8080 from your browser (e.g. `http://192.168.1.xxx:8080`).
+- **Tests & CLI**: Use the provided PowerShell script `cli-greenup-link.ps1` from your PC to interact with the API via command line.
+- **Home Automation**: Check the [REST API Documentation](API_REST_LEGRAND.md) to interface your home automation controller.
 
 ---
 
-## 🔮 Fonctionnalités futures
+## 🚀 Future Features
 
-La feuille de route inclut (sans date garantie) :
-- Le support du mode de communication OCPP.
-- L'élargissement de la compatibilité aux autres modèles de bornes de la gamme.
+The roadmap includes (with no guaranteed timeline):
+- OCPP communication mode support.
+- Broadening compatibility to other station models in the range.
 
-*Note : N'hésitez pas à utiliser les "Issues" GitHub pour suggérer ou demander des fonctionnalités spécifiques dont vous auriez besoin !*
+*Note: Feel free to use GitHub "Issues" to suggest or request specific features you might need!*
