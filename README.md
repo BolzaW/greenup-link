@@ -152,10 +152,10 @@ The roadmap includes (with no guaranteed timeline):
 - MQTT integration for Home Automation
 - Compatibility with recent Raspberry Pi OS releases
 - Custom ATmega firmware with more capabilities (like more telemetry info from TIC signals)
-- Schuko (domestic socket) compatibility
-- Three-phase (Triphasé) support
-- Dual charge points wallbox support
 - OCPP communication mode support
-- Broadening compatibility to other station models in the range.
+- Extending compatibility to other station models in the range:
+  - Schuko (domestic socket) compatibility
+  - Three-phase (Triphasé) support
+  - Dual charge points wallbox support
 
 *Note: Feel free to use GitHub "Issues" to suggest or request specific features you might need!*
