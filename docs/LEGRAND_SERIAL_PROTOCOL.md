@@ -70,7 +70,7 @@ Low-level commands to interact with physical buttons, enable, disable, or force 
 | `2PCOK` / `2PCNOK` | `2PC:1` / `2PC:0` | Authorizes (`OK`) or Blocks (`NOK`) charging on the **Domestic** (Schuko / 2 Pins) socket. |
 | `T2FOK` / `T2FNOK` | `T2F:1` / `T2F:0` | **TBD**: **Forces** charging on the Type 2 socket (bypasses safety or schedule?). Not extensively tested. |
 | `2PFOK` / `2PFNOK` | `2PF:1` / `2PF:0` | **TBD**: **Forces** charging on the domestic socket. Not extensively tested. |
-| `SBOK` / `SBNOK` | `SB:` | **Pause/Resume**: Simulates pressing the physical START/STOP button on the front panel. `SBNOK` cleanly stops the charge (`State:M`). `SBOK` wakes the station and restarts the cycle. |
+| `SBOK` / `SBNOK` | `SB:` | **Pause/Resume**: Simulates pressing the physical START/STOP button on the front panel. `SBNOK` cleanly stops the charge (`State:M`). `SBOK` wakes the station and restarts the cycle. *Note: `SBNOK` can be overridden by a spontaneous `SBF:1` emitted by the board when a vehicle is plugged in.* |
 | `Unlock` | None | Orders the **physical unlocking** of the cable (if the station has a Type 2 socket lock mechanism). |
 
 ---
@@ -119,6 +119,8 @@ The ATmega sends unsolicited messages over the serial line during specific event
 | :--- | :--- |
 | `RaspberryPi?` | Emitted spontaneously when the ATmega boots. It expects the Pi to answer `RaspberryPiModeOK` to confirm its presence. |
 | `State:*` | Emitted spontaneously at each state machine transition (e.g., `State:A`, `State:B`). |
+| `Start` | Emitted spontaneously at the start of a charging session. |
+| `SBF:*` | Emitted spontaneously during physical hardware events. `SBF:1` is emitted when a vehicle is plugged in (which can override a previous `SBNOK` state), and `SBF:0` is emitted when the cable is removed. |
 | `CC:XX` | The calculated current limit. Emitted at the beginning of a charge, and spontaneously sent every time it is recalculated (e.g., about every 10 seconds during a charge when TIC load balancing is active). |
 | `CCI:X.XX` | *Current Instantaneous*. Emitted periodically while charging to report the actual current drawn by the vehicle (in Amperes). |
 | `CPh:Mono` / `CPh:Tri` | *Charge Phases*. Emitted just before the charge ramps up to indicate the automatically detected number of phases used by the vehicle. |
