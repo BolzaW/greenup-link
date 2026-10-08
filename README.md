@@ -138,7 +138,7 @@ To launch the application automatically, create a Systemd service:
 ### 6. Usage
 - **Web GUI**: Simply open the station's IP address on port 8080 from your browser (e.g. `http://192.168.1.xxx:8080`).
 - **Tests & CLI**: Use the provided PowerShell script `cli-greenup-link.ps1` from your PC to interact with the API via command line.
-- **Home Automation**: Check the [REST API Documentation](API_REST_LEGRAND.md) to interface your home automation controller.
+- **Home Automation**: Check the [REST API Documentation](docs/API_REST_GREENUP_LINK.md) to interface your home automation controller.
 
 ---
 
