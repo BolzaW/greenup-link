@@ -87,10 +87,11 @@ Commands to manage functioning modes, schedules, and active sessions.
 | `FM?` | `FM:` | Requests the main Functioning Mode (1=Direct Charge, 2=Auto-hours/TIC, 4=Planning, 5=Modbus, 6=OCPP). *See Chapter 6 of STATE_MACHINE.md for details.* |
 | `FM:X` | `FM:` | Sets the main Functioning Mode to `X` (e.g., `FM:1` for permanent direct charge). *See Chapter 6 of STATE_MACHINE.md for details.* |
 | `FM2?` | `FM2:` | Queries the current state of the external signal (simulated dry contact). |
-| `FM2:1` / `FM2:0` | `FM2:` | Simulates the external signal. `FM2:1` blocks the charge. `FM2:0` authorizes the charge. Useful in `FM:1` or `FM:6` to control charge without OCPP. |
-| `D?` | `D:` | Queries the front button derogation state (used to force charge during off-peak hours). |
-| `DOK` / `DNOK` | `D:` | Sent by the controller to Accept (`DOK`) or Reject (`DNOK`) a physical derogation requested by the user via the front button (which the station signals by emitting `D:1`). |
-| *(RX Only)* `Dec:` | N/A | **Delayed Start (Décalage)**: Sent by the station when the user presses the front button multiple times to delay the charge. The value is in minutes (e.g., `Dec:180` for 3 hours). |
+| `FM2:1` / `FM2:0` | `FM2:` | Simulates the external signal. `FM2:1` blocks the charge. `FM2:0` authorizes the charge. **Note**: This is overridden by the TIC during Peak Hours (Heures Pleines). |
+| `D?` | `D:` | Queries the current derogation state (force charge). |
+| `DOK` / `DNOK` | `D:` | Activates (`DOK`) or deactivates (`DNOK`) the derogation. |
+| `Dec?` | `Dec:` | **TBD**: Queries the current delayed start (décalage). |
+| `Dec:X` | `Dec:` | **TBD**: Sets the delayed start to `X` (Unknown range/unit, possibly hours). |
 | `SOK` / `SNOK` | `Slp:` | **Sleep**: `SOK` forces the station into deep sleep (`State:Y`). `SNOK` wakes the station up. |
 
 ---
