@@ -117,7 +117,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
 - **URL**: `/api/t2/disable`
 - **Method**: `POST`
 - **Description**: Software deactivation of the Type 2 socket (sends `T2CNOK`).
-- **⚠️ Warning**: with `T2C:0`, the Legrand state machine is frozen in `State:A` (Quirk #3). The IEC state is then deduced solely from `cp_voltage`.
+- **⚠️ Warning**: with `T2C:0`, the Legrand state machine is frozen in `State:A` . The IEC state is then deduced solely from `cp_voltage`.
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Socket deactivated (T2CNOK)" }
@@ -128,7 +128,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
 - **Method**: `POST`
 - **URL Parameter**: `:amps` (integer between **7** and **32**).
 - **Description**: Sets the current limit target (sends `CCEl:XX`, always 2-digit formatted).
-- **Security**: The API rejects any value outside `[7, 32]` with a `400` error. While the ATmega board can technically accept values above 32A, they have not been tested in real conditions to avoid hardware risks. Using `CCEl` (Eliot limit) instead of directly forcing `CC` is a deliberate choice: it allows the ATmega to keep its internal safeguards active, computing the final safe limit (`CC`) based on other hardware factors. Finally, note that below 6A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8A (Quirk #6).
+- **Security**: The API rejects any value outside `[7, 32]` with a `400` error. While the ATmega board can technically accept values above 32A, they have not been tested in real conditions to avoid hardware risks. Using `CCEl` (Eliot limit) instead of directly forcing `CC` is a deliberate choice: it allows the ATmega to keep its internal safeguards active, computing the final safe limit (`CC`) based on other hardware factors. Finally, note that below 6A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8A.
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Current limit set to 16A" }
