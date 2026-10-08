@@ -41,14 +41,14 @@ async fn serve_ui() -> Html<&'static str> {
 
 /// GET /api/info
 async fn get_info(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "🔍 Demande GET /api/info");
+    logger::log("API", "🔍 GET request /api/info");
     let info = state.info.lock().unwrap().clone();
     Json(info)
 }
 
 /// GET /api/telemetry
 async fn get_telemetry(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("TRACE", "📡 Demande GET /api/telemetry");
+    logger::log("TRACE", "📡 GET request /api/telemetry");
     let telemetry = state.telemetry.lock().unwrap().clone();
     Json(telemetry)
 }
@@ -58,42 +58,42 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
     let cmd = match u8::try_from(amps).ok().map(Command::set_current_limit) {
         Some(Ok(cmd)) => cmd,
         _ => {
-            logger::log("API", &format!("⛔ Rejet courant hors limites: {}A", amps));
+            logger::log("API", &format!("⛔ Rejecting out of bounds current: {}A", amps));
             return (
                 StatusCode::BAD_REQUEST,
                 Json(json!({"error": format!(
-                    "Le courant doit être obligatoirement compris entre {} et {} Ampères",
+                    "Current must be between {} and {} Amps",
                     MIN_CURRENT_AMPS, MAX_CURRENT_AMPS
                 )})),
             );
         }
     };
 
-    logger::log("API", &format!("⚡ Modification limite courant → {}A", amps));
+    logger::log("API", &format!("⚡ Current limit modification → {}A", amps));
     
     if state.serial_tx.send(cmd).await.is_ok() {
         (
             StatusCode::OK,
             Json(json!({
                 "status": "success", 
-                "message": format!("Limite de courant définie sur {}A", amps)
+                "message": format!("Current limit set to {}A", amps)
             })),
         )
     } else {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Erreur interne: Impossible de communiquer avec le thread série"})),
+            Json(json!({"error": "Internal error: Failed to communicate with serial thread"})),
         )
     }
 }
 
 /// POST /api/charge/start
 async fn start_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "▶ Demande de reprise de charge (SBOK)");
+    logger::log("API", "▶ Charge resume request (SBOK)");
     if state.serial_tx.send(Command::SetStartButton(true)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge autorisée (Type 2)"})))
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge authorized (Type 2)"})))
     } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
     }
 }
 
@@ -103,76 +103,76 @@ async fn start_charge(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// POST /api/init
 async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "🔄 Lancement de la séquence d'initialisation");
+    logger::log("API", "🔄 Starting initialization sequence");
     tokio::spawn(async move {
-        // La détection TIC n'est jamais lancée automatiquement :
-        // elle doit être demandée explicitement via POST /api/tic/refresh.
+        // TIC detection is never started automatically:
+        // it must be explicitly requested via POST /api/tic/refresh.
         greenup_driver::serial::trigger_init_sequence(&state).await;
     });
-    (StatusCode::OK, Json(json!({"status": "success", "message": "Séquence d'initialisation lancée"})))
+    (StatusCode::OK, Json(json!({"status": "success", "message": "Initialization sequence started"})))
 }
 
 async fn enable_t2(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "🔓 Activation de la prise Type 2 (T2COK)");
+    logger::log("API", "🔓 Activating Type 2 plug (T2COK)");
     if state.serial_tx.send(Command::AuthorizeType2(true)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Prise activée (T2COK)"})))
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Plug activated (T2COK)"})))
     } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
     }
 }
 
 /// POST /api/reset
 async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "⚠️ Demande de redémarrage matériel (Reset)");
+    logger::log("API", "⚠️ Hardware restart request (Reset)");
     if state.serial_tx.send(Command::Reset).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Redémarrage de la carte ATmega demandé"})))
+        (StatusCode::OK, Json(json!({"status": "success", "message": "ATmega board restart requested"})))
     } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
     }
 }
 
 /// POST /api/t2/disable
 async fn disable_t2(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "🔒 Désactivation de la prise Type 2 (T2CNOK)");
+    logger::log("API", "🔒 Deactivating Type 2 plug (T2CNOK)");
     if state.serial_tx.send(Command::AuthorizeType2(false)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Prise désactivée (T2CNOK)"})))
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Plug deactivated (T2CNOK)"})))
     } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
     }
 }
 
 async fn stop_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "⏹ Demande de pause de charge (SBNOK)");
+    logger::log("API", "⏹ Charge pause request (SBNOK)");
     if state.serial_tx.send(Command::SetStartButton(false)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge stoppée (Type 2)"})))
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge stopped (Type 2)"})))
     } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
     }
 }
 
 /// POST /api/command
 async fn send_raw_command(State(state): State<SharedState>, body: String) -> impl IntoResponse {
     let cmd = body.trim().to_string();
-    logger::log("API", &format!("🔧 Commande brute: {}", body.trim()));
+    logger::log("API", &format!("🔧 Raw command: {}", body.trim()));
     if state.serial_tx.send(Command::Raw(cmd)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Commande envoyée"})))
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Command sent"})))
     } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Erreur de communication série"})))
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
     }
 }
 
 /// POST /api/tic/refresh
 async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "🔄 Demande manuelle de détection TIC (TICTM:1)");
+    logger::log("API", "🔄 Manual TIC detection request (TICTM:1)");
     match greenup_driver::serial::start_tic_detection(&state).await {
-        Ok(()) => (StatusCode::OK, Json(json!({"status": "success", "message": "Détection TIC lancée"}))),
+        Ok(()) => (StatusCode::OK, Json(json!({"status": "success", "message": "TIC detection started"}))),
         Err(TicStartError::NotInStateA(current)) => (
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": format!("La détection TIC ne peut se faire que lorsque la borne est libre (State:A). État actuel : {}", current)})),
+            Json(json!({"error": format!("TIC detection can only be done when the charging station is free (State:A). Current state: {}", current)})),
         ),
         Err(TicStartError::Serial) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Erreur de communication série"})),
+            Json(json!({"error": "Serial communication error"})),
         ),
     }
 }
@@ -180,20 +180,19 @@ async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
 /// POST /api/bluetooth
 async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<BluetoothPayload>) -> impl IntoResponse {
     let cmd = Command::SetBluetooth(payload.enabled);
-    let log_msg = if payload.enabled { "🔵 Activation" } else { "⚪ Désactivation" };
+    let log_msg = if payload.enabled { "🔵 Activating" } else { "⚪ Deactivating" };
     
-    logger::log("API", &format!("{} Bluetooth demandée", log_msg));
+    logger::log("API", &format!("{} Bluetooth requested", log_msg));
     
     if state.serial_tx.send(cmd).await.is_ok() {
         (
             StatusCode::OK,
-            Json(json!({"status": "success", "message": format!("Bluetooth {} avec succès", if payload.enabled { "activé" } else { "désactivé" })}))
+            Json(json!({"status": "success", "message": format!("Bluetooth successfully {}", if payload.enabled { "activated" } else { "deactivated" })}))
         )
     } else {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Erreur de communication série"}))
+            Json(json!({"error": "Serial communication error"}))
         )
     }
 }
-
