@@ -34,8 +34,8 @@ Commands to query the real-time behavioral state and errors of the station.
 | `State?` | `State:` | Requests the transactional/behavioral state of the charge (A, B, C, D, E, I, W, M). *See `STATE_MACHINE.md` for full details.* |
 | `E?` | `E:` | Requests current errors. `E:0000` means no error. Errors `E:0001` to `E:0015` indicate hardware faults. *See Chapter 5 of STATE_MACHINE.md for the full error codes table.* |
 | `CP?` | `CP:` | Raw voltage measured on the Control Pilot pin. Reveals the actual physical connection state (`12`=unplugged, `9`=plugged, `6`=charging). Vital to bypass the software state machine lock. |
-| `SB?` | `SB:` | TBD. Possibly reads the current state of the front panel START/STOP button. |
-| `T2C?` | `T2C:` | TBD. Possibly reads the current authorization state of the Type 2 socket. |
+| `SB?` | `SB:` | Reads the current state of the front panel START/STOP button. |
+| `T2C?` | `T2C:` | Reads the current authorization state of the Type 2 socket. |
 
 ---
 
@@ -46,9 +46,10 @@ Commands to read or set charging current limits.
 | Command (TX) | Expected Reply Prefix (RX) | Explanation |
 | :--- | :--- | :--- |
 | `CC?` | `CC:` | Requests the final calculated charging current limit imposed by the ATmega (e.g., `CC:16`). |
+| `CC:XX` | `CC:` | Overrides the `CC` variable directly. **Warning**: Potentially more dangerous than using `CCEl:XX` because there are no internal safeguards (the ATmega does not guard its minimum hardware values). |
 | `CCEl?` | `CCEl:` | Requests the software current limit imposed by the Cloud (Eliot / Legrand App). |
 | `CCEl:XX` | `CCEl:` | Sets the Cloud power limit (e.g., `CCEl:16`). Safer than overriding `CC` directly. |
-| `CCS?` | `CCS:` | TBD. Requests the maximum current capacity configured for the Schuko socket. |
+| `CCS?` | `CCS:` | Requests the maximum current capacity configured for the Schuko socket. |
 | `CCS:XX` | `CCS:` | Sets the power limit for the domestic socket (Schuko). |
 | `CCTIC?` | `CCTIC:` | Requests the dynamic current limit deduced by the TIC. Returns `32` if the TIC is disconnected. |
 | `TICTM:1` / `TICTM:0` | `TICTM:1` / `TICTM:0` | Enables (`1`) or disables (`0`) the TIC Test mode. When enabled, the station broadcasts TIC baud rates and calculated limits (`CCTIC`). |
@@ -62,8 +63,8 @@ Low-level commands to enable, disable, or force the physical sockets.
 | :--- | :--- | :--- |
 | `T2COK` / `T2CNOK` | `T2C:1` / `T2C:0` | Authorizes (`OK`) or Blocks (`NOK`) charging on the **Type 2** socket. *Warning: `T2CNOK` blinds the state machine.* |
 | `2PCOK` / `2PCNOK` | `2PC:1` / `2PC:0` | Authorizes (`OK`) or Blocks (`NOK`) charging on the **Domestic** (Schuko / 2 Pins) socket. |
-| `T2FOK` / `T2FNOK` | `T2F:1` / `T2F:0` | **Forces** charging on the Type 2 socket (bypasses safety or schedule?). |
-| `2PFOK` / `2PFNOK` | `2PF:1` / `2PF:0` | **Forces** charging on the domestic socket. |
+| `T2FOK` / `T2FNOK` | `T2F:1` / `T2F:0` | **TBD**: **Forces** charging on the Type 2 socket (bypasses safety or schedule?). Not extensively tested. |
+| `2PFOK` / `2PFNOK` | `2PF:1` / `2PF:0` | **TBD**: **Forces** charging on the domestic socket. Not extensively tested. |
 | `Unlock` | None | Orders the **physical unlocking** of the cable (if the station has a Type 2 socket lock mechanism). |
 
 ---
@@ -88,10 +89,10 @@ Commands managing interactions with user badges or Cloud supervision.
 | Command (TX) | Expected Reply Prefix (RX) | Explanation |
 | :--- | :--- | :--- |
 | `OCPPPS?` | `OCPPPS:` | Requests the station's OCPP status (e.g., `OCPPStatus:Available`). |
-| `OCPPPACOK` / `OCPPPACNOK` | `OCPPPAC:` | **P**lug **A**nd **C**harge: Enables/disables the badge-less "Plug and Charge" function. |
-| `RFIDId:XXXXX` | `RFIDId:` | Transmits the RFID badge ID (read by the Pi) to the power board. |
-| `RFIDA:XXXXX` | `RFIDA:` | Sends the RFID authorization status. |
-| `OCPPCTO:XXX` | `OCPPCTO:` | Connection Time Out: Sets the connection timeout. |
+| `OCPPPACOK` / `OCPPPACNOK` | `OCPPPAC:` | **TBD**: **P**lug **A**nd **C**harge: Enables/disables the badge-less "Plug and Charge" function. |
+| `RFIDId:XXXXX` | `RFIDId:` | **TBD**: Transmits the RFID badge ID (read by the Pi) to the power board. |
+| `RFIDA:XXXXX` | `RFIDA:` | **TBD**: Sends the RFID authorization status. |
+| `OCPPCTO:XXX` | `OCPPCTO:` | **TBD**: Connection Time Out: Sets the connection timeout. |
 
 ---
 
@@ -112,6 +113,8 @@ The ATmega sends unsolicited messages over the serial line during specific event
 | Unsolicited Frame (RX) | Explanation |
 | :--- | :--- |
 | `RaspberryPi?` | Emitted spontaneously when the ATmega boots. It expects the Pi to answer `RaspberryPiModeOK` to confirm its presence. |
+| `State:*` | Emitted spontaneously at each state machine transition (e.g., `State:A`, `State:B`). |
+| `CC:XX` | The calculated current limit. Emitted at the beginning of a charge, and spontaneously sent every time it is recalculated (e.g., about every 10 seconds during a charge when TIC load balancing is active). |
 | `CCI:X.XX` | *Current Instantaneous*. Emitted periodically while charging to report the actual current drawn by the vehicle (in Amperes). |
 | `CPh:Mono` / `CPh:Tri` | *Charge Phases*. Emitted just before the charge ramps up to indicate the automatically detected number of phases used by the vehicle. |
 | `\WT:...:CT:...:\` | **Session Ticket**. Emitted at the end of a charging session (when passing through states W then M). Example: `\WT:0:0:5:CT:0:6:58:EVplug:4485.20:0.00:\`. It contains Waiting Time (`WT`), Charging Time (`CT`), the socket used (`EVplug` or `DOMplug`), and the Average Power during Peak and Off-Peak hours. |
