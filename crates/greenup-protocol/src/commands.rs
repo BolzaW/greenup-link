@@ -166,6 +166,10 @@ pub enum Command {
     GetEcoStart,
     /// `FM2:1` / `FM2:0` – Enables/disables Eco-Start (DIP2 equivalent).
     SetEcoStart(bool),
+    /// `D?` – Derogation state (front button force charge).
+    GetDerogation,
+    /// `D:1` / `D:0` – Enables/disables derogation (front button force charge).
+    SetDerogation(bool),
 
     // --- 8. Debug ---
     /// Sending a raw command without expecting an acknowledgment (debug API).
@@ -242,6 +246,8 @@ impl Command {
             Command::SetFunctioningMode(m) => format!("FM:{}", m.code()),
             Command::GetEcoStart => "FM2?".into(),
             Command::SetEcoStart(on) => format!("FM2:{}", *on as u8),
+            Command::GetDerogation => "D?".into(),
+            Command::SetDerogation(on) => format!("D:{}", *on as u8),
             Command::Raw(s) => s.clone(),
         }
     }
@@ -305,6 +311,8 @@ impl Command {
             Command::SetFunctioningMode(_) => Some("FM:"),
             Command::GetEcoStart => Some("FM2:"),
             Command::SetEcoStart(_) => Some("FM2:"),
+            Command::GetDerogation => Some("D:"),
+            Command::SetDerogation(_) => Some("D:"),
             Command::Raw(_) => None,
         }
     }
@@ -319,6 +327,8 @@ impl Command {
             Command::GetWeekYearProduction,
             Command::GetState,
             Command::GetFunctioningMode,
+            Command::GetEcoStart,
+            Command::GetDerogation,
             Command::GetCurrentLimit,
             Command::GetEliotCurrentLimit,
             Command::GetCpVoltage,
