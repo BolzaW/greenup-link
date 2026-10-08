@@ -1,45 +1,45 @@
-//! Commandes émises vers la carte de puissance (TX).
+//! Commands issued to the power board (TX).
 //!
-//! Chaque variante de [`Command`] correspond à une trame ASCII documentée dans
-//! `docs/LEGRAND_SERIAL_PROTOCOL.md`. La méthode [`Command::encode`] produit la
-//! trame prête à être écrite sur le lien série (terminée par `\r`).
+//! Each variant of [`Command`] corresponds to an ASCII frame documented in
+//! `docs/LEGRAND_SERIAL_PROTOCOL.md`. The [`Command::encode`] method produces the
+//! frame ready to be written to the serial link (terminated by `\r`).
 //!
-//! Cette couche est volontairement pure : aucune I/O, aucun état.
+//! This layer is intentionally pure: no I/O, no state.
 
 use std::fmt;
 
-/// Terminateur de trame attendu par l'ATmega (Carriage Return, 0x0D).
+/// Frame terminator expected by the ATmega (Carriage Return, 0x0D).
 pub const FRAME_TERMINATOR: &str = "\r";
 
-/// Courant minimal accepté par la carte (en dessous, la carte passe en défaut).
+/// Minimum current accepted by the board (below this, the board goes into fault state).
 pub const MIN_CURRENT_AMPS: u8 = 7;
-/// Courant maximal accepté par la carte.
+/// Maximum current accepted by the board.
 pub const MAX_CURRENT_AMPS: u8 = 32;
 
-/// Modes de fonctionnement principaux de l'ATmega (`FM:X`).
+/// Main functioning modes of the ATmega (`FM:X`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FunctioningMode {
-    /// `FM:1` – Charge directe permanente (mode utilisé par Green'Up Link).
+    /// `FM:1` – Permanent direct charge (mode used by Green'Up Link).
     DirectCharge = 1,
-    /// `FM:2` – Pilotage par contact sec (Heures Creuses / Heures Pleines).
+    /// `FM:2` – Controlled by dry contact (Off-Peak / Peak hours).
     RemoteControl = 2,
-    /// `FM:3` – Smart meter (TIC). Non implémenté dans le firmware 18.04.
+    /// `FM:3` – Smart meter (TIC). Not implemented in firmware 18.04.
     SmartMeter = 3,
-    /// `FM:4` – Programmation horaire interne.
+    /// `FM:4` – Internal time programming.
     Programming = 4,
-    /// `FM:5` – Pilotage Modbus (DLM).
+    /// `FM:5` – Modbus control (DLM).
     Modbus = 5,
-    /// `FM:6` – Supervision OCPP (modifie fortement le comportement interne).
+    /// `FM:6` – OCPP supervision (heavily modifies internal behavior).
     Ocpp = 6,
 }
 
 impl FunctioningMode {
-    /// Code numérique envoyé dans la trame `FM:X`.
+    /// Numeric code sent in the `FM:X` frame.
     pub fn code(self) -> u8 {
         self as u8
     }
 
-    /// Décode la valeur reçue dans une trame `FM:X`.
+    /// Decodes the value received in an `FM:X` frame.
     pub fn from_code(code: &str) -> Option<Self> {
         match code.trim() {
             "1" => Some(Self::DirectCharge),
@@ -53,10 +53,10 @@ impl FunctioningMode {
     }
 }
 
-/// Erreurs de construction d'une commande.
+/// Errors when building a command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CommandError {
-    /// Le courant demandé est hors de la plage [`MIN_CURRENT_AMPS`]..=[`MAX_CURRENT_AMPS`].
+    /// The requested current is outside the range [`MIN_CURRENT_AMPS`]..=[`MAX_CURRENT_AMPS`].
     CurrentOutOfRange(u8),
 }
 
@@ -65,7 +65,7 @@ impl fmt::Display for CommandError {
         match self {
             CommandError::CurrentOutOfRange(a) => write!(
                 f,
-                "courant {}A hors limites ({}..={}A)",
+                "current {}A out of bounds ({}..={}A)",
                 a, MIN_CURRENT_AMPS, MAX_CURRENT_AMPS
             ),
         }
@@ -74,11 +74,11 @@ impl fmt::Display for CommandError {
 
 impl std::error::Error for CommandError {}
 
-/// Toutes les commandes connues pouvant être envoyées à la carte de puissance.
+/// All known commands that can be sent to the power board.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    // --- 1. Initialisation & Système ---
-    /// `RaspberryPiModeOK` – Annonce que le Pi prend le contrôle (réponse au ping `RaspberryPi?`).
+    // --- 1. Initialization & System ---
+    /// `RaspberryPiModeOK` – Announces that the Pi is taking control (response to the `RaspberryPi?` ping).
     RaspberryPiModeOk,
     /// `SoftwareVersion?`
     GetSoftwareVersion,
@@ -90,16 +90,16 @@ pub enum Command {
     GetReference,
     /// `WeekYearProduction?`
     GetWeekYearProduction,
-    /// `Side?` – Côté actif (bornes doubles).
+    /// `Side?` – Active side (dual-socket stations).
     GetSide,
-    /// `Reset` – Redémarre la carte de puissance.
+    /// `Reset` – Reboots the power board.
     Reset,
-    /// `Test` – Mode test usine.
+    /// `Test` – Factory test mode.
     FactoryTest,
-    /// `ping` – Ping basique.
+    /// `ping` – Basic ping.
     Ping,
 
-    // --- 2. Statut & Télémesure ---
+    // --- 2. Status & Telemetry ---
     /// `State?`
     GetState,
     /// `E?`
@@ -114,29 +114,29 @@ pub enum Command {
     GetT2CEnabled,
     /// `SB?`
     GetSbState,
-    /// `CCTIC?` – Limite de courant calculée à partir de la TIC.
+    /// `CCTIC?` – Current limit calculated from the TIC.
     GetTicCurrentLimit,
-    /// `TICTM:1` / `TICTM:0` – Active/désactive le mode test TIC.
+    /// `TICTM:1` / `TICTM:0` – Enables/disables TIC test mode.
     SetTicTestMode(bool),
 
-    // --- 3. Pilotage de la charge ---
-    /// `CC:XX` – Limite de courant prise Type 2 (utiliser [`Command::set_current_limit`] pour valider).
+    // --- 3. Charge Control ---
+    /// `CC:XX` – Type 2 socket current limit (use [`Command::set_current_limit`] to validate).
     SetCurrentLimit(u8),
-    /// `CCS:XX` – Limite de courant prise Schuko.
+    /// `CCS:XX` – Schuko socket current limit.
     SetSchukoCurrentLimit(u8),
-    /// `T2COK` / `T2CNOK` – Autorise/bloque la charge Type 2.
+    /// `T2COK` / `T2CNOK` – Authorizes/blocks Type 2 charging.
     AuthorizeType2(bool),
-    /// `2PCOK` / `2PCNOK` – Autorise/bloque la charge prise domestique.
+    /// `2PCOK` / `2PCNOK` – Authorizes/blocks domestic socket charging.
     AuthorizeDomestic(bool),
-    /// `T2FOK` / `T2FNOK` – Force la charge Type 2.
+    /// `T2FOK` / `T2FNOK` – Forces Type 2 charging.
     ForceType2(bool),
-    /// `2PFOK` / `2PFNOK` – Force la charge prise domestique.
+    /// `2PFOK` / `2PFNOK` – Forces domestic socket charging.
     ForceDomestic(bool),
-    /// `SOK` / `SNOK` – Entre/sort du mode veille (uniquement depuis l'état A).
+    /// `SOK` / `SNOK` – Enters/exits sleep mode (only from state A).
     SetSleep(bool),
-    /// `Unlock` – Déverrouillage physique du câble.
-    /// `SBOK` / `SBNOK` - Simule l'appui logiciel sur le bouton START/STOP (Pause/Reprise parfaite).
+    /// `SBOK` / `SBNOK` - Simulates a software press on the START/STOP button (Perfect Pause/Resume).
     SetStartButton(bool),
+    /// `Unlock` – Physically unlocks the cable.
     Unlock,
 
     // --- 4. OCPP / RFID ---
@@ -144,11 +144,11 @@ pub enum Command {
     GetOcppParameters,
     /// `OCPPPACOK` / `OCPPPACNOK` – Plug & Charge.
     SetPlugAndCharge(bool),
-    /// `RFIDId:XXXX` – Transmet l'identifiant d'un badge.
+    /// `RFIDId:XXXX` – Transmits a badge identifier.
     SendRfidId(String),
-    /// `RFIDA:XXXX` – Transmet un statut d'autorisation RFID.
+    /// `RFIDA:XXXX` – Transmits an RFID authorization status.
     SendRfidAuthorization(String),
-    /// `OCPPCTO:XXX` – Timeout de connexion OCPP.
+    /// `OCPPCTO:XXX` – OCPP connection timeout.
     SetOcppConnectionTimeout(u32),
 
     // --- 5. Bluetooth ---
@@ -157,18 +157,18 @@ pub enum Command {
     /// `BTOK` / `BTNOK`
     SetBluetooth(bool),
 
-    // --- 7. Modes de fonctionnement ---
+    // --- 7. Functioning Modes ---
     /// `FM?`
     GetFunctioningMode,
     /// `FM:X`
     SetFunctioningMode(FunctioningMode),
-    /// `FM2?` – État de l'Éco-démarrage.
+    /// `FM2?` – Eco-Start state.
     GetEcoStart,
-    /// `FM2:1` / `FM2:0` – Active/désactive l'Éco-démarrage (équivalent DIP2).
+    /// `FM2:1` / `FM2:0` – Enables/disables Eco-Start (DIP2 equivalent).
     SetEcoStart(bool),
 
     // --- 8. Debug ---
-    /// Envoi d'une commande brute sans acquittement attendu (API de debug).
+    /// Sending a raw command without expecting an acknowledgment (debug API).
     Raw(String),
 }
 
@@ -177,12 +177,12 @@ fn ok_nok(prefix: &str, enabled: bool) -> String {
 }
 
 impl Command {
-    /// Construit une commande `CC:XX` en validant la plage de courant.
+    /// Builds a `CC:XX` command while validating the current range.
     pub fn set_current_limit(amps: u8) -> Result<Self, CommandError> {
         Self::validate_current(amps).map(Command::SetCurrentLimit)
     }
 
-    /// Construit une commande `CCS:XX` en validant la plage de courant.
+    /// Builds a `CCS:XX` command while validating the current range.
     pub fn set_schuko_current_limit(amps: u8) -> Result<Self, CommandError> {
         Self::validate_current(amps).map(Command::SetSchukoCurrentLimit)
     }
@@ -195,7 +195,7 @@ impl Command {
         }
     }
 
-    /// Trame ASCII sans terminateur (utile pour les logs).
+    /// ASCII frame without terminator (useful for logs).
     pub fn as_frame(&self) -> String {
         match self {
             Command::RaspberryPiModeOk => "RaspberryPiModeOK".into(),
@@ -246,13 +246,13 @@ impl Command {
         }
     }
 
-    /// Trame complète prête à être écrite sur le lien série (avec `\r`).
+    /// Complete frame ready to be written to the serial link (with `\r`).
     pub fn encode(&self) -> String {
         format!("{}{}", self.as_frame(), FRAME_TERMINATOR)
     }
 
-    /// Détermine le préfixe attendu en réponse pour acquitter cette commande.
-    /// Si `None`, la commande ne nécessite pas d'acquittement ou est de type "fire-and-forget" (ex: Raw).
+    /// Determines the expected prefix in response to acknowledge this command.
+    /// If `None`, the command does not require an acknowledgment or is "fire-and-forget" (e.g. Raw).
     pub fn expected_rx_prefix(&self) -> Option<&'static str> {
         match self {
             Command::RaspberryPiModeOk => Some("Side:"),
@@ -262,7 +262,7 @@ impl Command {
             Command::GetReference => Some("Reference:"),
             Command::GetWeekYearProduction => Some("WeekYearProduction:"),
             Command::GetSide => Some("Side:"),
-            Command::Reset => Some("State:"), // Reset renvoie l'état après le reboot
+            Command::Reset => Some("State:"), // Reset returns the state after reboot
             Command::FactoryTest => None,
             Command::Ping => Some("pong"),
 
@@ -289,7 +289,7 @@ impl Command {
             Command::ForceDomestic(false) => Some("2PF:0"),
             Command::SetSleep(_) => Some("Slp:"),
             Command::SetStartButton(_) => Some("SB:"),
-            Command::Unlock => None, // À vérifier
+            Command::Unlock => None, // To verify
 
             Command::GetOcppParameters => Some("OCPPPS:"),
             Command::SetPlugAndCharge(_) => Some("OCPPPAC:"),
@@ -309,7 +309,7 @@ impl Command {
         }
     }
 
-    /// Séquence d'interrogation recommandée au démarrage (hors `RaspberryPiModeOK` et TIC).
+    /// Recommended query sequence at startup (excluding `RaspberryPiModeOK` and TIC).
     pub fn startup_queries() -> Vec<Command> {
         vec![
             Command::GetSoftwareVersion,

@@ -8,7 +8,7 @@ use greenup_everest::{EverestAdapter, EverestBspEvent};
 
 #[tokio::main]
 async fn main() {
-    // 1. Initialiser le driver série (emprunté de greenup-link)
+    // 1. Initialize the serial driver (borrowed from greenup-link)
     let (serial_tx, serial_rx) = mpsc::channel(32);
     let driver_state = Arc::new(AppState {
         telemetry: Mutex::new(Telemetry::default()),
@@ -22,15 +22,15 @@ async fn main() {
         greenup_driver::serial::run_serial_loop(state_for_serial, serial_rx);
     });
 
-    // Lancer la séquence d'init après 1 seconde
+    // Launch the init sequence after 1 second
     let state_for_init = driver_state.clone();
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_secs(1)).await;
-        logger::log("EVEREST", "🔄 Envoi séquence initialisation Legrand...");
+        logger::log("EVEREST", "🔄 Sending Legrand initialization sequence...");
         greenup_driver::serial::trigger_init_sequence(&state_for_init).await;
     });
 
-    // 2. Initialiser l'Adaptateur EVerest
+    // 2. Initialize the EVerest Adapter
     let adapter = Arc::new(EverestAdapter::new(driver_state.clone()));
     
     let adapter_for_loop = adapter.clone();
@@ -38,21 +38,21 @@ async fn main() {
         adapter_for_loop.run_event_loop().await;
     });
 
-    // 3. Connexion MQTT (Configurable via variable d'environnement)
+    // 3. MQTT Connection (Configurable via environment variable)
     let mqtt_host = std::env::var("MQTT_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
     let mut mqttoptions = MqttOptions::new("greenup-everest-driver", &mqtt_host, 1883);
     mqttoptions.set_keep_alive(Duration::from_secs(5));
     
     let (client, mut connection) = AsyncClient::new(mqttoptions, 10);
     
-    // Souscriptions aux ordres d'EVerest
+    // Subscriptions to EVerest commands
     client.subscribe("everest/board_support/cmd/allow_power_on", QoS::AtMostOnce).await.unwrap();
     client.subscribe("everest/board_support/cmd/set_pwm", QoS::AtMostOnce).await.unwrap();
     client.subscribe("everest/board_support/cmd/reset", QoS::AtMostOnce).await.unwrap();
 
-    logger::log("EVEREST", "🔌 Connecté au broker MQTT local (Port 1883)");
+    logger::log("EVEREST", "🔌 Connected to local MQTT broker (Port 1883)");
 
-    // 4. Tâche d'émission (Legrand -> EVerest)
+    // 4. Emission task (Legrand -> EVerest)
     let client_pub = client.clone();
     let adapter_pub = adapter.clone();
     tokio::spawn(async move {
@@ -69,7 +69,7 @@ async fn main() {
                         EverestBspEvent::Error => "Error",
                         EverestBspEvent::Faulted => "Faulted",
                     };
-                    logger::log("EVEREST", &format!("📤 Émission BspEvent: {}", evt_str));
+                    logger::log("EVEREST", &format!("📤 Emitting BspEvent: {}", evt_str));
                     let _ = client_pub.publish("everest/board_support/event", QoS::AtMostOnce, false, evt_str).await;
                 }
                 Ok(tel) = tel_rx.recv() => {
@@ -86,7 +86,7 @@ async fn main() {
         }
     });
 
-    // 5. Boucle de réception MQTT (EVerest -> Legrand)
+    // 5. MQTT reception loop (EVerest -> Legrand)
     loop {
         match connection.poll().await {
             Ok(Event::Incoming(Incoming::Publish(p))) => {
@@ -96,19 +96,19 @@ async fn main() {
                 match topic.as_str() {
                     "everest/board_support/cmd/allow_power_on" => {
                         let allow = payload_str.trim() == "true";
-                        logger::log("EVEREST", &format!("📥 Commande allow_power_on: {}", allow));
+                        logger::log("EVEREST", &format!("📥 allow_power_on command: {}", allow));
                         let _ = adapter.allow_power_on(allow).await;
                     }
                     "everest/board_support/cmd/set_pwm" => {
                         if let Ok(duty) = payload_str.trim().parse::<f32>() {
-                            logger::log("EVEREST", &format!("📥 Commande set_pwm: {}%", duty));
+                            logger::log("EVEREST", &format!("📥 set_pwm command: {}%", duty));
                             if let Err(e) = adapter.set_pwm(duty).await {
-                                logger::log("EVEREST", &format!("⚠️ Erreur PWM: {}", e));
+                                logger::log("EVEREST", &format!("⚠️ PWM Error: {}", e));
                             }
                         }
                     }
                     "everest/board_support/cmd/reset" => {
-                        logger::log("EVEREST", "📥 Commande Reset Matériel");
+                        logger::log("EVEREST", "📥 Hardware Reset command");
                         let _ = adapter.hardware_reset().await;
                     }
                     _ => {}
@@ -116,7 +116,7 @@ async fn main() {
             }
             Ok(_) => {}
             Err(e) => {
-                logger::log("EVEREST", &format!("⚠️ Erreur MQTT: {:?}", e));
+                logger::log("EVEREST", &format!("⚠️ MQTT Error: {:?}", e));
                 tokio::time::sleep(Duration::from_secs(3)).await;
             }
         }

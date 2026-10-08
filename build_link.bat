@@ -4,8 +4,8 @@ echo   Compilation Rust (Zigbuild) pour la borne Legrand
 echo ====================================================
 echo.
 
-REM Utilisation de cargo-zigbuild pour compiler tous les binaires du workspace
-wsl -d Ubuntu -e bash -c "PATH=$PATH:~/.cargo/bin cargo zigbuild --target armv7-unknown-linux-gnueabihf.2.24"
+REM Utilisation de cargo-zigbuild pour compiler le binaire greenup-link
+wsl -d Ubuntu -e bash -c "PATH=$PATH:~/.cargo/bin cargo zigbuild -p greenup-link --target armv7-unknown-linux-gnueabihf.2.24"
 
 echo.
 echo ====================================================

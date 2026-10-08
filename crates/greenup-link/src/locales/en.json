@@ -1,0 +1,49 @@
+{
+  "header": {
+    "subtitle": "Local control interface",
+    "ble_module": "BLE Module"
+  },
+  "visualizer": {
+    "force_tic_refresh": "Force TIC mode refresh",
+    "system_state": "System state"
+  },
+  "state": {
+    "searching": "Searching for station...",
+    "disconnected": "Disconnected",
+    "connected": "Connected",
+    "charging": "Charging",
+    "fault": "Fault",
+    "unknown": "Unknown",
+    "code": "Code",
+    "charge_complete": "Charge Complete",
+    "offline": "Offline"
+  },
+  "telemetry": {
+    "voltage": "Voltage",
+    "current": "Current",
+    "power": "Power",
+    "energy": "Energy"
+  },
+  "controls": {
+    "charge_params": "Charge parameters",
+    "current_limit": "Current Setpoint",
+    "start": "START",
+    "stop": "STOP"
+  },
+  "tic": {
+    "standard": "Standard TIC (9600 baud)",
+    "historic": "Historic TIC (1200 baud)",
+    "detecting": "Detecting...",
+    "disconnected": "TIC Not Connected"
+  },
+  "info": {
+    "not_available": "Information not available"
+  },
+  "alert": {
+    "error": "Error: ",
+    "tic_refresh_state_a": "The station must be in state A (Free) to start TIC detection."
+  },
+  "error": {
+    "hardware_code": "Hardware Code: "
+  }
+}
