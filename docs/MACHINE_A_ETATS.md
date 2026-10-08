@@ -117,7 +117,7 @@ Normally, the `FM2:0` command is supposed to disable the eco-start function (so 
 This behavior unexpectedly blocks the state machine in `State:B` during Peak Hours (HP).
 
 **Workaround:** A way to temporarily override this (for a single charging session) is to explicitly resend the `FM:1` command while the station is in `State:B`. 
-**WARNING:** Doing this completely cuts off the Peak/Off-Peak control, but it also disables the TIC load shedding (délestage) for the entire duration of that charging session.
+**WARNING:** Doing this completely cuts off the Peak/Off-Peak control, but it also disables the TIC load balancing for the entire duration of that charging session.
 
 ### The CC: parser bug and the sub-6A crash
 Analysis of current setpoints revealed two consecutive flaws:
@@ -136,4 +136,4 @@ These commands simulate a software press on the physical STOP/START button on th
 *   Sending **`SBNOK`**: The station thinks the STOP button was pressed. It immediately goes to `State:W` (Stopping), sends the session ticket, then safely stabilizes in **`State:M`** (Manual stop). It doesn't loop, it waits.
 *   Sending **`SBOK`**: The station thinks START was pressed (or the cable was plugged). It goes back to `State:A`, detects the socket (`SBF:1`), emits `Start`, goes to `State:B`, then starts charging (`State:C`).
 
-This is the **perfect** mechanic to control charge and load shedding sessions for EVerest / Home Assistant integration, without suffering the side effects of other interruption commands!
+This is the **perfect** mechanic to control charge and load balancing sessions for EVerest / Home Assistant integration, without suffering the side effects of other interruption commands!
