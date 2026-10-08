@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct Telemetry {
     pub voltage: f32,
     pub current: f32,
-    pub power: f32, // Calculée: V * I
+    pub power: f32, // Calculated: V * I
     pub energy: f32,
     pub frequency: f32,
     pub greenup_state: String,
@@ -16,7 +16,7 @@ pub struct Telemetry {
     pub sb_state: Option<bool>,
     pub iec_state: Option<String>,
     pub charge_complete: bool,
-    pub tic_mode: String, // "": inconnu, "0": non présent, "1200": historique, "9600": standard
+    pub tic_mode: String, // "": unknown, "0": not present, "1200": historical, "9600": standard
     #[serde(skip)]
     pub last_power_update: Option<std::time::Instant>,
 }
@@ -24,14 +24,14 @@ pub struct Telemetry {
 impl Default for Telemetry {
     fn default() -> Self {
         Self {
-            voltage: 230.0, // Tension arbitraire par défaut pour le calcul de puissance
+            voltage: 230.0, // Arbitrary default voltage for power calculation
             current: 0.0,
             power: 0.0,
             energy: 0.0,
             frequency: 0.0,
             greenup_state: String::new(),
             error_code: String::new(),
-            limit_amps: 16, // 16A par défaut
+            limit_amps: 16, // 16A by default
             eliot_limit_amps: None,
             cp_voltage: None,
             t2c_enabled: None,

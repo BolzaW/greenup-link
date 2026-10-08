@@ -18,17 +18,17 @@ pub async fn trigger_init_sequence(state: &SharedState) {
 }
 
 pub enum TicStartError {
-    /// La borne n'est pas en `State:A` (contient l'état Legrand courant).
+    /// The charging station is not in `State:A` (contains the current Legrand state).
     NotInStateA(String),
-    /// Le canal vers le port série est fermé.
+    /// The channel to the serial port is closed.
     Serial,
 }
 
-/// Lance la détection TIC (`TICTM:1`), UNIQUEMENT si l'état Legrand est `A`.
+/// Starts TIC detection (`TICTM:1`), ONLY if the Legrand state is `A`.
 ///
-/// Garde-fou centralisé : si la borne n'est pas en `State:A`, la fonction ne fait
-/// strictement rien (aucune trame envoyée, aucun état modifié). Le driver se charge
-/// ensuite d'envoyer `TICTM:0` à la fin de la détection.
+/// Centralized safeguard: if the charging station is not in `State:A`, the function does
+/// absolutely nothing (no frame sent, no state modified). The driver then takes care
+/// of sending `TICTM:0` at the end of the detection.
 pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartError> {
     let current_state = match state.telemetry.lock() {
         Ok(tel) => tel.greenup_state.clone(),
@@ -36,7 +36,7 @@ pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartErro
     };
 
     if current_state != "A" {
-        logger::log("SERIE", &format!("⛔ Détection TIC ignorée : borne non libre (State: {})", current_state));
+        logger::log("SERIE", &format!("⛔ TIC detection ignored: charging station not free (State: {})", current_state));
         return Err(TicStartError::NotInStateA(current_state));
     }
 
@@ -69,11 +69,11 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
     let mut port = serialport::new("/dev/ttyUSB0", 115_200)
         .timeout(Duration::from_millis(100))
         .open()
-        .expect("Impossible d'ouvrir le port série /dev/ttyUSB0");
+        .expect("Cannot open the serial port /dev/ttyUSB0");
 
-    let clone_port = port.try_clone().expect("Echec clone port serie");
+    let clone_port = port.try_clone().expect("Failed to clone serial port");
 
-    // Canal interne pour envoyer les lignes lues au thread TX pour acquittement
+    // Internal channel to send read lines to the TX thread for acknowledgment
     let (internal_tx, internal_rx) = std::sync::mpsc::channel::<String>();
 
     let state_rx = state.clone();
@@ -85,10 +85,10 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
                 Ok(n) if n > 0 => {
                     let clean_line = line.trim();
                     if !clean_line.is_empty() {
-                        // On envoie une copie au TX pour le matching
+                        // We send a copy to TX for matching
                         let _ = internal_tx.send(clean_line.to_string());
                         
-                        // On parse pour mettre a jour la telemetrie
+                        // We parse to update telemetry
                         parse_incoming_line(clean_line, &state_rx);
                     }
                     line.clear();
@@ -98,11 +98,11 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
                     std::thread::sleep(Duration::from_millis(10));
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                    // Timeout normal, on garde ce qui a déjà été lu dans line
+                    // Normal timeout, we keep what has already been read in line
                 }
                 Err(e) => {
-                    // Autre erreur
-                    crate::logger::log("SERIE", &format!("Erreur de lecture série: {:?}", e));
+                    // Other error
+                    crate::logger::log("SERIE", &format!("Serial read error: {:?}", e));
                     line.clear();
                     std::thread::sleep(Duration::from_millis(100));
                 }
@@ -110,7 +110,7 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
         }
     });
 
-    // Boucle TX (Thread courant)
+    // TX Loop (Current thread)
     while let Some(cmd) = rx_channel.blocking_recv() {
         let encoded = cmd.encode();
         let expected_prefix = cmd.expected_rx_prefix();
@@ -119,12 +119,12 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
         let mut success = false;
 
         while retries >= 0 && !success {
-            // Vider le canal des vieux messages
+            // Empty the channel of old messages
             while let Ok(_) = internal_rx.try_recv() {}
 
             logger::log("SERIE_TX", encoded.trim());
             if let Err(e) = port.write_all(encoded.as_bytes()) {
-                logger::log("SERIE", &format!("Erreur d'ecriture serie: {}", e));
+                logger::log("SERIE", &format!("Serial write error: {}", e));
             }
 
             if let Some(prefix) = expected_prefix {
@@ -148,20 +148,20 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
                     success = true;
                 } else {
                     if got_default {
-                        logger::log("SERIE", &format!("❌ Commande {} refusee (Default), retry: {}", cmd.as_frame(), retries));
+                        logger::log("SERIE", &format!("❌ Command {} rejected (Default), retry: {}", cmd.as_frame(), retries));
                     } else {
-                        logger::log("SERIE", &format!("⏳ Commande {} timeout, retry: {}", cmd.as_frame(), retries));
+                        logger::log("SERIE", &format!("⏳ Command {} timeout, retry: {}", cmd.as_frame(), retries));
                     }
                     retries -= 1;
                 }
             } else {
-                success = true; // Pas d'acquittement attendu
+                success = true; // No acknowledgment expected
             }
         }
     }
 }
 
-// Fonction qui analyse chaque ligne venant de la carte et met à jour la mémoire partagée
+// Function that analyzes each line coming from the board and updates the shared memory
 
 use crate::telemetry::Telemetry;
 
@@ -200,7 +200,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
 
     match event {
         ProtocolEvent::Ping => {
-            logger::log("SERIE", "🤝 Ping matériel détecté, envoi de RaspberryPiModeOK");
+            logger::log("SERIE", "🤝 Hardware ping detected, sending RaspberryPiModeOK");
             let _ = state.serial_tx.try_send(Command::RaspberryPiModeOk);
         }
         ProtocolEvent::SoftwareVersion(v) => {
@@ -216,9 +216,9 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut info) = state.info.lock() {
                 let spec = crate::hardware_specs::HardwareCapabilities::from_reference(&v);
                 if !spec.is_known {
-                    logger::log("SERIE", &format!("⚠️ Référence inconnue ({}), on assume un modèle de base (Mono 4.6kW)", v));
+                    logger::log("SERIE", &format!("⚠️ Unknown reference ({}), assuming basic model (Single-phase 4.6kW)", v));
                 } else {
-                    logger::log("SERIE", &format!("ℹ️ Modèle identifié : {}", spec.name));
+                    logger::log("SERIE", &format!("ℹ️ Model identified: {}", spec.name));
                 }
                 info.reference = v;
                 info.capabilities = Some(spec);
@@ -232,7 +232,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::StateChange(state_val) => {
             if state_val == "V" {
-                logger::log("SYS", "!!! ALERTE CRITIQUE : COUPURE DE COURANT DÉTECTÉE (State:V) - EXTINCTION IMMINENTE !!!");
+                logger::log("SYS", "!!! CRITICAL ALERT: POWER OUTAGE DETECTED (State:V) - IMMINENT SHUTDOWN !!!");
             }
             if let Ok(mut tel) = state.telemetry.lock() {
                 if (state_val == "D" || state_val == "E") && (tel.greenup_state != "D" && tel.greenup_state != "E") {
@@ -247,7 +247,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::ErrorChange(e) => {
             if e == "0012" {
-                logger::log("SYS", "!!! ALERTE CRITIQUE : DÉFAUT SOUS-TENSION (E:0012) - EXTINCTION IMMINENTE !!!");
+                logger::log("SYS", "!!! CRITICAL ALERT: UNDER-VOLTAGE FAULT (E:0012) - IMMINENT SHUTDOWN !!!");
             }
             if let Ok(mut tel) = state.telemetry.lock() { tel.error_code = e; }
         }
@@ -256,7 +256,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::FmMode(fm_val) => {
             if FunctioningMode::from_code(&fm_val) != Some(FunctioningMode::DirectCharge) {
-                logger::log("SERIE", &format!("⚠️ Mode FM détecté = {}, forçage en FM:1", fm_val));
+                logger::log("SERIE", &format!("⚠️ FM Mode detected = {}, forcing FM:1", fm_val));
                 let _ = state.serial_tx.try_send(
                     Command::SetFunctioningMode(FunctioningMode::DirectCharge),
                 );
@@ -280,15 +280,15 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             }
 
             if val != "0" {
-                logger::log("SERIE", &format!("🔌 TIC détecté : {} baud", val));
+                logger::log("SERIE", &format!("🔌 TIC detected: {} baud", val));
                 if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = val; }
             } else if should_stop_test {
-                logger::log("SERIE", "🔌 TIC non détecté (absent)");
+                logger::log("SERIE", "🔌 TIC not detected (absent)");
                 if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "0".to_string(); }
             }
 
             if should_stop_test {
-                logger::log("SERIE", "Fin de la détection automatique du TIC, envoi de TICTM:0");
+                logger::log("SERIE", "End of automatic TIC detection, sending TICTM:0");
                 let _ = state.serial_tx.try_send(Command::SetTicTestMode(false));
             }
         }
@@ -337,7 +337,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut tel) = state.telemetry.lock() { tel.frequency = f; }
         }
         ProtocolEvent::CommandNotUnderstood(cmd) => {
-            logger::log("SERIE", &format!("⚠️ Commande non reconnue par la borne : {}", cmd));
+            logger::log("SERIE", &format!("⚠️ Command not recognized by the charging station: {}", cmd));
         }
         ProtocolEvent::Unknown(_) => {}
     }

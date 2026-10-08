@@ -1,31 +1,31 @@
 use serde::{Deserialize, Serialize};
 
-/// Spécifications matérielles de la borne, déduites de sa référence.
+/// Hardware specifications of the charging station, deduced from its reference.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HardwareCapabilities {
-    /// Nom commercial de la borne.
+    /// Commercial name of the charging station.
     pub name: String,
-    /// Référence Legrand (sans espaces).
+    /// Legrand reference (without spaces).
     pub reference: String,
-    /// Nombre de phases (1 = Monophasé, 3 = Triphasé).
+    /// Number of phases (1 = Single-phase, 3 = Three-phase).
     pub phases: u8,
-    /// Puissance maximale théorique en kW (ex: 4.6, 7.4, 22.0).
+    /// Theoretical maximum power in kW (e.g. 4.6, 7.4, 22.0).
     pub max_power_kw: f32,
-    /// Limite de courant maximum par phase en Ampères (ex: 20, 32).
+    /// Maximum current limit per phase in Amperes (e.g. 20, 32).
     pub max_current_amps: u8,
-    /// Présence d'une prise domestique (Schuko).
+    /// Presence of a domestic socket (Schuko).
     pub has_schuko: bool,
-    /// Nombre de points de charge (1 ou 2).
+    /// Number of charging points (1 or 2).
     pub charging_points: u8,
-    /// Indique si cette référence est officiellement reconnue (false si fallback).
+    /// Indicates if this reference is officially recognized (false if fallback).
     pub is_known: bool,
 }
 
 impl Default for HardwareCapabilities {
-    /// Borne par défaut si la référence est inconnue (Mono, 4.6kW, 1 T2, pas de Schuko).
+    /// Default charging station if the reference is unknown (Single-phase, 4.6kW, 1 T2, no Schuko).
     fn default() -> Self {
         Self {
-            name: "Modèle Inconnu (Fallback par défaut)".to_string(),
+            name: "Unknown Model (Default Fallback)".to_string(),
             reference: "UNKNOWN".to_string(),
             phases: 1,
             max_power_kw: 4.6,
@@ -38,9 +38,9 @@ impl Default for HardwareCapabilities {
 }
 
 impl HardwareCapabilities {
-    /// Renvoie les spécifications de la borne à partir de sa référence Legrand (ex: "058001").
+    /// Returns the hardware specifications from its Legrand reference (e.g. "058001").
     pub fn from_reference(reference: &str) -> Self {
-        // Nettoie la référence pour enlever d'éventuels espaces
+        // Cleans the reference to remove potential spaces
         let clean_ref = reference.replace(" ", "");
 
         match clean_ref.as_str() {
@@ -79,8 +79,8 @@ impl HardwareCapabilities {
 
             _ => {
                 let mut fallback = Self::default();
-                // On garde quand même la référence envoyée par la borne
-                // (mais avec une durée de vie statique compliquée, on se contente du flag)
+                // We still keep the reference sent by the charging station
+                // (but with a complicated static lifetime, we just use the flag)
                 fallback.is_known = false;
                 fallback
             }
