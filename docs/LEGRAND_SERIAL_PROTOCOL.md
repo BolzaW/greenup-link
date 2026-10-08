@@ -61,8 +61,8 @@ Commands to read or set charging current limits.
 
 ---
 
-## 4. Hardware Socket Control (T2 / Schuko)
-Low-level commands to enable, disable, or force the physical sockets.
+## 4. Hardware & Socket Control
+Low-level commands to interact with physical buttons, enable, disable, or force the physical sockets.
 
 | Command (TX) | Expected Reply Prefix (RX) | Explanation |
 | :--- | :--- | :--- |
@@ -70,6 +70,7 @@ Low-level commands to enable, disable, or force the physical sockets.
 | `2PCOK` / `2PCNOK` | `2PC:1` / `2PC:0` | Authorizes (`OK`) or Blocks (`NOK`) charging on the **Domestic** (Schuko / 2 Pins) socket. |
 | `T2FOK` / `T2FNOK` | `T2F:1` / `T2F:0` | **TBD**: **Forces** charging on the Type 2 socket (bypasses safety or schedule?). Not extensively tested. |
 | `2PFOK` / `2PFNOK` | `2PF:1` / `2PF:0` | **TBD**: **Forces** charging on the domestic socket. Not extensively tested. |
+| `SBOK` / `SBNOK` | `SB:` | **Pause/Resume**: Simulates pressing the physical START/STOP button on the front panel. `SBNOK` cleanly stops the charge (`State:M`). `SBOK` wakes the station and restarts the cycle. |
 | `Unlock` | None | Orders the **physical unlocking** of the cable (if the station has a Type 2 socket lock mechanism). |
 
 ---
@@ -84,7 +85,6 @@ Commands to manage functioning modes, schedules, and active sessions.
 | `FM2?` | `FM2:` | Queries the current state of the external signal (Dry Contact / TIC Peak/Off-Peak). |
 | `FM2:1` / `FM2:0` | `FM2:` | Overrides the external signal. `FM2:0` simulates Peak Hours (suspends charge in `FM:2`). `FM2:1` simulates Off-Peak Hours (authorizes charge). |
 | `SOK` / `SNOK` | `Slp:` | **Sleep**: `SOK` forces the station into deep sleep (`State:Y`). `SNOK` wakes the station up. |
-| `SBOK` / `SBNOK` | `SB:` | **Pause/Resume**: Simulates pressing the physical START/STOP button. `SBNOK` cleanly stops the charge (`State:M`). `SBOK` wakes the station and restarts the cycle. |
 
 ---
 
