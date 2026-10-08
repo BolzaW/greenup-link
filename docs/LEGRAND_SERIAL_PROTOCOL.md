@@ -43,14 +43,19 @@ Commands to query the real-time behavioral state and errors of the station.
 Commands to read or set charging current limits.
 *Note: The final charging current (`CC`) is determined by the ATmega as the minimum of the hardware capability (`CCCa`, `CCS`) and software limits (`CCEl`, `CCTIC`).*
 
+**⚠️ Important Constraints:**
+- **Current Limits:** Tested and supported values range strictly from **`07`A to `32`A**. The board cannot regulate PWM below `6.8A` and will crash into an `E:0010` (Overcurrent) fault if configured to `05`A or lower.
+- **Over-provisioning:** It is software-wise possible to request more than 32A (e.g., `CC:33`), but this has **never been tested in real conditions** and must be strictly avoided to prevent hardware damage.
+- **Formatting:** All set commands require exactly **two digits** for the value (e.g., `08`, `16`, `32`).
+
 | Command (TX) | Expected Reply Prefix (RX) | Explanation |
 | :--- | :--- | :--- |
 | `CC?` | `CC:` | Requests the final calculated charging current limit imposed by the ATmega (e.g., `CC:16`). |
-| `CC:XX` | `CC:` | Overrides the `CC` variable directly. **Warning**: Potentially more dangerous than using `CCEl:XX` because there are no internal safeguards (the ATmega does not guard its minimum hardware values). |
+| `CC:XX` | `CC:` | Overrides the `CC` variable directly (format `XX` mandatory). **Warning**: Potentially more dangerous than using `CCEl:XX` because there are no internal safeguards (the ATmega does not guard its minimum hardware values). |
 | `CCEl?` | `CCEl:` | Requests the software current limit imposed by the Cloud (Eliot / Legrand App). |
-| `CCEl:XX` | `CCEl:` | Sets the Cloud power limit (e.g., `CCEl:16`). Safer than overriding `CC` directly. |
+| `CCEl:XX` | `CCEl:` | Sets the Cloud power limit (e.g., `CCEl:16`, format `XX` mandatory). Safer than overriding `CC` directly. |
 | `CCS?` | `CCS:` | Requests the maximum current capacity configured for the Schuko socket. |
-| `CCS:XX` | `CCS:` | Sets the power limit for the domestic socket (Schuko). |
+| `CCS:XX` | `CCS:` | Sets the power limit for the domestic socket (Schuko) (format `XX` mandatory). |
 | `CCTIC?` | `CCTIC:` | Requests the dynamic current limit deduced by the TIC. Returns `32` if the TIC is disconnected. |
 | `TICTM:1` / `TICTM:0` | `TICTM:1` / `TICTM:0` | Enables (`1`) or disables (`0`) the TIC Test mode. When enabled, the station broadcasts TIC baud rates and calculated limits (`CCTIC`). |
 
@@ -74,8 +79,8 @@ Commands to manage functioning modes, schedules, and active sessions.
 
 | Command (TX) | Expected Reply Prefix (RX) | Explanation |
 | :--- | :--- | :--- |
-| `FM?` | `FM:` | Requests the main Functioning Mode (1=Direct Charge, 2=Auto-hours/TIC, 4=Planning, 5=Modbus, 6=OCPP). |
-| `FM:X` | `FM:` | Sets the main Functioning Mode to `X` (e.g., `FM:1` for permanent direct charge). |
+| `FM?` | `FM:` | Requests the main Functioning Mode (1=Direct Charge, 2=Auto-hours/TIC, 4=Planning, 5=Modbus, 6=OCPP). *See Chapter 6 of STATE_MACHINE.md for details.* |
+| `FM:X` | `FM:` | Sets the main Functioning Mode to `X` (e.g., `FM:1` for permanent direct charge). *See Chapter 6 of STATE_MACHINE.md for details.* |
 | `FM2?` | `FM2:` | Queries the current state of the external signal (Dry Contact / TIC Peak/Off-Peak). |
 | `FM2:1` / `FM2:0` | `FM2:` | Overrides the external signal. `FM2:0` simulates Peak Hours (suspends charge in `FM:2`). `FM2:1` simulates Off-Peak Hours (authorizes charge). |
 | `SOK` / `SNOK` | `Slp:` | **Sleep**: `SOK` forces the station into deep sleep (`State:Y`). `SNOK` wakes the station up. |

@@ -160,3 +160,16 @@ Here is the official interpretation table of error codes extracted from the orig
 | **`E:0012`** | `UnderVoltage` | Power outage / Electrical power failure (triggers `State:V`). |
 | **`E:0013`** | `OtherError` | Internal USB communication error. |
 | **`E:0015`** | `OtherError` | 6mA DC leakage fault detected. |
+
+## 6. Functioning Modes (FM)
+
+The ATmega has several internal functioning modes that alter its state machine logic. The main mode can be modified by sending `FM:X` (where X is the mode number) and verified with `FM?`.
+
+| Mode | Official designation | Explanation of the mode |
+| :--- | :--- | :--- |
+| `FM:1` | **Direct Charge (Permanent)** | The station charges as soon as a vehicle is plugged in, without any condition. This is the "dumb executor" mode we force by default in Green'Up Link. |
+| `FM:2` | **Remote controls (Auto-hours)** | "Peak / Off-Peak" mode, relying on the station's contactor input (Dry contact) or TIC to start/stop the charge. |
+| `FM:3` | **Smart meter (TIC Linky)** | Intelligent control based on the Linky meter's tele-information. **Note:** This mode is actually **not implemented in the ATmega code** (firmware 18.04), which explains why Legrand hid it (commented it out) in the original Web interface code. |
+| `FM:4` | **Programming (Planning)** | Internal time programming mode. The ATmega relies on calendar files to trigger the charge. |
+| `FM:5` | **Modbus (DLM)** | In this mode, the station is controlled via the RS485 bus (Modbus protocol) by an external energy manager (Load Management). |
+| `FM:6` | **OCPP** | Cloud supervision mode. The station awaits its orders from the central OCPP server. **Warning:** this mode alters the ATmega's internal behavior (disables TIC auto-detection, imposes a 30s blocking authorization wait after presenting a badge, modifies the `Unlock` command logic, and forces RFID flags to 1 at startup). |
