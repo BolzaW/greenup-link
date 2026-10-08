@@ -2,8 +2,8 @@
 
 [🇬🇧 Read in English](README.md)
 
-
-> **Disclaimer :** Green'Up Link is an independent, community-developed project and is not affiliated with, sponsored or endorsed by Legrand. "Green'Up" and "Legrand" are trademarks of their respective owners.
+> [!WARNING]
+> **Avertissement de non-responsabilité :** Green'Up Link est un projet communautaire indépendant et n'est ni affilié, ni sponsorisé, ni approuvé par Legrand. "Green'Up" et "Legrand" sont des marques déposées de leurs propriétaires respectifs. Le logiciel est fourni "tel quel", sans garantie. L'utilisation de ce logiciel avec votre borne se fait à vos risques et périls.
 
 ## 📖 Résumé du projet
 
@@ -12,6 +12,8 @@
 Il communique avec la carte de puissance de la borne via la liaison série USB interne et expose :
 - Une **IHM Web locale** claire et réactive.
 - Une **API REST** complète et documentée, parfaite pour l'intégration en domotique (Home Assistant, Jeedom, etc.).
+
+Le projet propose également une intégration EVerest sans API/IHM via un pont MQTT direct, permettant à la borne d'être pilotée comme un module matériel EVerest standard.
 
 ## 🤔 Pourquoi ce projet ?
 
@@ -35,6 +37,7 @@ Ce projet est en cours de développement. Les fonctionnalités seront ajoutées 
 - **Firmware de la carte de puissance** :
   - `FirmwareBoardA-V01;18;10.hex` (Testé et validé)
   - `FirmwareBoardA-V01;18;04.hex` (Théoriquement compatible)
+  - `FirmwareBoardA-V01;17;27.hex` (Théoriquement compatible)
 
 ---
 
@@ -140,12 +143,19 @@ Pour lancer l'application automatiquement, créez un service Systemd :
 - **Interface Graphique** : Ouvrez simplement l'adresse IP de la borne sur le port 8080 depuis votre navigateur (ex: `http://192.168.1.xxx:8080`).
 - **Tests & CLI** : Utilisez le script PowerShell fourni `cli-greenup-link.ps1` depuis votre PC pour interagir avec l'API en ligne de commande.
 - **Domotique** : Consultez la [Documentation de l'API REST](docs/GREENUP_LINK_REST_API.md) pour interfacer votre box domotique.
+- **Module EVerest** : Pour une intégration avec le framework open-source de recharge de VE EVerest (via MQTT), veuillez vous référer à la [Documentation d'intégration EVerest](crates/greenup-everest/README.md).
 
 ---
 
 ## 🔮 Fonctionnalités futures
 
 La feuille de route inclut (sans date garantie) :
+- Intégration MQTT pour la domotique
+- Compatibilité avec les OS récents de Raspberry Pi
+- Firmware ATmega custom avec plus de capacités (comme plus d'infos télémétriques depuis le signal TIC)
+- Compatibilité prise Schuko (domestique)
+- Support du Triphasé
+- Support des bornes double point de charge
 - Le support du mode de communication OCPP.
 - L'élargissement de la compatibilité aux autres modèles de bornes de la gamme.
 

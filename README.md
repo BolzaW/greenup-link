@@ -12,6 +12,8 @@ It communicates with the charging station's power board via the internal USB ser
 - A clean, responsive **local Web GUI**.
 - A comprehensive and documented **REST API**, perfect for home automation integration (Home Assistant, Jeedom, etc.).
 
+It also provides an EVerest integration without API/UI via a direct MQTT bridge, allowing the station to be controlled as a standard EVerest hardware module.
+
 ## 🤔 Why this project?
 
 The software provided with the official Communication Kit is bloated. It is buggy, unresponsive, and very difficult to use for standard home automation. 
@@ -34,6 +36,7 @@ This project is actively in development. Features will be added progressively. F
 - **Power board firmware**:
   - `FirmwareBoardA-V01;18;10.hex` (Tested and validated)
   - `FirmwareBoardA-V01;18;04.hex` (Theoretically compatible)
+  - `FirmwareBoardA-V01;17;27.hex` (Theoretically compatible)
 
 ---
 
@@ -139,13 +142,20 @@ To launch the application automatically, create a Systemd service:
 - **Web GUI**: Simply open the station's IP address on port 8080 from your browser (e.g. `http://192.168.1.xxx:8080`).
 - **Tests & CLI**: Use the provided PowerShell script `cli-greenup-link.ps1` from your PC to interact with the API via command line.
 - **Home Automation**: Check the [REST API Documentation](docs/GREENUP_LINK_REST_API.md) to interface your home automation controller.
+- **EVerest Module**: For integration with the open-source EV charging framework EVerest (via MQTT), please refer to the dedicated [EVerest Integration Documentation](crates/greenup-everest/README.md).
 
 ---
 
 ## 🚀 Future Features
 
 The roadmap includes (with no guaranteed timeline):
-- OCPP communication mode support.
+- MQTT integration for Home Automation
+- Compatibility with recent Raspberry Pi OS releases
+- Custom ATmega firmware with more capabilities (like more telemetry info from TIC signals)
+- Schuko (domestic socket) compatibility
+- Three-phase (Triphasé) support
+- Dual charge points wallbox support
+- OCPP communication mode support
 - Broadening compatibility to other station models in the range.
 
 *Note: Feel free to use GitHub "Issues" to suggest or request specific features you might need!*
