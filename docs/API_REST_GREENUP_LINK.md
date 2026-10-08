@@ -1,33 +1,33 @@
-# Documentation de l'API REST - Borne Legrand GreenUp
+# Green'Up Link - REST API Documentation
 
-Cette documentation décrit les points de terminaison (endpoints) exposés par le serveur web local `greenup-link` (par défaut sur le port `8080`). Toutes les réponses sont retournées au format JSON.
+This API allows interfacing the Green'Up Link software with any standard home automation controller (Home Assistant, Jeedom, Node-RED, etc.). All responses are in JSON format.
 
-En cas d'erreur, la réponse a la forme `{ "error": "<message>" }` avec un code HTTP `400` (requête refusée) ou `500` (communication série impossible).
+## 📋 Endpoints Overview
 
-| Méthode | URL | Rôle |
+| Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/info` | Informations matérielles et capacités de la borne |
-| `GET` | `/api/telemetry` | Télémétrie temps réel + états Legrand / IEC |
-| `POST` | `/api/charge/start` | Reprise de charge (`SBOK`) |
-| `POST` | `/api/charge/stop` | Pause de charge (`SBNOK`) |
-| `POST` | `/api/t2/enable` | Activation logicielle de la prise T2 (`T2COK`) |
-| `POST` | `/api/t2/disable` | Désactivation logicielle de la prise T2 (`T2CNOK`) |
-| `POST` | `/api/current/:amps` | Limite de courant (`CC:XX`) |
-| `POST` | `/api/init` | Relance de la séquence de démarrage |
-| `POST` | `/api/reset` | Redémarrage matériel de la carte ATmega (`Reset`) |
-| `POST` | `/api/tic/refresh` | Détection du TIC (uniquement en `State:A`) |
-| `POST` | `/api/bluetooth` | Activation / désactivation du Bluetooth |
-| `POST` | `/api/command` | Commande série brute (debug) |
+| `GET` | `/api/info` | Hardware info (Firmware, Serial, Capabilities) |
+| `GET` | `/api/telemetry` | Real-time telemetry + Legrand / IEC states |
+| `POST` | `/api/charge/start` | Resume charge (`SBOK`) |
+| `POST` | `/api/charge/stop` | Pause charge (`SBNOK`) |
+| `POST` | `/api/t2/enable` | Software activation of the T2 socket (`T2COK`) |
+| `POST` | `/api/t2/disable` | Software deactivation of the T2 socket (`T2CNOK`) |
+| `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`) |
+| `POST` | `/api/init` | Relaunch startup sequence |
+| `POST` | `/api/reset` | ATmega board hardware restart (`Reset`) |
+| `POST` | `/api/tic/refresh` | TIC detection (only in `State:A`) |
+| `POST` | `/api/bluetooth` | Enable / disable Bluetooth |
+| `POST` | `/api/command` | Raw serial command (debug) |
 
 ---
 
-## 📡 Endpoints de Lecture (GET)
+## 📡 Read Endpoints (GET)
 
-### 1. Obtenir les informations matérielles et logicielles
-- **URL** : `/api/info`
-- **Méthode** : `GET`
-- **Description** : Renvoie les informations d'identification de la carte de puissance (version firmware, numéro de série, date de production...) ainsi que les capacités matérielles déduites de la référence (`capabilities`). Ces informations sont interrogées au démarrage et mises en cache.
-- **Réponse type** :
+### 1. Get hardware and software information
+- **URL**: `/api/info`
+- **Method**: `GET`
+- **Description**: Returns power board identification info (firmware version, serial number, production date...) as well as hardware capabilities deduced from the reference (`capabilities`). This info is queried at startup and cached.
+- **Typical Response**:
   ```json
   {
     "software_version": "V01.18.10",
@@ -49,13 +49,13 @@ En cas d'erreur, la réponse a la forme `{ "error": "<message>" }` avec un code 
     }
   }
   ```
-  - *Note :* `capabilities` vaut `null` tant que la référence n'a pas été reçue.
+  - *Note:* `capabilities` is `null` until the reference has been received.
 
-### 2. Obtenir la télémétrie en temps réel
-- **URL** : `/api/telemetry`
-- **Méthode** : `GET`
-- **Description** : Renvoie les données temps réel de la borne. Conçu pour être interrogé fréquemment (polling ~2 s par l'IHM). Les appels sont journalisés au niveau `TRACE` (fichier de log uniquement, pas la console).
-- **Réponse type** :
+### 2. Get real-time telemetry
+- **URL**: `/api/telemetry`
+- **Method**: `GET`
+- **Description**: Returns real-time station data. Designed to be polled frequently (polling ~2s by the GUI). Calls are logged at `TRACE` level (log file only, not console).
+- **Typical Response**:
   ```json
   {
     "voltage": 232.0,
@@ -75,116 +75,116 @@ En cas d'erreur, la réponse a la forme `{ "error": "<message>" }` avec un code 
     "tic_mode": "9600"
   }
   ```
-  - `greenup_state` : état propriétaire Legrand (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). Voir `docs/MACHINE_A_ETATS.md`.
-  - `iec_state` : état normalisé déduit (niveau 2) : `Disconnected_A`, `Connected_B`, `Charging_C`, `Error_E`, `Faulted_F`. Vaut `null` tant qu'il ne peut pas être déduit.
-  - `cp_voltage` (`CP?`) : tension Control Pilot en volts (`12`, `9`, `6`).
-  - `t2c_enabled` (`T2C?`) / `sb_state` (`SB?`) : états logiciels de la prise T2 et du bouton Start/Stop.
-  - `eliot_limit_amps` (`CCEl?`) : limite de courant effective appliquée par la borne.
-  - `tic_mode` : `"0"` (absent), `"1200"` (historique), `"9600"` (standard), `"detecting"` (détection en cours) ou `""` (inconnu, aucune détection lancée).
+  - `greenup_state`: Legrand proprietary state (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). See `docs/MACHINE_A_ETATS.md`.
+  - `iec_state`: Deduced standard IEC state: `Disconnected_A`, `Connected_B`, `Charging_C`, `Error_E`, `Faulted_F`. Returns `null` if it cannot be deduced.
+  - `cp_voltage` (`CP?`): Control Pilot voltage in volts (`12`, `9`, `6`).
+  - `t2c_enabled` (`T2C?`) / `sb_state` (`SB?`): Software states of the T2 socket and the Start/Stop button.
+  - `eliot_limit_amps` (`CCEl?`): Effective current limit applied by the station.
+  - `tic_mode`: `"0"` (absent), `"1200"` (historical), `"9600"` (standard), `"detecting"` (detection in progress) or `""` (unknown, no detection started).
 
 ---
 
-## 🛠️ Endpoints d'Action (POST)
+## 🛠️ Action Endpoints (POST)
 
-### 3. Reprendre la charge
-- **URL** : `/api/charge/start`
-- **Méthode** : `POST`
-- **Description** : Simule un appui sur le bouton START (envoie `SBOK`). Depuis `State:M`, la borne repasse en `A` → `B` → `C`.
-- **Réponse type** :
+### 3. Resume charge
+- **URL**: `/api/charge/start`
+- **Method**: `POST`
+- **Description**: Simulates a START button press (sends `SBOK`). From `State:M`, the station goes back to `A` → `B` → `C`.
+- **Typical Response**:
   ```json
-  { "status": "success", "message": "Charge autorisée (Type 2)" }
+  { "status": "success", "message": "Charge authorized (Type 2)" }
   ```
 
-### 4. Mettre la charge en pause
-- **URL** : `/api/charge/stop`
-- **Méthode** : `POST`
-- **Description** : Simule un appui sur le bouton STOP (envoie `SBNOK`). La borne passe en `State:W` puis se stabilise en `State:M` (arrêt manuel) sans aveugler la machine à états.
-- **Réponse type** :
+### 4. Pause charge
+- **URL**: `/api/charge/stop`
+- **Method**: `POST`
+- **Description**: Simulates a STOP button press (sends `SBNOK`). The station goes to `State:W` then stabilizes in `State:M` (manual stop) without blinding the state machine.
+- **Typical Response**:
   ```json
-  { "status": "success", "message": "Charge stoppée (Type 2)" }
+  { "status": "success", "message": "Charge stopped (Type 2)" }
   ```
 
-### 5. Activer la prise Type 2
-- **URL** : `/api/t2/enable`
-- **Méthode** : `POST`
-- **Description** : Réactive logiciellement la prise Type 2 (envoie `T2COK`).
-- **Réponse type** :
+### 5. Enable Type 2 socket
+- **URL**: `/api/t2/enable`
+- **Method**: `POST`
+- **Description**: Software activation of the Type 2 socket (sends `T2COK`).
+- **Typical Response**:
   ```json
-  { "status": "success", "message": "Prise activée (T2COK)" }
+  { "status": "success", "message": "Socket activated (T2COK)" }
   ```
 
-### 6. Désactiver la prise Type 2
-- **URL** : `/api/t2/disable`
-- **Méthode** : `POST`
-- **Description** : Désactive logiciellement la prise Type 2 (envoie `T2CNOK`).
-- **⚠️ Attention** : avec `T2C:0`, la machine à états Legrand est figée en `State:A` (Quirk #3). L'état IEC est alors déduit uniquement de `cp_voltage`.
-- **Réponse type** :
+### 6. Disable Type 2 socket
+- **URL**: `/api/t2/disable`
+- **Method**: `POST`
+- **Description**: Software deactivation of the Type 2 socket (sends `T2CNOK`).
+- **⚠️ Warning**: with `T2C:0`, the Legrand state machine is frozen in `State:A` (Quirk #3). The IEC state is then deduced solely from `cp_voltage`.
+- **Typical Response**:
   ```json
-  { "status": "success", "message": "Prise désactivée (T2CNOK)" }
+  { "status": "success", "message": "Socket deactivated (T2CNOK)" }
   ```
 
-### 7. Modifier la limite de courant
-- **URL** : `/api/current/:amps`
-- **Méthode** : `POST`
-- **Paramètre URL** : `:amps` (entier compris entre **7** et **32**).
-- **Description** : Définit la consigne de limite de courant (envoie `CC:XX`, toujours formaté sur 2 chiffres).
-- **Sécurité** : Toute valeur hors `[7, 32]` est rejetée (`400`). Sous 6 A la borne plante (`E:0010`), et l'électronique ne régule pas en dessous de ~6,8 A (Quirk #6).
-- **Réponse type** :
+### 7. Modify current limit
+- **URL**: `/api/current/:amps`
+- **Method**: `POST`
+- **URL Parameter**: `:amps` (integer between **7** and **32**).
+- **Description**: Sets the current limit target (sends `CCEl:XX`, always 2-digit formatted).
+- **Security**: Any value outside `[7, 32]` is rejected (`400`). Below 6 A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8 A (Quirk #6).
+- **Typical Response**:
   ```json
-  { "status": "success", "message": "Limite de courant définie sur 16A" }
+  { "status": "success", "message": "Current limit set to 16A" }
   ```
 
-### 8. Relancer la séquence d'initialisation
-- **URL** : `/api/init`
-- **Méthode** : `POST`
-- **Description** : Rejoue la séquence de démarrage : `RaspberryPiModeOK`, puis interrogation des informations (`SoftwareVersion?`, `HardwareVersion?`, `SerialNumber?`, `Reference?`, `WeekYearProduction?`) et des états (`State?`, `FM?`, `CC?`, `CCEl?`, `CP?`, `T2C?`, `SB?`, `E?`, `BT?`). La réponse est immédiate, la séquence s'exécute en tâche de fond.
-- **Note** : la détection TIC n'est **jamais** lancée automatiquement. Elle doit être demandée explicitement via `/api/tic/refresh`.
-- **Réponse type** :
+### 8. Relaunch initialization sequence
+- **URL**: `/api/init`
+- **Method**: `POST`
+- **Description**: Replays the startup sequence: `RaspberryPiModeOK`, then querying information (`SoftwareVersion?`, `HardwareVersion?`, `SerialNumber?`, `Reference?`, `WeekYearProduction?`) and states (`State?`, `FM?`, `CC?`, `CCEl?`, `CP?`, `T2C?`, `SB?`, `E?`, `BT?`). The response is immediate, the sequence runs in the background.
+- **Note**: TIC detection is **never** started automatically. It must be requested explicitly via `/api/tic/refresh`.
+- **Typical Response**:
   ```json
-  { "status": "success", "message": "Séquence d'initialisation lancée" }
+  { "status": "success", "message": "Initialization sequence started" }
   ```
 
-### 9. Redémarrer la carte de puissance
-- **URL** : `/api/reset`
-- **Méthode** : `POST`
-- **Description** : Envoie la commande `Reset` à la carte ATmega pour forcer un redémarrage matériel. Utile pour débloquer la borne lorsqu'elle reste figée en `State:A` alors que `T2C:1` et `CP:9` (véhicule branché) : l'état `B` n'arrive jamais sans reset.
-- **Réponse type** :
+### 9. Restart power board
+- **URL**: `/api/reset`
+- **Method**: `POST`
+- **Description**: Sends the `Reset` command to the ATmega board to force a hardware restart. Useful to unblock the station when it remains stuck in `State:A` while `T2C:1` and `CP:9` (vehicle plugged in): state `B` never arrives without a reset.
+- **Typical Response**:
   ```json
-  { "status": "success", "message": "Redémarrage de la carte ATmega demandé" }
+  { "status": "success", "message": "ATmega board restart requested" }
   ```
 
-### 10. Lancer la détection du TIC (Linky)
-- **URL** : `/api/tic/refresh`
-- **Méthode** : `POST`
-- **Description** : Lance la détection de la vitesse de la télé-information client. Le serveur envoie `TICTM:1`, analyse le retour (ex : `TICTestB:9600`), met à jour `tic_mode`, puis coupe le mode test avec `TICTM:0`.
-- **Sécurité** : la détection n'est autorisée que si la borne est au repos (`greenup_state == "A"`). Dans tout autre état, **rien n'est envoyé à la borne** et l'API répond `400` :
+### 10. Start TIC (Linky) detection
+- **URL**: `/api/tic/refresh`
+- **Method**: `POST`
+- **Description**: Starts the customer tele-information (TIC) speed detection. The server sends `TICTM:1`, parses the return (e.g. `TICTestB:9600`), updates `tic_mode`, then disables test mode with `TICTM:0`.
+- **Security**: Detection is only allowed if the station is idle (`greenup_state == "A"`). In any other state, **nothing is sent to the station** and the API responds `400`:
   ```json
-  { "error": "La détection TIC ne peut se faire que lorsque la borne est libre (State:A). État actuel : M" }
+  { "error": "TIC detection can only be done when the station is free (State:A). Current state: M" }
   ```
-- **Réponse type (Succès)** :
+- **Typical Response (Success)**:
   ```json
-  { "status": "success", "message": "Détection TIC lancée" }
+  { "status": "success", "message": "TIC detection started" }
   ```
 
-### 11. Activer / Désactiver le Bluetooth
-- **URL** : `/api/bluetooth`
-- **Méthode** : `POST`
-- **Body (JSON)** :
+### 11. Enable / Disable Bluetooth
+- **URL**: `/api/bluetooth`
+- **Method**: `POST`
+- **Body (JSON)**:
   ```json
   { "enabled": true }
   ```
-- **Description** : Allume (`enabled: true`) ou éteint (`enabled: false`) le module Bluetooth de la borne (`BTOK` / `BTNOK`). Utile pour empêcher l'application smartphone Legrand d'écraser les consignes de la domotique.
-- **Réponse type** :
+- **Description**: Turns the station's Bluetooth module on (`enabled: true`) or off (`enabled: false`) (`BTOK` / `BTNOK`). Useful to prevent the Legrand smartphone app from overriding home automation instructions.
+- **Typical Response**:
   ```json
-  { "status": "success", "message": "Bluetooth désactivé avec succès" }
+  { "status": "success", "message": "Bluetooth disabled successfully" }
   ```
 
-### 12. Envoyer une commande brute (Debug/Avancé)
-- **URL** : `/api/command`
-- **Méthode** : `POST`
-- **Body (Texte brut)** : la commande à envoyer (ex : `State?`)
-- **Description** : Transmet directement la chaîne (avec ajout automatique du `\r` final) sur le port série. Réservé aux tests et au debugging.
-- **Réponse type** :
+### 12. Send raw command (Debug/Advanced)
+- **URL**: `/api/command`
+- **Method**: `POST`
+- **Body (Plain text)**: the command to send (e.g., `State?`)
+- **Description**: Directly transmits the string on the serial port. Reserved for testing and debugging.
+- **Typical Response**:
   ```json
-  { "status": "success", "message": "Commande envoyée" }
+  { "status": "success", "message": "Command sent" }
   ```
