@@ -1,49 +1,49 @@
-# Machine à États de la Borne Legrand (Green'Up Premium)
+# Legrand Charging Station State Machine (Green'Up Premium)
 
-Ce document détaille le fonctionnement de la machine à états propriétaire du firmware ATmega Legrand. 
-Les états renvoyés par la commande série State: ne sont pas de simples états électriques IEC 61851, mais une véritable machine à états comportementale.
+This document details the operation of the proprietary state machine in the Legrand ATmega firmware.
+The states returned by the `State:` serial command are not simple IEC 61851 electrical states, but a true behavioral state machine.
 
-## 1. Liste complète des états (State:X)
+## 1. Full list of states (State:X)
 
-Cette sémantique a été établie avec certitude par rétro-ingénierie du firmware 18.04 de la carte de puissance et recoupement avec l'implémentation Java d'origine.
+This semantics was established with certainty by reverse-engineering the power board's 18.04 firmware and cross-referencing it with the original Java implementation.
 
-| État | Interprétation matérielle | Correspondance OCPP (selon l'ATmega) |
+| State | Hardware interpretation | OCPP mapping (according to ATmega) |
 |---|---|---|
-| **A** | Repos, aucun véhicule connecté | Available |
-| **B** | Prise **T2S** occupée, en attente d'autorisation | SuspendedEVSE déclenche StartTransaction |
-| **C** | T2S → charge suspendue côté véhicule | SuspendedEV |
-| **D** | T2S → **charge en cours** | Charging |
-| **E** | T2S → **charge en cours** (variante) | Charging |
-| **F** | Prise **domestique 2P+T** occupée, en attente | SuspendedEVSE déclenche StartTransaction |
-| **G** | Domestique → **charge en cours** | Charging |
-| **H** | Domestique → **charge en cours** (variante) | Charging |
-| **I** | T2S → suspendu véhicule (variante) | SuspendedEV |
-| **J** | T2S → suspendu borne | SuspendedEVSE |
-| **K** | Suspendu borne | SuspendedEVSE |
-| **L** | **Débranchement véhicule** / fin de session | arrêt, motif EVDisconnected |
-| **M** | **Arrêt local** (bouton) | arrêt, motif Local |
-| **N** | Suspendu borne (T2S) | SuspendedEVSE |
-| **O** | Suspendu borne (domestique) | SuspendedEVSE |
-| **P** | Arrêt local en cours | arrêt, motif Local |
-| **R** | **Défaut** (verrou, surcharge, contacteur) | Faulted, Other |
-| **S** | **Défaut** (contacteur, CP) | Faulted, Other |
-| **T** | **Défaut** (court-circuit CP) | Faulted, Other |
-| **U** | **Coupure secteur** | PowerLoss |
-| **V** | **Coupure secteur** (variante) | PowerLoss |
-| **W** | État transitoire, émis mais jamais stable | ignoré |
-| **X** | Redémarrage | ignoré |
-| **Y** | **Veille** profonde (commande Slp:1) | Unavailable |
-| **Z** | Initialisation / mode production | Unavailable |
+| **A** | Idle, no vehicle connected | Available |
+| **B** | **T2S** socket occupied, waiting for authorization | SuspendedEVSE triggers StartTransaction |
+| **C** | T2S → charge suspended by vehicle | SuspendedEV |
+| **D** | T2S → **charging in progress** | Charging |
+| **E** | T2S → **charging in progress** (variant) | Charging |
+| **F** | **Domestic 2P+T** socket occupied, waiting | SuspendedEVSE triggers StartTransaction |
+| **G** | Domestic → **charging in progress** | Charging |
+| **H** | Domestic → **charging in progress** (variant) | Charging |
+| **I** | T2S → suspended by vehicle (variant) | SuspendedEV |
+| **J** | T2S → suspended by station | SuspendedEVSE |
+| **K** | Suspended by station | SuspendedEVSE |
+| **L** | **Vehicle unplugged** / end of session | stop, reason EVDisconnected |
+| **M** | **Local stop** (button) | stop, reason Local |
+| **N** | Suspended by station (T2S) | SuspendedEVSE |
+| **O** | Suspended by station (domestic) | SuspendedEVSE |
+| **P** | Local stop in progress | stop, reason Local |
+| **R** | **Fault** (lock, overload, contactor) | Faulted, Other |
+| **S** | **Fault** (contactor, CP) | Faulted, Other |
+| **T** | **Fault** (CP short-circuit) | Faulted, Other |
+| **U** | **Power loss** | PowerLoss |
+| **V** | **Power loss** (variant) | PowerLoss |
+| **W** | Transient state, emitted but never stable | ignored |
+| **X** | Reboot | ignored |
+| **Y** | Deep **sleep** (command Slp:1) | Unavailable |
+| **Z** | Initialization / production mode | Unavailable |
 
 ---
 
-## 2. Séquencements des états
+## 2. State Sequencing
 
-```
+```text
                         +-----------------------------------+
                         |                                   |
         Slp:1           v                                   |
-   Y <---------------  [A]  Repos / Available               |
+   Y <---------------  [A]  Idle / Available                |
    |                   / | \                                |
    | Slp:0            /  |  \                               |
    +-----------------+   |   +--------------------+         |
@@ -71,74 +71,69 @@ Cette sémantique a été établie avec certitude par rétro-ingénierie du firm
       [O] --> [A]              [P] --> [R] --> [A] ---------+
 ```
 
-## 3. Incohérences constatées dans les logs (Quirks)
+## 3. Custom IEC states mapping (Level 2)
 
-Bien que la liste ci-dessus soit extraite du code source de la borne, l'observation en direct (logs de charge) a mis en évidence quelques subtilités du moteur d'états qui devront être gérées par greenup-driver.
+To expose a clean and stable state machine to a supervisor (like EVCC or EVerest), we use an abstraction layer (Level 2) that translates native Legrand states into standardized IEC 61851 states: **Disconnected_A**, **Connected_B**, **Charging_C**, **Error_E** (Minor/recoverable fault), and **Faulted_F** (Fatal hardware fault).
 
-### Quirk #1 : Passage forcé en State:C par les Heures Creuses
-Lors d'un démarrage retardé (la voiture est branchée mais attend son propre planning), la borne est en State:B. 
-Si un évènement TIC (ex: passage en Heures Creuses) survient, l'ATmega passe en State:C, **même si la voiture (broche CP) n'a rien réclamé**. C'est ensuite, quand la voiture lance sa charge, que l'état bascule en State:E.
+The logic chosen for the `greenup-everest` driver is as follows:
 
-### Quirk #2 : L'anomalie de OCPPStatus:SuspendedEVSE
-Lorsqu'on interroge l'état OCPP interne via OCPPPS? après que la **voiture** ait coupé la charge (passage transitoire par State:I puis retour à State:B), la borne a le défaut de répondre SuspendedEVSE au lieu de SuspendedEV. Le driver Rust devra parfois "corriger" ce diagnostic en mémorisant l'historique des états.
-
-### Quirk #3 : State:A forcé malgré un câble branché après arrêt local
-Si l'on force l'arrêt de la charge depuis la borne via la commande T2CNOK, la borne effectue sa séquence de clôture (passant par W puis M) et retombe ensuite à l'état A (Available). **Cependant, le câble côté véhicule est toujours physiquement branché.** Logiquement, la borne devrait retourner en état B (Prise occupée, en attente d'autorisation), mais elle se déclare complètement libre.
-**Conséquence (Verrouillage logiciel de la prise) :** La commande `T2CNOK` (qui passe la variable interne `T2C` à `0`) force non seulement la borne en `State:A`, mais **verrouille la machine à états de la prise Type 2 dans cet état**. Tant que `T2C:0`, absolument tous les événements physiques sur cette prise (insertion, retrait du câble, appui sur le bouton) sont ignorés par le firmware. L'API est donc aveugle à l'état physique du câble, car la prise T2S est logiciellement désactivée en attendant d'être réarmée par un `T2COK`.
-**Solution de contournement (Polling Analogique) :** Même si les événements asynchrones sont verrouillés, l'API peut interroger directement le convertisseur analogique-numérique (ADC) de la carte avec la commande `CP?`. Celle-ci renvoie la tension brute en Volts sur la broche Control Pilot : `12` (Débranché), `9` (Branché/State B), `6` (En charge/State C). Poller `CP?` permet de retrouver la vue !
-
-### Quirk #4 : Le mode Eco-Start (Heures Creuses) fantôme et son contournement
-Normalement, la commande FM2:0 est censée désactiver la fonction éco-démarrage (la charge devrait démarrer instantanément sans attendre les Heures Creuses du TIC). Cependant, les logs montrent que même avec FM2:0, la borne semble rester influencée par le signal TIC. Au passage en Heures Creuses, l'ATmega pousse le passage à State:C de manière inattendue.
-
-Fait particulièrement troublant : la borne peut répondre FM:1 à la commande FM? (indiquant qu'elle est bien en mode Direct Charge permanent), tout en appliquant quand même ce mode éco-start fantôme ! 
-**Solution de contournement :** L'envoi explicite de la commande FM:1 (même si la borne indique déjà être dans ce mode) désactive et purge efficacement ce mode fantôme. Cependant, **ATTENTION** : l'envoi de FM:1 (notamment pendant un State:B) désactive purement et simplement toute la détection TIC ! La borne devient incapable de gérer le délestage ou les heures creuses. Il faut donc être très prudent avec cette commande.
-
-### Quirk #6 : Le bug du parseur `CC:` et le crash sous 6A
-L'analyse des consignes de courant a mis en évidence deux failles matérielles / logicielles consécutives :
-1. **Le parseur `CC:` est buggé** : Il attend strictement 2 chiffres. Si l'on envoie `CC:9` au lieu de `CC:09`, la borne l'interprète mal et applique une consigne de `0A` (elle répond d'ailleurs `CC:00`).
-2. **Crash sous 6A** : La norme IEC 61851 impose un courant minimum de 6A. Si la borne reçoit une consigne strictement inférieure à 6A (comme `CC:05`, ou `0A` à cause du bug précédent), elle n'arrête pas proprement la charge. Le courant chute au minimum matériel (~6.8A), puis au bout de 8 secondes la borne panique. Elle émet le défaut `E:0010` (`State:R`), clôture la session, et **redémarre complètement** (`State:X`) !
-
-Le driver `greenup-everest` devra donc systématiquement formater ses consignes sur 2 chiffres (ex: `CC:06`). **De plus, bien que `CC:06` ne fasse pas crasher la borne, l'électronique de régulation est incapable de descendre physiquement sous ~6.8A.** Par sécurité et pour assurer une régulation saine, le driver devra imposer une limite logicielle basse stricte de **`7A`**.
-
-### Quirk #7 : L'interruption par `Unlock` et l'auto-validation du mode `FM:1`
-La commande `Unlock` permet de forcer proprement l'arrêt d'une charge en cours. Elle déclenche la séquence de fin (`State:W` -> Envoi du résumé -> `State:A`).
-Cependant, puisque le câble est physiquement toujours branché, la borne détecte immédiatement le contacteur (`SBF:1`) et repasse en `State:B`.
-
-**Le problème de l'auto-validation :**
-En mode `FM:1` (Direct Charge), la borne est programmée pour valider *automatiquement* l'état `B`. Sans intervention externe, elle passe de suite en `State:C` puis reprend la charge (`State:E`). Ce mode `FM:1` nous prive donc du contrôle de l'autorisation : la borne décide de charger d'elle-même.
-Pour implémenter une borne intelligente (Smart Charging) où le driver décide *quand* la charge doit démarrer, le mode `FM:1` n'est probablement pas adapté. Il faudra explorer d'autres modes (comme le mode OCPP `FM:6` ou l'activation de la gestion RFID) qui maintiennent la borne bloquée en `State:B` en attente d'une autorisation logicielle explicite.
-### Quirk #8 : La découverte majeure du pilotage Start/Stop via `SBOK` / `SBNOK`
-Le pilotage intelligent (Smart Charging) nécessite de pouvoir mettre en pause et reprendre une charge sans verrouiller le système. L'utilisation d' `Unlock` boucle à l'infini (voir Quirk #7), et `T2CNOK` aveugle la machine à état (Quirk #3).
-**La solution ultime réside dans les commandes `SBOK` et `SBNOK`.**
-Ces commandes simulent un appui logiciel sur le gros bouton physique STOP/START de la façade (qui est lui-même lié au contacteur de présence câble `SBF`).
-
-*   Envoi de **`SBNOK`** : La borne croit qu'on a appuyé sur le bouton STOP. Elle passe immédiatement en `State:W` (Arrêt en cours), envoie le ticket de session, puis se stabilise sagement en **`State:M`** (Arrêt manuel). Elle ne boucle pas, elle attend.
-*   Envoi de **`SBOK`** : La borne croit qu'on a appuyé sur START (ou branché le câble). Elle repasse en `State:A`, détecte la prise (`SBF:1`), émet `Start`, passe en `State:B` puis enclenche la charge (`State:C`).
-
-C'est la mécanique **parfaite** pour piloter les sessions de charge et de délestage pour l'intégration EVerest / Home Assistant, sans avoir à subir les effets secondaires des autres commandes d'interruption !
-
-### Mappage Standard EVCC / EVerest (Niveau 2)
-
-Pour exposer une machine à état propre et stable à un superviseur (comme EVCC ou EVerest), nous utilisons une couche d'abstraction (Niveau 2) qui traduit les états natifs Legrand en états standardisés de la norme IEC 61851 : **Disconnected_A**, **Connected_B**, **Charging_C**, **Error_E** (Défaut mineur/récupérable), et **Faulted_F** (Défaut matériel fatal).
-
-La logique choisie pour le code du driver `greenup-everest` est la suivante :
-
-**Cas Particulier (Borne verrouillée logiciellement) :**
-Si `T2C:0` : La borne est désactivée et sa machine à état est aveugle (`State` reste bloqué à `A`). L'état EVCC est déduit exclusivement de la tension du Control Pilot (`CP?`) :
+**Special Case (Station software locked):**
+If `T2C:0`: The station is disabled and its state machine is blind (`State` remains stuck in `A`). The IEC state is deduced exclusively from the Control Pilot voltage (`CP?`):
 *   `CP:12` ➡️ **Disconnected_A**
 *   `CP:9` ➡️ **Connected_B**
 *   `CP:6` ➡️ **Charging_C**
-*(Note de conception : Le driver devra repasser `T2C:1` lorsqu'il voudra réautoriser la charge).*
+*(Design note: The driver will have to set `T2C:1` when it wants to reauthorize charging).*
 
-**Cas Nominal (T2C:1) :**
-La machine à état Legrand est cohérente et peut être traduite directement :
-*   `State:A` (Repos) ➡️ **Disconnected_A**
-*   `State:L` (Débranchement) ➡️ **Disconnected_A** *(transitionne automatiquement vers A)*
-*   `State:B` (Connecté, attente borne/TIC) ➡️ **Connected_B**
-*   `State:C` (Attente véhicule / Prêt) ➡️ **Connected_B**
-*   `State:I` (Interrompu par EV) ➡️ **Connected_B** *(attention, reboucle automatiquement vers A->B->C, mais reste logique B)*
-*   `State:W` (Arrêt en cours) ➡️ **Connected_B**
-*   `State:M` (Arrêt manuel / via `SBNOK`) ➡️ **Connected_B** *(état stable tant que le véhicule n'est pas débranché/rebranché)*
-*   `State:D` / `State:E` (En charge) ➡️ **Charging_C**
-*   `State:R` / `State:X` (Défaut / Reboot) ➡️ **Error_E**
-*   `State:V` (Coupure d'alimentation fatale) ➡️ **Faulted_F** *(survient avec E:0012 juste avant l'extinction)*
+**Nominal Case (T2C:1):**
+The Legrand state machine is consistent and can be translated directly:
+*   `State:A` (Idle) ➡️ **Disconnected_A**
+*   `State:L` (Unplugging) ➡️ **Disconnected_A** *(automatically transitions to A)*
+*   `State:B` (Connected, waiting for station/TIC) ➡️ **Connected_B**
+*   `State:C` (Waiting for EV / Ready) ➡️ **Connected_B**
+*   `State:I` (Interrupted by EV) ➡️ **Connected_B** *(warning, automatically loops back to A->B->C, but logically remains B)*
+*   `State:W` (Stopping in progress) ➡️ **Connected_B**
+*   `State:M` (Manual stop / via `SBNOK`) ➡️ **Connected_B** *(stable state as long as EV is not unplugged/replugged)*
+*   `State:D` / `State:E` (Charging) ➡️ **Charging_C**
+*   `State:R` / `State:X` (Fault / Reboot) ➡️ **Error_E**
+*   `State:V` (Fatal power loss) ➡️ **Faulted_F** *(occurs with E:0012 right before shutdown)*
+
+## 4. Inconsistencies found in logs (Quirks)
+
+### The A-B-C automatic sequence in FM:1
+In `FM:1` (Direct Charge) mode, the A-B-C state sequence is automatic upon connecting the vehicle. Without external intervention, it goes straight to `State:C` and then resumes charging (`State:E`). 
+Only 2 elements can prevent this behavior:
+1. `T2C:0` (after a `T2CNOK` command), which blocks the station in `State:A`.
+2. The presence of TIC (Tele-Information Client), which blocks the station in `State:B` during peak hours (HP).
+
+This `FM:1` mode deprives us of authorization control: the station decides to charge on its own. To implement Smart Charging where the driver decides *when* charging should start, `FM:1` is not well suited out-of-the-box unless we actively use other commands to pause it (like `SBNOK`).
+
+### State:A forced despite plugged cable after local stop
+If we force charging to stop from the station using the `T2CNOK` command, the station performs its closing sequence (passing through W then M) and then falls back to `State:A` (Available). **However, the cable on the vehicle side is still physically plugged in.** Logically, the station should return to `State:B` (Socket occupied, waiting for authorization), but it declares itself completely free.
+**Consequence (Software lock of the socket):** The `T2CNOK` command (which sets the internal `T2C` variable to `0`) not only forces the station into `State:A`, but **locks the Type 2 socket state machine in this state**. As long as `T2C:0`, absolutely all physical events on this socket (insertion, removal of cable, button press) are ignored by the firmware. The API is therefore blind to the physical state of the cable.
+**Workaround (Analog Polling):** Even if asynchronous events are locked, the API can directly poll the Analog-to-Digital Converter (ADC) with the `CP?` command. This returns the raw voltage on the Control Pilot pin: `12` (Unplugged), `9` (Plugged/State B), `6` (Charging/State C). Polling `CP?` restores visibility!
+
+### The ghost Eco-Start (Off-Peak) mode and its workaround
+Normally, the `FM2:0` command is supposed to disable the eco-start function (so charging should start instantly). However, logs show that the TIC Peak/Off-Peak (HP/HC) control remains active despite `FM2:0`. 
+This behavior unexpectedly blocks the state machine in `State:B` during Peak Hours (HP).
+
+**Workaround:** A way to temporarily override this (for a single charging session) is to explicitly resend the `FM:1` command while the station is in `State:B`. 
+**WARNING:** Doing this completely cuts off the Peak/Off-Peak control, but it also disables the TIC load shedding (délestage) for the entire duration of that charging session.
+
+### The CC: parser bug and the sub-6A crash
+Analysis of current setpoints revealed two consecutive flaws:
+1. **The `CC:` parser is buggy**: It strictly expects 2 digits. If we send `CC:9` instead of `CC:09`, the station misinterprets it and applies a `0A` setpoint (it replies `CC:00`).
+2. **Crash under 6A**: The IEC 61851 standard requires a minimum current of 6A. If the station receives a setpoint strictly below 6A (like `CC:05`, or `0A` due to the previous bug), it does not stop the charge cleanly. The current drops to the hardware minimum (~6.8A), then after 8 seconds the station panics. It emits the fault `E:0010` (`State:R`), closes the session, and **reboots completely** (`State:X`)!
+Therefore, the driver must strictly format setpoints to 2 digits and impose a strict low software limit of **7A**.
+
+### Interruption via Unlock
+The `Unlock` command cleanly forces a charge in progress to stop. It triggers the end sequence (`State:W` -> Send summary -> `State:A`).
+However, since the cable is physically still plugged in, the station immediately detects the contactor (`SBF:1`) and goes back to `State:B`. Due to the automatic A-B-C sequence in `FM:1` mode (explained above), it will then immediately restart the charge, creating an infinite loop.
+
+### The major discovery of Start/Stop control via SBOK / SBNOK
+Smart Charging requires being able to pause and resume a charge without locking the system. Using `Unlock` loops infinitely, and `T2CNOK` blinds the state machine.
+**The ultimate solution lies in the `SBOK` and `SBNOK` commands.**
+These commands simulate a software press on the physical STOP/START button on the front panel.
+*   Sending **`SBNOK`**: The station thinks the STOP button was pressed. It immediately goes to `State:W` (Stopping), sends the session ticket, then safely stabilizes in **`State:M`** (Manual stop). It doesn't loop, it waits.
+*   Sending **`SBOK`**: The station thinks START was pressed (or the cable was plugged). It goes back to `State:A`, detects the socket (`SBF:1`), emits `Start`, goes to `State:B`, then starts charging (`State:C`).
+
+This is the **perfect** mechanic to control charge and load shedding sessions for EVerest / Home Assistant integration, without suffering the side effects of other interruption commands!
