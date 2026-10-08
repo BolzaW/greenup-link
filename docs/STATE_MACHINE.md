@@ -137,3 +137,26 @@ These commands simulate a software press on the physical STOP/START button on th
 *   Sending **`SBOK`**: The station thinks START was pressed (or the cable was plugged). It goes back to `State:A`, detects the socket (`SBF:1`), emits `Start`, goes to `State:B`, then starts charging (`State:C`).
 
 This is the **perfect** mechanic to control charge and load balancing sessions for EVerest / Home Assistant integration, without suffering the side effects of other interruption commands!
+
+## 5. Error Codes (E:XXXX)
+
+When the station enters a fault state (`State:R`, `State:S`, `State:T`, `State:U`, `State:V`), it usually emits an error code that can be queried with `E?`.
+Here is the official interpretation table of error codes extracted from the original Java code (OCPP mapping):
+
+| Code | OCPP Fault Category | Physical Explanation |
+| :--- | :--- | :--- |
+| **`E:0000`** | `NoError` | No error detected. |
+| **`E:0001`** | `ConnectorLockFailure` | T2S socket locking error. |
+| **`E:0002`** | `ConnectorLockFailure` | T2S socket unlocking error. |
+| **`E:0003`** | `OtherError` | Control Pilot short-circuit detected on socket, cable or vehicle side. |
+| **`E:0004`** | `OtherError` | Control Pilot short-circuit detected on board side. |
+| **`E:0005`** | `PowerSwitchFailure` | Domestic socket contactor opening error. |
+| **`E:0006`** | `PowerSwitchFailure` | Domestic socket contactor closing error. |
+| **`E:0007`** | `PowerSwitchFailure` | T2S socket contactor opening error. |
+| **`E:0008`** | `PowerSwitchFailure` | T2S socket contactor closing error. |
+| **`E:0009`** | `OtherError` | Diode not detected on vehicle side. |
+| **`E:0010`** | `OverCurrentFailure` | Current overload on T2S socket. *(Also triggered in case of PWM crash / setpoint < 6A!)* |
+| **`E:0011`** | `OverCurrentFailure` | Current overload on Domestic socket. |
+| **`E:0012`** | `UnderVoltage` | Power outage / Electrical power failure (triggers `State:V`). |
+| **`E:0013`** | `OtherError` | Internal USB communication error. |
+| **`E:0015`** | `OtherError` | 6mA DC leakage fault detected. |
