@@ -1,7 +1,7 @@
 //! Commandes émises vers la carte de puissance (TX).
 //!
 //! Chaque variante de [`Command`] correspond à une trame ASCII documentée dans
-//! `docs/PROTOCOLE_SERIE_LEGRAND.md`. La méthode [`Command::encode`] produit la
+//! `docs/LEGRAND_SERIAL_PROTOCOL.md`. La méthode [`Command::encode`] produit la
 //! trame prête à être écrite sur le lien série (terminée par `\r`).
 //!
 //! Cette couche est volontairement pure : aucune I/O, aucun état.
