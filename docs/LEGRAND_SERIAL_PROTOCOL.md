@@ -22,7 +22,7 @@ Commands used at startup to establish dialogue and identify the board.
 | `WeekYearProduction?`| `WeekYearProduction:`| Requests the manufacturing date (Week/Year). |
 | `Side?` | `Side:` | Requests the active side (Side 1 or 2). Often useful on dual-socket stations. |
 | `Reset` | `State:` | Reboots the power board. Acknowledged by the board's first state upon rebooting. |
-| `Test` | None | Puts the board into a factory or lab "Test" mode. |
+| `test*` | `test:ok` / `test:nok` | **Factory Test Suite**. A set of hidden EOL (End-Of-Line) lab commands found in the ATmega bytecode (e.g., `testled`, `testbouton`, `testcontacteurevplug`, `testmoteur`, `test6mA`). Entirely absent from the supervision Pi. |
 | `Z` | None | **⚠️ CRITICAL WARNING:** Triggers a software reset and drops the ATmega into **Bootloader mode** for firmware flashing. Do NOT use unless you intend to run `avrdude` immediately after. |
 | `ping` | `pong` | Basic ping to check if the board's serial interface is responsive. |
 
