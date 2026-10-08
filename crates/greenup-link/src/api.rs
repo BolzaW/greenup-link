@@ -14,6 +14,8 @@ use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
 pub fn build_router(state: SharedState) -> Router {
     Router::new()
         .route("/", get(serve_ui))
+        .route("/locales/fr.json", get(serve_fr_json))
+        .route("/locales/en.json", get(serve_en_json))
         .route("/api/info", get(get_info))
         .route("/api/telemetry", get(get_telemetry))
         .route("/api/current/:amps", post(set_current))
@@ -37,6 +39,16 @@ pub struct BluetoothPayload {
 /// GET /
 async fn serve_ui() -> Html<&'static str> {
     Html(include_str!("index.html"))
+}
+
+/// GET /locales/fr.json
+async fn serve_fr_json() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/json")], include_str!("locales/fr.json"))
+}
+
+/// GET /locales/en.json
+async fn serve_en_json() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/json")], include_str!("locales/en.json"))
 }
 
 /// GET /api/info

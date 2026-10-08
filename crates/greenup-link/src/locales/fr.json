@@ -1,0 +1,49 @@
+{
+  "header": {
+    "subtitle": "Interface de contrôle locale",
+    "ble_module": "Module BLE"
+  },
+  "visualizer": {
+    "force_tic_refresh": "Forcer l'actualisation du mode TIC",
+    "system_state": "État système"
+  },
+  "state": {
+    "searching": "Recherche de la borne...",
+    "disconnected": "Débranché",
+    "connected": "Connecté",
+    "charging": "En Charge",
+    "fault": "Défaut",
+    "unknown": "Inconnu",
+    "code": "Code",
+    "charge_complete": "Charge Terminée",
+    "offline": "Hors Ligne"
+  },
+  "telemetry": {
+    "voltage": "Tension",
+    "current": "Courant",
+    "power": "Puissance",
+    "energy": "Énergie"
+  },
+  "controls": {
+    "charge_params": "Paramètres de charge",
+    "current_limit": "Consigne de Courant",
+    "start": "DÉMARRER",
+    "stop": "ARRÊTER"
+  },
+  "tic": {
+    "standard": "TIC Standard (9600 bauds)",
+    "historic": "TIC Historique (1200 bauds)",
+    "detecting": "Détection en cours...",
+    "disconnected": "TIC Non Connecté"
+  },
+  "info": {
+    "not_available": "Informations non disponibles"
+  },
+  "alert": {
+    "error": "Erreur: ",
+    "tic_refresh_state_a": "La borne doit être à l'état A (Libre) pour lancer une détection TIC."
+  },
+  "error": {
+    "hardware_code": "Code Hardware : "
+  }
+}
