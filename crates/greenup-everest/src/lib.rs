@@ -2,22 +2,22 @@ use tokio::sync::broadcast;
 use greenup_driver::SharedState;
 use greenup_protocol::{Command, MIN_CURRENT_AMPS, MAX_CURRENT_AMPS};
 
-/// Événements traduits pour EVerest (interface evse_board_support)
+/// Translated events for EVerest (evse_board_support interface)
 #[derive(Debug, Clone, PartialEq)]
 pub enum EverestBspEvent {
-    /// Le câble est déconnecté (State A)
+    /// Cable is disconnected (State A)
     Disconnected,
-    /// Le câble est connecté mais la charge n'a pas commencé (State B)
+    /// Cable is connected but charging has not started (State B)
     Connected,
-    /// La charge est en cours (State C/D)
+    /// Charging in progress (State C/D)
     Charging,
-    /// Erreur matérielle (State E)
+    /// Hardware error (State E)
     Error,
-    /// Défaut critique (State F / V)
+    /// Critical fault (State F / V)
     Faulted,
 }
 
-/// Télémétrie standardisée pour le module EVerest Powermeter
+/// Standardized telemetry for the EVerest Powermeter module
 #[derive(Debug, Clone)]
 pub struct EverestTelemetry {
     pub voltage_v: f32,
@@ -33,7 +33,7 @@ pub struct EverestAdapter {
 }
 
 impl EverestAdapter {
-    /// Initialise l'adaptateur EVerest en encapsulant le driver GreenUp existant.
+    /// Initializes the EVerest adapter by wrapping the existing GreenUp driver.
     pub fn new(driver_state: SharedState) -> Self {
         let (event_tx, _) = broadcast::channel(16);
         let (telemetry_tx, _) = broadcast::channel(16);
@@ -44,7 +44,7 @@ impl EverestAdapter {
         }
     }
 
-    /// Tâche asynchrone qui poll le driver Legrand et émet les événements EVerest
+    /// Asynchronous task that polls the Legrand driver and emits EVerest events
     pub async fn run_event_loop(&self) {
         let mut last_iec = String::new();
         loop {
@@ -57,7 +57,7 @@ impl EverestAdapter {
                         voltage_v: tel.voltage,
                         current_a: tel.current,
                         power_w: tel.power,
-                        energy_wh: tel.energy * 1000.0, // Everest attend souvent des Wh
+                        energy_wh: tel.energy * 1000.0, // Everest often expects Wh
                     };
                     (iec, tele)
                 } else {
@@ -65,10 +65,10 @@ impl EverestAdapter {
                 }
             };
 
-            // Émission de la télémétrie
+            // Emit telemetry
             let _ = self.telemetry_tx.send(telemetry_update);
 
-            // Détection des changements d'état IEC pour générer les BspEvent
+            // Detect IEC state changes to generate BspEvents
             if current_iec != last_iec {
                 let evt = match current_iec.as_str() {
                     "Disconnected_A" => Some(EverestBspEvent::Disconnected),
@@ -87,39 +87,39 @@ impl EverestAdapter {
         }
     }
 
-    /// S'abonne aux changements d'états (BSP Events)
+    /// Subscribes to state changes (BSP Events)
     pub fn subscribe_events(&self) -> broadcast::Receiver<EverestBspEvent> {
         self.event_tx.subscribe()
     }
 
-    /// S'abonne à la télémétrie (Powermeter)
+    /// Subscribes to telemetry (Powermeter)
     pub fn subscribe_telemetry(&self) -> broadcast::Receiver<EverestTelemetry> {
         self.telemetry_tx.subscribe()
     }
 
     // =========================================================================
-    // COMMANDES EVEREST -> LEGRAND
+    // EVEREST -> LEGRAND COMMANDS
     // =========================================================================
 
-    /// (EVerest) allow_power_on: Autorise ou bloque la charge
+    /// (EVerest) allow_power_on: Allows or blocks charging
     pub async fn allow_power_on(&self, allow: bool) -> Result<(), String> {
-        // En EVerest, `allow_power_on(true)` autorise la charge (State C).
-        // On traduit cela par l'appui sur le bouton Start (SBOK) ou Stop (SBNOK).
+        // In EVerest, `allow_power_on(true)` allows charging (State C).
+        // We translate this to pressing the Start (SBOK) or Stop (SBNOK) button.
         let cmd = Command::SetStartButton(allow);
         self.driver_state
             .serial_tx
             .send(cmd)
             .await
-            .map_err(|_| "Erreur d'envoi TX".to_string())
+            .map_err(|_| "TX send error".to_string())
     }
 
-    /// (EVerest) set_pwm: Traduit un rapport cyclique (duty cycle PWM) en Ampères pour Legrand
+    /// (EVerest) set_pwm: Translates a PWM duty cycle to Amperes for Legrand
     pub async fn set_pwm(&self, duty_cycle_pct: f32) -> Result<(), String> {
-        // En IEC 61851, un duty cycle de 10% à 85% correspond à Ampères = duty_cycle * 0.6
-        // Everest envoie un pourcentage (ex: 26.66% = 16A).
+        // In IEC 61851, a 10% to 85% duty cycle corresponds to Amperes = duty_cycle * 0.6
+        // Everest sends a percentage (e.g. 26.66% = 16A).
         let mut amps = (duty_cycle_pct * 0.6).round() as u8;
         
-        // Sécurité matérielle Legrand
+        // Legrand hardware safety
         if amps < MIN_CURRENT_AMPS {
             amps = MIN_CURRENT_AMPS;
         } else if amps > MAX_CURRENT_AMPS {
@@ -131,18 +131,18 @@ impl EverestAdapter {
                 .serial_tx
                 .send(cmd)
                 .await
-                .map_err(|_| "Erreur d'envoi TX".to_string())
+                .map_err(|_| "TX send error".to_string())
         } else {
-            Err("Consigne de courant hors tolérance absolue".to_string())
+            Err("Current setpoint out of absolute tolerance".to_string())
         }
     }
 
-    /// Demande un redémarrage matériel (si supporté par la couche supérieure)
+    /// Requests a hardware reset (if supported by the upper layer)
     pub async fn hardware_reset(&self) -> Result<(), String> {
         self.driver_state
             .serial_tx
             .send(Command::Reset)
             .await
-            .map_err(|_| "Erreur d'envoi TX".to_string())
+            .map_err(|_| "TX send error".to_string())
     }
 }
