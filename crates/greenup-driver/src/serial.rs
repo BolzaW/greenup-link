@@ -255,11 +255,10 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut tel) = state.telemetry.lock() { tel.charge_complete = true; }
         }
         ProtocolEvent::FmMode(fm_val) => {
-            if FunctioningMode::from_code(&fm_val) != Some(FunctioningMode::DirectCharge) {
-                logger::log("SERIAL", &format!("⚠️ FM Mode detected = {}, forcing FM:1", fm_val));
-                let _ = state.serial_tx.try_send(
-                    Command::SetFunctioningMode(FunctioningMode::DirectCharge),
-                );
+            if let Some(mode) = FunctioningMode::from_code(&fm_val) {
+                logger::log("SERIAL", &format!("ℹ️ FM Mode detected = {:?}", mode));
+            } else {
+                logger::log("SERIAL", &format!("⚠️ Unknown FM Mode detected = {}", fm_val));
             }
         }
                 ProtocolEvent::TicTestBaud(val) => {
