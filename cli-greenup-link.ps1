@@ -1,6 +1,6 @@
 $PI_IP = ""
 while ([string]::IsNullOrWhiteSpace($PI_IP)) {
-    $PI_IP = Read-Host "Entrez l'adresse IP du Raspberry Pi (ex: 192.168.1.50)"
+    $PI_IP = Read-Host "Enter the Raspberry Pi IP address (e.g., 192.168.1.50)"
 }
 $BASE_URL = "http://${PI_IP}:8080"
 
@@ -8,24 +8,22 @@ function Show-Menu {
     Clear-Host
     Write-Host "=================================================" -ForegroundColor Cyan
     Write-Host "    CLI CLIENT API - GREEN'UP LINK               " -ForegroundColor White
-    Write-Host "    Cible : $BASE_URL                            " -ForegroundColor Gray
+    Write-Host "    Target: $BASE_URL                            " -ForegroundColor Gray
     Write-Host "=================================================" -ForegroundColor Cyan
-    Write-Host "1. Obtenir les informations de la borne (Info)"
-    Write-Host "2. Obtenir la télémesure en temps réel"
-    Write-Host "3. Piloter la charge (Pause/Reprise via SB)"
-    Write-Host "4. Piloter le verrouillage de la prise (T2C)"
-    Write-Host "5. Définir la limite de courant (7A - 32A)"
-    Write-Host "6. Piloter le module Bluetooth"
-    Write-Host "7. Relancer l'initialisation de la borne"
-    Write-Host "8. Forcer le rafraîchissement TIC"
-    Write-Host "9. Redémarrer la carte de puissance (Reset)"
-    Write-Host "COMMAND. Mode Expert (Commandes brutes)"
-    Write-Host "0. Quitter"
+    Write-Host "1. Get board info (Hardware/Firmware)"
+    Write-Host "2. Get real-time telemetry"
+    Write-Host "3. Control charging (Start/Stop)"
+    Write-Host "4. Set current limit (7A - 32A)"
+    Write-Host "5. Control Bluetooth module"
+    Write-Host "6. Restart initialization sequence"
+    Write-Host "7. Force TIC refresh"
+    Write-Host "8. Reboot power board (Reset)"
+    Write-Host "0. Exit"
     Write-Host "=================================================" -ForegroundColor Cyan
 }
 while ($true) {
     Show-Menu
-    $choice = Read-Host "Choisissez une option"
+    $choice = Read-Host "Choose an option"
 
     try {
         switch ($choice) {
@@ -40,8 +38,8 @@ while ($true) {
                 $response | ConvertTo-Json -Depth 5 | Write-Host -ForegroundColor Green
             }
             "3" {
-                $state = Read-Host "Démarrer (D) ou Stopper (S) la charge ? (D/S)"
-                if ($state -match "^[Dd]") {
+                $state = Read-Host "Start (S) or Stop (T) the charge? (S/T)"
+                if ($state -match "^[Ss]") {
                     Write-Host "`n[POST] $BASE_URL/api/charge/start..." -ForegroundColor Yellow
                     $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/start" -Method Post
                 } else {
@@ -51,56 +49,45 @@ while ($true) {
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
             "4" {
-                $state = Read-Host "Activer (A) ou Désactiver (D) la prise Type 2 ? (A/D)"
-                if ($state -match "^[Aa]") {
-                    Write-Host "`n[POST] $BASE_URL/api/t2/enable..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/t2/enable" -Method Post
-                } else {
-                    Write-Host "`n[POST] $BASE_URL/api/t2/disable..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/t2/disable" -Method Post
-                }
-                $response | ConvertTo-Json | Write-Host -ForegroundColor Green
-            }
-            "5" {
-                $amps = Read-Host "Entrez la limite de courant (ex: 16)"
+                $amps = Read-Host "Enter current limit (e.g., 16)"
                 Write-Host "`n[POST] $BASE_URL/api/current/$amps..." -ForegroundColor Yellow
                 $response = Invoke-RestMethod -Uri "$BASE_URL/api/current/$amps" -Method Post
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
-            "6" {
-                $state = Read-Host "Voulez-vous activer le Bluetooth ? (O/N)"
-                $isEnabled = $state -match "^[OoYy]"
+            "5" {
+                $state = Read-Host "Enable Bluetooth? (Y/N)"
+                $isEnabled = $state -match "^[Yy]"
                 $body = @{ enabled = $isEnabled } | ConvertTo-Json
                 Write-Host "`n[POST] $BASE_URL/api/bluetooth..." -ForegroundColor Yellow
                 $response = Invoke-RestMethod -Uri "$BASE_URL/api/bluetooth" -Method Post -Body $body -ContentType "application/json"
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
-            "7" {
+            "6" {
                 Write-Host "`n[POST] $BASE_URL/api/init..." -ForegroundColor Yellow
                 $response = Invoke-RestMethod -Uri "$BASE_URL/api/init" -Method Post
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
-            "8" {
+            "7" {
                 Write-Host "`n[POST] $BASE_URL/api/tic/refresh..." -ForegroundColor Yellow
                 $response = Invoke-RestMethod -Uri "$BASE_URL/api/tic/refresh" -Method Post
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
-            "9" {
+            "8" {
                 Write-Host "`n[POST] $BASE_URL/api/reset..." -ForegroundColor Yellow
                 $response = Invoke-RestMethod -Uri "$BASE_URL/api/reset" -Method Post
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
             "COMMAND" {
-                Write-Host "`n--- ATTENTION: MODE COMMANDE DIRECTE ---" -ForegroundColor Red
-                Write-Host "Vous écrivez directement sur le bus série de la borne." -ForegroundColor Red
-                Write-Host "N'envoyez pas de commandes inconnues sous peine de risquer de corrompre ou bloquer le matériel !" -ForegroundColor Red
-                Write-Host "Tapez 'exit', 'quit' ou laissez vide pour revenir au menu sécurisé." -ForegroundColor Gray
+                Write-Host "`n--- WARNING: DIRECT COMMAND MODE ---" -ForegroundColor Red
+                Write-Host "You are writing directly to the station's serial bus." -ForegroundColor Red
+                Write-Host "Do not send unknown commands to avoid corrupting or locking the hardware!" -ForegroundColor Red
+                Write-Host "Type 'exit', 'quit' or leave empty to return to the safe menu." -ForegroundColor Gray
                 
                 while ($true) {
-                    $cmd = Read-Host "`nPS> Commande brute"
+                    $cmd = Read-Host "`nPS> Raw command"
                     
                     if ([string]::IsNullOrWhiteSpace($cmd) -or $cmd.ToLower() -match "^(exit|quit)$") {
-                        Write-Host "Retour au menu principal..." -ForegroundColor Gray
+                        Write-Host "Returning to main menu..." -ForegroundColor Gray
                         break
                     }
 
@@ -109,23 +96,23 @@ while ($true) {
                         $response = Invoke-RestMethod -Uri "$BASE_URL/api/command" -Method Post -Body $cmd -ContentType "text/plain"
                         $response | ConvertTo-Json -Depth 2 | Write-Host -ForegroundColor Green
                     } catch {
-                        Write-Host "❌ Erreur de requête : $($_.Exception.Message)" -ForegroundColor Red
+                        Write-Host "❌ Request error: $($_.Exception.Message)" -ForegroundColor Red
                     }
                 }
             }
             "0" {
-                Write-Host "`nAu revoir !" -ForegroundColor Cyan
+                Write-Host "`nGoodbye!" -ForegroundColor Cyan
                 exit
             }
             default {
-                Write-Host "`nOption invalide." -ForegroundColor Red
+                Write-Host "`nInvalid option." -ForegroundColor Red
             }
         }
     } catch {
-        Write-Host "`n❌ Erreur de communication : $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "Le serveur sur le Raspberry Pi est-il bien lancé ?" -ForegroundColor Gray
+        Write-Host "`n❌ Communication error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Is the Raspberry Pi server running?" -ForegroundColor Gray
     }
 
-    Write-Host "`nAppuyez sur Entrée pour continuer..." -ForegroundColor DarkGray
+    Write-Host "`nPress Enter to continue..." -ForegroundColor DarkGray
     $null = Read-Host
 }
