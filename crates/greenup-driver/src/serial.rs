@@ -199,9 +199,9 @@ fn update_charge_status(tel: &mut Telemetry) {
     let is_forced_by_d = tel.d_state.unwrap_or(false);
     tel.charge_authorized = !is_blocked_by_fm2 || is_forced_by_d;
 
-    // Paused if SB is ON (true). SBF acts as a complement but SB:1 means paused by user.
-    // The command SBNOK sets SB:1. SBOK sets SB:0. So SB:1 => paused.
-    tel.charge_paused = tel.sb_state.unwrap_or(false);
+    // Paused if SB is 0. 
+    // The command SBNOK (pause) sets SB:0. SBOK (resume) sets SB:1. So SB:0 => paused.
+    tel.charge_paused = !tel.sb_state.unwrap_or(true);
 }
 
 fn parse_incoming_line(line: &str, state: &SharedState) {
