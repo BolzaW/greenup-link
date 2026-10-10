@@ -197,7 +197,11 @@ fn update_charge_status(tel: &mut Telemetry) {
     // Authorized to charge if FM2 is OFF (false) or D is ON (true)
     let is_blocked_by_fm2 = tel.fm2_state.unwrap_or(false);
     let is_forced_by_d = tel.d_state.unwrap_or(false);
-    tel.charge_authorized = !is_blocked_by_fm2 || is_forced_by_d;
+    
+    // Also T2C must be authorized (default to true if unknown to avoid blocking)
+    let is_t2c_authorized = tel.t2c_enabled.unwrap_or(true);
+
+    tel.charge_authorized = is_t2c_authorized && (!is_blocked_by_fm2 || is_forced_by_d);
 }
 
 fn parse_incoming_line(line: &str, state: &SharedState) {
@@ -339,7 +343,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut tel) = state.telemetry.lock() { tel.cp_voltage = Some(v); update_iec_state(&mut tel); }
         }
         ProtocolEvent::T2CEnabled(v) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.t2c_enabled = Some(v); update_iec_state(&mut tel); }
+            if let Ok(mut tel) = state.telemetry.lock() { tel.t2c_enabled = Some(v); update_iec_state(&mut tel); update_charge_status(&mut tel); }
         }
         ProtocolEvent::SbState(v) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.charge_paused = !v; }

@@ -101,14 +101,23 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
 
 /// POST /api/charge/enable
 async fn enable_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "▶ Charge enable request (FM2:0 + DOK)");
+    logger::log("API", "▶ Charge enable request (T2COK + FM2:0 + DOK)");
+    
+    // Safety check: ensure T2C is enabled
+    if let Err(_) = state.serial_tx.send(Command::AuthorizeType2(true)).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (T2COK)"})));
+    }
+    
+    // First we send FM2:0 to explicitly unblock the charge from external signal
     if let Err(_) = state.serial_tx.send(Command::SetExternalSignal(false)).await {
         return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (FM2:0)"})));
     }
+    
+    // Then we send DOK to force the charge (overriding TIC limits)
     if state.serial_tx.send(Command::SetDerogation(true)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge enabled (FM2:0 + DOK)"})))
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge enabled (T2COK + FM2:0 + DOK)"})))
     } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (DOK)"})))
     }
 }
 

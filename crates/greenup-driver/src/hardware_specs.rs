@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HardwareCapabilities {
     /// Commercial name of the charging station.
+    #[serde(skip)]
     pub name: String,
     /// Legrand reference (without spaces).
+    #[serde(skip)]
     pub reference: String,
     /// Number of phases (1 = Single-phase, 3 = Three-phase).
     pub phases: u8,
