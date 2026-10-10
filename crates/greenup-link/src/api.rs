@@ -188,6 +188,7 @@ async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<
     match payload.action.as_str() {
         "enable" => {
             logger::log("API", "▶ Charge enable request (T2COK + FM2:0 + DOK)");
+            if let Ok(mut tel) = state.telemetry.lock() { tel.fm2_state = Some(false); tel.d_state = Some(true); greenup_driver::serial::update_charge_status(&mut tel); }
             let _ = state.serial_tx.send(Command::AuthorizeType2(true)).await;
             let _ = state.serial_tx.send(Command::SetExternalSignal(false)).await;
             if state.serial_tx.send(Command::SetDerogation(true)).await.is_ok() {
@@ -198,6 +199,7 @@ async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<
         },
         "disable" => {
             logger::log("API", "▶ Charge disable request (FM2:1 + DNOK)");
+            if let Ok(mut tel) = state.telemetry.lock() { tel.fm2_state = Some(true); tel.d_state = Some(false); greenup_driver::serial::update_charge_status(&mut tel); }
             let _ = state.serial_tx.send(Command::SetExternalSignal(true)).await;
             if state.serial_tx.send(Command::SetDerogation(false)).await.is_ok() {
                 (StatusCode::OK, Json(json!({"status": "success"})))
@@ -207,6 +209,7 @@ async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<
         },
         "pause" => {
             logger::log("API", "▶ Charge pause request (SBNOK)");
+            if let Ok(mut tel) = state.telemetry.lock() { tel.charge_paused = true; }
             if state.serial_tx.send(Command::SetStartButton(false)).await.is_ok() {
                 (StatusCode::OK, Json(json!({"status": "success"})))
             } else {
@@ -215,6 +218,7 @@ async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<
         },
         "resume" => {
             logger::log("API", "▶ Charge resume request (SBOK)");
+            if let Ok(mut tel) = state.telemetry.lock() { tel.charge_paused = false; }
             if state.serial_tx.send(Command::SetStartButton(true)).await.is_ok() {
                 (StatusCode::OK, Json(json!({"status": "success"})))
             } else {
@@ -224,3 +228,5 @@ async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<
         _ => (StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid action"})))
     }
 }
+
+

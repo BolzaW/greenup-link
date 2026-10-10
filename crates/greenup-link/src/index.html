@@ -706,10 +706,10 @@
         // Let polling restore state properly
     }
 
-    async function sendPostAction(url) {
+    async function sendPostAction(url, bodyObj = null) {
         lockControls();
         try {
-            await fetch(url, { method: 'POST' });
+            let opts = { method: 'POST' }; if (bodyObj) { opts.headers = {'Content-Type': 'application/json'}; opts.body = JSON.stringify(bodyObj); } await fetch(url, opts);
         } catch (err) {
             console.error(err);
         }
@@ -719,9 +719,9 @@
         }, 1000);
     }
 
-    btnEnableDisable.addEventListener('click', () => sendPostAction(window.lastChargeAuthorized ? '/api/charge/disable' : '/api/charge/enable'));
+    btnEnableDisable.addEventListener('click', () => sendPostAction('/api/charge', { action: window.lastChargeAuthorized ? 'disable' : 'enable' }));
     
-    btnPauseResume.addEventListener('click', () => sendPostAction(window.lastChargePaused ? '/api/charge/resume' : '/api/charge/pause'));
+    btnPauseResume.addEventListener('click', () => sendPostAction('/api/charge', { action: window.lastChargePaused ? 'resume' : 'pause' }));
     
     slider.addEventListener('mousedown', () => isDraggingSlider = true);
     slider.addEventListener('mouseup', () => isDraggingSlider = false);
@@ -746,6 +746,7 @@
 </script>
 </body>
 </html>
+
 
 
 
