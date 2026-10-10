@@ -12,6 +12,7 @@
 Il communique avec la carte de puissance de la borne via la liaison série USB interne et expose :
 - Une **IHM Web locale** claire et réactive.
 - Une **API REST** complète et documentée, parfaite pour l'intégration en domotique (Home Assistant, Jeedom, etc.).
+- Une compatibilité totale avec **EVCC** pour la recharge solaire intelligente (voir le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md)).
 
 Le projet propose également une intégration EVerest sans API/IHM via un pont MQTT direct, permettant à la borne d'être pilotée comme un module matériel EVerest standard. *(Note : Pour une implémentation native et plus "propre" d'un module EVerest remplaçant entièrement l'EvseManager, n'hésitez pas à consulter l'excellent projet communautaire [evorada/everest-greenup](https://github.com/evorada/everest-greenup) réalisé par suda).*
 
@@ -160,3 +161,4 @@ La feuille de route inclut (sans date garantie) :
   - Support des bornes double point de charge
 
 *Note : N'hésitez pas à utiliser les "Issues" GitHub pour suggérer ou demander des fonctionnalités spécifiques dont vous auriez besoin !*
+
