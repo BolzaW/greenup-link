@@ -11,6 +11,7 @@
 It communicates with the charging station's power board via the internal USB serial link and exposes:
 - A clean, responsive **local Web GUI**.
 - A comprehensive and documented **REST API**, perfect for home automation integration (Home Assistant, Jeedom, etc.).
+- Full compatibility with **EVCC** for smart solar charging (see the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md)).
 
 It also provides an EVerest integration without API/UI via a direct MQTT bridge, allowing the station to be controlled as a standard EVerest hardware module. *(Note: For a cleaner, native EVerest module implementation that replaces EvseManager entirely, check out the excellent community project [evorada/everest-greenup](https://github.com/evorada/everest-greenup) by suda).*
 
@@ -159,3 +160,4 @@ The roadmap includes (with no guaranteed timeline):
   - Dual charge points wallbox support
 
 *Note: Feel free to use GitHub "Issues" to suggest or request specific features you might need!*
+
