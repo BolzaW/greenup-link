@@ -188,7 +188,7 @@ fn update_iec_state(tel: &mut Telemetry) {
     tel.evcc_status = tel.iec_state.as_ref().map(|s| s.chars().last().unwrap_or('A').to_string());
 }
 
-fn update_charge_status(tel: &mut Telemetry) {
+pub fn update_charge_status(tel: &mut Telemetry) {
     // Authorized to charge if FM2 is OFF (false) or D is ON (true)
     let is_blocked_by_fm2 = tel.fm2_state.unwrap_or(false);
     let is_forced_by_d = tel.d_state.unwrap_or(false);
@@ -359,4 +359,5 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::Unknown(_) => {}
     }
 }
+
 
