@@ -50,12 +50,11 @@ chargers:
     type: custom
     
     # 1. Real-time Status (A, B, C, E, F)
-    # The API returns standard states like "Charging_C". 
-    # We use jq .[-1:] to extract the last character ("C") for EVCC.
+    # The API natively returns the exact letter expected by EVCC
     status:
       source: http
       uri: http://<GREENUP_IP>:3000/api/telemetry
-      jq: .iec_state[-1:]
+      jq: .evcc_status
       timeout: 5s
       
     # 2. Real-time Power (Watts)
@@ -73,19 +72,22 @@ chargers:
       timeout: 5s
       
     # 4. Charger Enable State
-    # Tells EVCC if the station is currently authorized to charge
+    # Combines charge_authorized and !charge_paused directly in the API
     enabled:
       source: http
       uri: http://<GREENUP_IP>:3000/api/telemetry
-      jq: .charge_authorized
+      jq: .evcc_enabled
       timeout: 5s
       
     # 5. Start / Stop Action
-    # Translates EVCC's 'enable' command to our REST API endpoints.
-    # We use a script to perform a curl POST request securely.
+    # Clean HTTP setter with JSON body. EVCC replaces ${enable} with true/false
     enable:
-      source: script
-      cmd: /bin/sh -c "if [ '${enable}' = 'true' ]; then curl -s -X POST http://<GREENUP_IP>:3000/api/charge/enable; else curl -s -X POST http://<GREENUP_IP>:3000/api/charge/disable; fi"
+      source: http
+      uri: http://<GREENUP_IP>:3000/api/evcc/state
+      method: POST
+      headers:
+        - "Content-Type: application/json"
+      body: '{"enable": ${enable}}'
       
     # 6. Current Limiting Action (Amps)
     # Allows EVCC to modulate charging power (e.g., for solar surplus matching)
@@ -117,7 +119,7 @@ loadpoints:
   - title: Garage
     charger: greenup
     mode: pv        # 'pv' (solar surplus), 'now' (fast charge), or 'minpv'
-    mincurrent: 8   # Minimum 8A for most EVs
+    mincurrent: 7   # Minimum 8A for most EVs
     maxcurrent: 32  # Maximum 32A
 
 site:
