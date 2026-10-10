@@ -4,7 +4,7 @@ chargers:
     status:
       source: http
       uri: http://localhost:3000/api/telemetry
-      jq: .evcc_status
+      jq: .iec_state
       timeout: 5s
       
     power:
@@ -22,16 +22,12 @@ chargers:
     enabled:
       source: http
       uri: http://localhost:3000/api/telemetry
-      jq: .evcc_enabled
+      jq: .charge_authorized
       timeout: 5s
       
     enable:
-      source: http
-      uri: http://localhost:3000/api/evcc/state
-      method: POST
-      headers:
-        - "Content-Type: application/json"
-      body: '{"enable": ${enable}}'
+      source: script
+      cmd: /bin/sh -c "if [ '${enable}' = 'true' ]; then curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"enable\"}' http://localhost:3000/api/charge; else curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"disable\"}' http://localhost:3000/api/charge; fi"
       
     maxcurrent:
       source: script

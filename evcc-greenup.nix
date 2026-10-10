@@ -13,7 +13,7 @@
           status = {
             source = "http";
             uri = "http://127.0.0.1:3000/api/telemetry";
-            jq = ".evcc_status";
+            jq = ".iec_state";
             timeout = "5s";
           };
           
@@ -34,21 +34,18 @@
           enabled = {
             source = "http";
             uri = "http://127.0.0.1:3000/api/telemetry";
-            jq = ".evcc_enabled";
+            jq = ".charge_authorized";
             timeout = "5s";
           };
           
           enable = {
-            source = "http";
-            uri = "http://127.0.0.1:3000/api/evcc/state";
-            method = "POST";
-            headers = [ "Content-Type: application/json" ];
-            body = "{\"enable\": \}";
+            source = "script";
+            cmd = "${pkgs.bash}/bin/sh -c "if [ '\\' = 'true' ]; then ${pkgs.curl}/bin/curl -s -X POST -H 'Content-Type: application/json' -d '{\\"action\\":\\"enable\\"}' http://127.0.0.1:3000/api/charge; else ${pkgs.curl}/bin/curl -s -X POST -H 'Content-Type: application/json' -d '{\\"action\\":\\"disable\\"}' http://127.0.0.1:3000/api/charge; fi"";
           };
           
           maxcurrent = {
             source = "script";
-            cmd = "${pkgs.curl}/bin/curl -s -X POST http://127.0.0.1:3000/api/current/\";
+            cmd = "${pkgs.curl}/bin/curl -s -X POST http://127.0.0.1:3000/api/current/\\";
           };
         }
       ];
