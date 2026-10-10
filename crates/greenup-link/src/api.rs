@@ -23,6 +23,7 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/charge/disable", post(disable_charge))
         .route("/api/charge/pause", post(pause_charge))
         .route("/api/charge/resume", post(resume_charge))
+        .route("/api/evcc/state", post(set_evcc_state))
         .route("/api/init", post(init_sequence))
         .route("/api/reset", post(reset_board))
         .route("/api/tic/refresh", post(refresh_tic))
@@ -229,5 +230,31 @@ async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<Blu
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "Serial communication error"}))
         )
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct EvccStatePayload { enable: bool }
+
+/// POST /api/evcc/state
+async fn set_evcc_state(State(state): State<SharedState>, Json(payload): Json<EvccStatePayload>) -> impl IntoResponse {
+    if payload.enable {
+        greenup_driver::logger::log("API", "▶ EVCC Enable request (T2COK + SBOK + FM2:0 + DOK)");
+        let _ = state.serial_tx.send(Command::AuthorizeType2(true)).await;
+        let _ = state.serial_tx.send(Command::SetStartButton(true)).await;
+        let _ = state.serial_tx.send(Command::SetExternalSignal(false)).await;
+        if state.serial_tx.send(Command::SetDerogation(true)).await.is_ok() {
+            (StatusCode::OK, Json(serde_json::json!({"status": "success"})))
+        } else {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Serial error"})))
+        }
+    } else {
+        greenup_driver::logger::log("API", "▶ EVCC Disable request (FM2:1 + DNOK)");
+        let _ = state.serial_tx.send(Command::SetExternalSignal(true)).await;
+        if state.serial_tx.send(Command::SetDerogation(false)).await.is_ok() {
+            (StatusCode::OK, Json(serde_json::json!({"status": "success"})))
+        } else {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Serial error"})))
+        }
     }
 }
