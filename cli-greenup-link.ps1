@@ -41,16 +41,16 @@ while ($true) {
                 $state = Read-Host "Enable (E) / Disable (D) / Pause (P) / Resume (R) the charge?"
                 if ($state -match "^[Ee]") {
                     Write-Host "`n[POST] $BASE_URL/api/charge/enable..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/enable" -Method Post
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Body '{"action":"enable"}' -ContentType "application/json"
                 } elseif ($state -match "^[Dd]") {
                     Write-Host "`n[POST] $BASE_URL/api/charge/disable..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/disable" -Method Post
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Body '{"action":"disable"}' -ContentType "application/json"
                 } elseif ($state -match "^[Pp]") {
                     Write-Host "`n[POST] $BASE_URL/api/charge/pause..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/pause" -Method Post
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Body '{"action":"pause"}' -ContentType "application/json"
                 } else {
                     Write-Host "`n[POST] $BASE_URL/api/charge/resume..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/resume" -Method Post
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Body '{"action":"resume"}' -ContentType "application/json"
                 }
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
@@ -122,3 +122,4 @@ while ($true) {
     Write-Host "`nPress Enter to continue..." -ForegroundColor DarkGray
     $null = Read-Host
 }
+

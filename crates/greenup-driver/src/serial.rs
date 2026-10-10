@@ -359,3 +359,4 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::Unknown(_) => {}
     }
 }
+

@@ -8,10 +8,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
 | :--- | :--- | :--- |
 | `GET` | `/api/info` | Hardware info (Firmware, Serial, Capabilities) |
 | `GET` | `/api/telemetry` | Real-time telemetry + Legrand / IEC states |
-| `POST` | `/api/charge/enable` | Force charge (`DOK`, bypasses restrictions) |
-| `POST` | `/api/charge/disable` | Secure stop (`FM2:1 + DNOK`) |
-| `POST` | `/api/charge/pause` | Natural pause (`SBNOK`) |
-| `POST` | `/api/charge/resume` | Natural resume (`SBOK`) |
+| | `POST` | `/api/charge` | Control charge state (nable, disable, pause, esume) |
 | `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`) |
 | `POST` | `/api/init` | Relaunch startup sequence |
 | `POST` | `/api/reset` | ATmega board hardware restart (`Reset`) |
@@ -69,7 +66,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
     "cp_voltage": 6,
 
 
-    "iec_state": "Charging_C",
+    "iec_state": "C",
     "charge_complete": false,
     "tic_mode": "9600"
   }
@@ -186,5 +183,6 @@ This API allows interfacing the Green'Up Link software with any standard home au
   ```json
   { "status": "success", "message": "Command sent" }
   ```
+
 
 

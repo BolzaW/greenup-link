@@ -540,15 +540,15 @@
         
         let stateLabel = iec_state || greenup_state;
         switch(iec_state) {
-            case 'Disconnected_A':
+            case 'A':
                 stateLabel = t('state.disconnected') + " (" + greenup_state + ")";
                 break;
 
-            case 'Connected_B':
+            case 'B':
                 stateLabel = t('state.connected') + " (" + greenup_state + ")";
                 break;
 
-            case 'Charging_C':
+            case 'C':
                 stateLabel = t('state.charging') + " (" + greenup_state + ")";
 
                 // Cable vert animé
@@ -573,8 +573,8 @@
                 carIcon.style.fill = 'url(#waveGradient)';
                 break;
 
-            case 'Error_E':
-            case 'Faulted_F':
+            case 'E':
+            case 'F':
                 stateLabel = `${t('state.fault')} (${iec_state} / ${greenup_state}) - ${t('state.code')}: ${error_code || t('state.unknown')}`;
                 // Borne, cable et voiture rouges
                 chargerBox.classList.add('border-rose-500/50', 'shadow-[0_0_30px_rgba(244,63,94,0.15)]');
@@ -593,7 +593,7 @@
         }
 
         // Cas particulier de la charge terminée physiquement (ex: L ou M post-charge)
-        if (isChargeComplete && (iec_state === 'Disconnected_A' || iec_state === 'Connected_B')) {
+        if (isChargeComplete && (iec_state === 'A' || iec_state === 'B')) {
             stateLabel = t('state.charge_complete') + " (" + greenup_state + ")";
             carIcon.classList.replace('text-slate-700', 'text-emerald-500');
             carIcon.classList.replace('text-sky-500', 'text-emerald-500');
@@ -746,6 +746,8 @@
 </script>
 </body>
 </html>
+
+
 
 
 

@@ -54,7 +54,7 @@ chargers:
     status:
       source: http
       uri: http://<GREENUP_IP>:3000/api/telemetry
-      jq: .evcc_status
+      jq: .iec_state
       timeout: 5s
       
     # 2. Real-time Power (Watts)
@@ -76,18 +76,14 @@ chargers:
     enabled:
       source: http
       uri: http://<GREENUP_IP>:3000/api/telemetry
-      jq: .evcc_enabled
+      jq: .charge_authorized
       timeout: 5s
       
     # 5. Start / Stop Action
-    # Clean HTTP setter with JSON body. EVCC replaces ${enable} with true/false
+    # Script setter with JSON body. EVCC replaces ${enable} with true/false
     enable:
-      source: http
-      uri: http://<GREENUP_IP>:3000/api/evcc/state
-      method: POST
-      headers:
-        - "Content-Type: application/json"
-      body: '{"enable": ${enable}}'
+      source: script
+      cmd: /bin/sh -c "if [ '${enable}' = 'true' ]; then curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"enable\"}' http://<GREENUP_IP>:3000/api/charge; else curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"disable\"}' http://<GREENUP_IP>:3000/api/charge; fi"
       
     # 6. Current Limiting Action (Amps)
     # Allows EVCC to modulate charging power (e.g., for solar surplus matching)
@@ -146,3 +142,4 @@ sudo systemctl start evcc
 ```
 
 You can now open the EVCC Web Interface by navigating to `http://<EVCC_IP>:7070` in your browser.
+

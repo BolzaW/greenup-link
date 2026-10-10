@@ -19,11 +19,7 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/info", get(get_info))
         .route("/api/telemetry", get(get_telemetry))
         .route("/api/current/:amps", post(set_current))
-        .route("/api/charge/enable", post(enable_charge))
-        .route("/api/charge/disable", post(disable_charge))
-        .route("/api/charge/pause", post(pause_charge))
-        .route("/api/charge/resume", post(resume_charge))
-        .route("/api/evcc/state", post(set_evcc_state))
+        .route("/api/charge", post(set_charge_state))
         .route("/api/init", post(init_sequence))
         .route("/api/reset", post(reset_board))
         .route("/api/tic/refresh", post(refresh_tic))
@@ -100,27 +96,7 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
     }
 }
 
-/// POST /api/charge/enable
-async fn enable_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "▶ Charge enable request (T2COK + FM2:0 + DOK)");
-    
-    // Safety check: ensure T2C is enabled
-    if let Err(_) = state.serial_tx.send(Command::AuthorizeType2(true)).await {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (T2COK)"})));
-    }
-    
-    // First we send FM2:0 to explicitly unblock the charge from external signal
-    if let Err(_) = state.serial_tx.send(Command::SetExternalSignal(false)).await {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (FM2:0)"})));
-    }
-    
-    // Then we send DOK to force the charge (overriding TIC limits)
-    if state.serial_tx.send(Command::SetDerogation(true)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge enabled (T2COK + FM2:0 + DOK)"})))
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (DOK)"})))
-    }
-}
+
 
 /// POST /api/charge/disable
 
@@ -149,42 +125,11 @@ async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
     }
 }
 
-/// POST /api/charge/disable
-async fn disable_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "⏹ Charge pause request (FM2:1 + DNOK)");
-    
-    // First we send FM2:1 to explicitly block the charge
-    if let Err(_) = state.serial_tx.send(Command::SetExternalSignal(true)).await {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (FM2:1)"})));
-    }
-    
-    // Then we send DNOK to release the derogation
-    if state.serial_tx.send(Command::SetDerogation(false)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge stopped (FM2:1 + DNOK)"})))
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (DNOK)"})))
-    }
-}
 
-/// POST /api/charge/pause
-async fn pause_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "⏸ Charge pause request (SBNOK)");
-    if state.serial_tx.send(Command::SetStartButton(false)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge paused (SBNOK)"})))
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
-    }
-}
 
-/// POST /api/charge/resume
-async fn resume_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "⏯ Charge resume request (SBOK)");
-    if state.serial_tx.send(Command::SetStartButton(true)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge resumed (SBOK)"})))
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
-    }
-}
+
+
+
 
 /// POST /api/command
 async fn send_raw_command(State(state): State<SharedState>, body: String) -> impl IntoResponse {
@@ -233,28 +178,49 @@ async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<Blu
     }
 }
 
-#[derive(serde::Deserialize)]
-struct EvccStatePayload { enable: bool }
 
-/// POST /api/evcc/state
-async fn set_evcc_state(State(state): State<SharedState>, Json(payload): Json<EvccStatePayload>) -> impl IntoResponse {
-    if payload.enable {
-        greenup_driver::logger::log("API", "▶ EVCC Enable request (T2COK + SBOK + FM2:0 + DOK)");
-        let _ = state.serial_tx.send(Command::AuthorizeType2(true)).await;
-        let _ = state.serial_tx.send(Command::SetStartButton(true)).await;
-        let _ = state.serial_tx.send(Command::SetExternalSignal(false)).await;
-        if state.serial_tx.send(Command::SetDerogation(true)).await.is_ok() {
-            (StatusCode::OK, Json(serde_json::json!({"status": "success"})))
-        } else {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Serial error"})))
-        }
-    } else {
-        greenup_driver::logger::log("API", "▶ EVCC Disable request (FM2:1 + DNOK)");
-        let _ = state.serial_tx.send(Command::SetExternalSignal(true)).await;
-        if state.serial_tx.send(Command::SetDerogation(false)).await.is_ok() {
-            (StatusCode::OK, Json(serde_json::json!({"status": "success"})))
-        } else {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "Serial error"})))
-        }
+
+#[derive(serde::Deserialize)]
+pub struct ChargeActionPayload { action: String }
+
+/// POST /api/charge
+async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<ChargeActionPayload>) -> impl IntoResponse {
+    match payload.action.as_str() {
+        "enable" => {
+            logger::log("API", "▶ Charge enable request (T2COK + FM2:0 + DOK)");
+            let _ = state.serial_tx.send(Command::AuthorizeType2(true)).await;
+            let _ = state.serial_tx.send(Command::SetExternalSignal(false)).await;
+            if state.serial_tx.send(Command::SetDerogation(true)).await.is_ok() {
+                (StatusCode::OK, Json(json!({"status": "success"})))
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
+            }
+        },
+        "disable" => {
+            logger::log("API", "▶ Charge disable request (FM2:1 + DNOK)");
+            let _ = state.serial_tx.send(Command::SetExternalSignal(true)).await;
+            if state.serial_tx.send(Command::SetDerogation(false)).await.is_ok() {
+                (StatusCode::OK, Json(json!({"status": "success"})))
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
+            }
+        },
+        "pause" => {
+            logger::log("API", "▶ Charge pause request (SBNOK)");
+            if state.serial_tx.send(Command::SetStartButton(false)).await.is_ok() {
+                (StatusCode::OK, Json(json!({"status": "success"})))
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
+            }
+        },
+        "resume" => {
+            logger::log("API", "▶ Charge resume request (SBOK)");
+            if state.serial_tx.send(Command::SetStartButton(true)).await.is_ok() {
+                (StatusCode::OK, Json(json!({"status": "success"})))
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
+            }
+        },
+        _ => (StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid action"})))
     }
 }
