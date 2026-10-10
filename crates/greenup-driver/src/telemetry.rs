@@ -7,11 +7,11 @@ pub struct Telemetry {
     pub power: f32, // Calculated: V * I
     pub energy: f32,
     pub frequency: f32,
-    pub greenup_state: String,
     pub error_code: String,
     pub limit_amps: u32,
     pub eliot_limit_amps: Option<u32>,
     pub cp_voltage: Option<u32>,
+    #[serde(skip)]
     pub t2c_enabled: Option<bool>,
     #[serde(skip)]
     pub fm2_state: Option<bool>,
@@ -19,6 +19,7 @@ pub struct Telemetry {
     pub d_state: Option<bool>,
     pub charge_authorized: bool,
     pub charge_paused: bool,
+    pub greenup_state: String,
     pub iec_state: Option<String>,
     pub charge_complete: bool,
     pub tic_mode: String, // "": unknown, "0": not present, "1200": historical, "9600": standard
@@ -65,3 +66,4 @@ pub struct BoardInfo {
     pub link_version: String,
     pub capabilities: Option<HardwareCapabilities>,
 }
+

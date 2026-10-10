@@ -89,10 +89,10 @@ This API allows interfacing the Green'Up Link software with any standard home au
 ### 3. Enable charge
 - **URL**: `/api/charge/enable`
 - **Method**: `POST`
-- **Description**: Authorizes and forces the charge. First sends `FM2:0` to unblock any external restrictions, then activates Derogation (`DOK`). This overrides the physical TIC (Peak/Off-Peak) and the external signal (`FM2`) limitations, while keeping the local hardware load-balancing (Délestage) active to protect the main breaker. The station will report `State:D` (Derogation Charge) which is equivalent to `State:C`.
+- **Description**: Authorizes and forces the charge. First sends `T2COK` to ensure the Type 2 port is active, then `FM2:0` to unblock any external restrictions, then activates Derogation (`DOK`). This overrides the physical TIC (Peak/Off-Peak) and the external signal (`FM2`) limitations, while keeping the local hardware load-balancing (Délestage) active to protect the main breaker. The station will report `State:D` (Derogation Charge) which is equivalent to `State:C`.
 - **Typical Response**:
   ```json
-  { "status": "success", "message": "Charge enabled (FM2:0 + DOK)" }
+  { "status": "success", "message": "Charge enabled (T2COK + FM2:0 + DOK)" }
   ```
 
 ### 4. Disable charge
