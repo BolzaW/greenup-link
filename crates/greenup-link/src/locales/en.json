@@ -28,7 +28,7 @@
     "charge_params": "Charge parameters",
     "current_limit": "Current Setpoint",
     "start": "START",
-    "stop": "STOP"
+    "stop": "STOP", "pause": "PAUSE", "resume": "RESUME"
   },
   "tic": {
     "standard": "Standard TIC (9600 baud)",

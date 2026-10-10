@@ -22,6 +22,7 @@ pub enum ProtocolEvent {
     CpVoltage(u32),
     T2CEnabled(bool),
     SbState(bool),
+    SbfState(bool),
     Energy(f32),
     Frequency(f32),
     CommandNotUnderstood(String),
@@ -101,6 +102,13 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         let v = line.replace("SB:", "");
         if v == "1" || v == "0" {
             ProtocolEvent::SbState(v == "1")
+        } else {
+            ProtocolEvent::Unknown(line.to_string())
+        }
+    } else if line.starts_with("SBF:") {
+        let v = line.replace("SBF:", "");
+        if v == "1" || v == "0" {
+            ProtocolEvent::SbfState(v == "1")
         } else {
             ProtocolEvent::Unknown(line.to_string())
         }
