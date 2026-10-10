@@ -21,6 +21,8 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/current/:amps", post(set_current))
         .route("/api/charge/start", post(start_charge))
         .route("/api/charge/stop", post(stop_charge))
+        .route("/api/charge/pause", post(pause_charge))
+        .route("/api/charge/resume", post(resume_charge))
         .route("/api/init", post(init_sequence))
         .route("/api/reset", post(reset_board))
         .route("/api/tic/refresh", post(refresh_tic))
@@ -148,6 +150,26 @@ async fn stop_charge(State(state): State<SharedState>) -> impl IntoResponse {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Charge stopped (FM2:1 + DNOK)"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (DNOK)"})))
+    }
+}
+
+/// POST /api/charge/pause
+async fn pause_charge(State(state): State<SharedState>) -> impl IntoResponse {
+    logger::log("API", "⏸ Charge pause request (SBNOK)");
+    if state.serial_tx.send(Command::SetStartButton(false)).await.is_ok() {
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge paused (SBNOK)"})))
+    } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
+    }
+}
+
+/// POST /api/charge/resume
+async fn resume_charge(State(state): State<SharedState>) -> impl IntoResponse {
+    logger::log("API", "⏯ Charge resume request (SBOK)");
+    if state.serial_tx.send(Command::SetStartButton(true)).await.is_ok() {
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge resumed (SBOK)"})))
+    } else {
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
     }
 }
 

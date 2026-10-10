@@ -8,8 +8,10 @@ This API allows interfacing the Green'Up Link software with any standard home au
 | :--- | :--- | :--- |
 | `GET` | `/api/info` | Hardware info (Firmware, Serial, Capabilities) |
 | `GET` | `/api/telemetry` | Real-time telemetry + Legrand / IEC states |
-| `POST` | `/api/charge/start` | Resume charge (`DOK`, forces charge bypassing restrictions) |
-| `POST` | `/api/charge/stop` | Pause charge (`FM2:1 + DNOK`, blocks charge securely) |
+| `POST` | `/api/charge/start` | Force charge (`DOK`, bypasses restrictions) |
+| `POST` | `/api/charge/stop` | Secure stop (`FM2:1 + DNOK`) |
+| `POST` | `/api/charge/pause` | Natural pause (`SBNOK`) |
+| `POST` | `/api/charge/resume` | Natural resume (`SBOK`) |
 | `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`) |
 | `POST` | `/api/init` | Relaunch startup sequence |
 | `POST` | `/api/reset` | ATmega board hardware restart (`Reset`) |
@@ -93,16 +95,34 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "Charge authorized (DOK)" }
   ```
 
-### 4. Pause charge
+### 4. Stop charge
 - **URL**: `/api/charge/stop`
 - **Method**: `POST`
-- **Description**: Securely pauses the charge. First sends `FM2:1` to firmly block the charge via the simulated external contact (preventing TIC from accidentally starting it during Off-Peak hours), then sends `DNOK` to release the derogation.
+- **Description**: Securely stops the charge. First sends `FM2:1` to firmly block the charge via the simulated external contact (preventing TIC from accidentally starting it during Off-Peak hours), then sends `DNOK` to release the derogation.
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Charge stopped (FM2:1 + DNOK)" }
   ```
 
-### 5. Modify current limit
+### 5. Pause charge (Natural)
+- **URL**: `/api/charge/pause`
+- **Method**: `POST`
+- **Description**: Pauses the charge naturally by simulating a press on the physical Stop button (`SBNOK`). This puts the station in a paused state (`SB:1`).
+- **Typical Response**:
+  ```json
+  { "status": "success", "message": "Charge paused (SBNOK)" }
+  ```
+
+### 6. Resume charge (Natural)
+- **URL**: `/api/charge/resume`
+- **Method**: `POST`
+- **Description**: Resumes the charge naturally by simulating a press on the physical Start button (`SBOK`), removing the paused state (`SB:0`).
+- **Typical Response**:
+  ```json
+  { "status": "success", "message": "Charge resumed (SBOK)" }
+  ```
+
+### 7. Modify current limit
 - **URL**: `/api/current/:amps`
 - **Method**: `POST`
 - **URL Parameter**: `:amps` (integer between **7** and **32**).
@@ -113,7 +133,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "Current limit set to 16A" }
   ```
 
-### 6. Relaunch initialization sequence
+### 8. Relaunch initialization sequence
 - **URL**: `/api/init`
 - **Method**: `POST`
 - **Description**: Replays the startup sequence: `RaspberryPiModeOK`, then querying information (`SoftwareVersion?`, `HardwareVersion?`, `SerialNumber?`, `Reference?`, `WeekYearProduction?`) and states (`State?`, `FM?`, `CC?`, `CCEl?`, `CP?`, `T2C?`, `SB?`, `E?`, `BT?`). The response is immediate, the sequence runs in the background.
@@ -123,7 +143,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "Initialization sequence started" }
   ```
 
-### 7. Restart power board
+### 9. Restart power board
 - **URL**: `/api/reset`
 - **Method**: `POST`
 - **Description**: Sends the `Reset` command to the ATmega board to force a hardware restart. Useful to unblock the station when it remains stuck in `State:A` while `T2C:1` and `CP:9` (vehicle plugged in): state `B` never arrives without a reset.
@@ -132,7 +152,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "ATmega board restart requested" }
   ```
 
-### 8. Start TIC (Linky) detection
+### 10. Start TIC (Linky) detection
 - **URL**: `/api/tic/refresh`
 - **Method**: `POST`
 - **Description**: Starts the customer tele-information (TIC) speed detection. The server sends `TICTM:1`, parses the return (e.g. `TICTestB:9600`), updates `tic_mode`, then disables test mode with `TICTM:0`.
@@ -145,7 +165,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "TIC detection started" }
   ```
 
-### 9. Enable / Disable Bluetooth
+### 11. Enable / Disable Bluetooth
 - **URL**: `/api/bluetooth`
 - **Method**: `POST`
 - **Body (JSON)**:
@@ -158,7 +178,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "Bluetooth disabled successfully" }
   ```
 
-### 10. Send raw command (Debug/Advanced)
+### 12. Send raw command (Debug/Advanced)
 - **URL**: `/api/command`
 - **Method**: `POST`
 - **Body (Plain text)**: the command to send (e.g., `State?`)

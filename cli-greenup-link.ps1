@@ -38,13 +38,19 @@ while ($true) {
                 $response | ConvertTo-Json -Depth 5 | Write-Host -ForegroundColor Green
             }
             "3" {
-                $state = Read-Host "Start (S) or Stop (T) the charge? (S/T)"
+                $state = Read-Host "Start (S) / Stop (T) / Pause (P) / Resume (R) the charge?"
                 if ($state -match "^[Ss]") {
                     Write-Host "`n[POST] $BASE_URL/api/charge/start..." -ForegroundColor Yellow
                     $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/start" -Method Post
-                } else {
+                } elseif ($state -match "^[Tt]") {
                     Write-Host "`n[POST] $BASE_URL/api/charge/stop..." -ForegroundColor Yellow
                     $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/stop" -Method Post
+                } elseif ($state -match "^[Pp]") {
+                    Write-Host "`n[POST] $BASE_URL/api/charge/pause..." -ForegroundColor Yellow
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/pause" -Method Post
+                } else {
+                    Write-Host "`n[POST] $BASE_URL/api/charge/resume..." -ForegroundColor Yellow
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/resume" -Method Post
                 }
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }

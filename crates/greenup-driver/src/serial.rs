@@ -193,6 +193,17 @@ fn update_iec_state(tel: &mut Telemetry) {
     }
 }
 
+fn update_charge_status(tel: &mut Telemetry) {
+    // Authorized to charge if FM2 is OFF (false) or D is ON (true)
+    let is_blocked_by_fm2 = tel.fm2_state.unwrap_or(false);
+    let is_forced_by_d = tel.d_state.unwrap_or(false);
+    tel.charge_authorized = !is_blocked_by_fm2 || is_forced_by_d;
+
+    // Paused if SB is ON (true). SBF acts as a complement but SB:1 means paused by user.
+    // The command SBNOK sets SB:1. SBOK sets SB:0. So SB:1 => paused.
+    tel.charge_paused = tel.sb_state.unwrap_or(false);
+}
+
 fn parse_incoming_line(line: &str, state: &SharedState) {
     logger::log("SERIAL_RX", line);
 
@@ -263,9 +274,11 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::ExternalSignal(enabled) => {
             logger::log("SERIAL", &format!("ℹ️ FM2 (External Signal) = {}", if enabled { "1 (BLOCK CHARGE)" } else { "0 (ALLOW CHARGE)" }));
+            if let Ok(mut tel) = state.telemetry.lock() { tel.fm2_state = Some(enabled); update_charge_status(&mut tel); }
         }
         ProtocolEvent::Derogation(enabled) => {
             logger::log("SERIAL", &format!("ℹ️ Front button derogation = {}", if enabled { "ON" } else { "OFF" }));
+            if let Ok(mut tel) = state.telemetry.lock() { tel.d_state = Some(enabled); update_charge_status(&mut tel); }
         }
                 ProtocolEvent::TicTestBaud(val) => {
             let mut should_stop_test = false;
@@ -333,7 +346,12 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut tel) = state.telemetry.lock() { tel.t2c_enabled = Some(v); update_iec_state(&mut tel); }
         }
         ProtocolEvent::SbState(v) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.sb_state = Some(v); update_iec_state(&mut tel); }
+            if let Ok(mut tel) = state.telemetry.lock() { tel.sb_state = Some(v); update_charge_status(&mut tel); }
+        }
+        ProtocolEvent::SbfState(v) => {
+            // SbfState acts as another toggle or flag, currently we just log it or you can store it if needed
+            // The pause logic relies on sb_state for now.
+            logger::log("SERIAL", &format!("ℹ️ SBF (Front Stop Button) = {}", v));
         }
         ProtocolEvent::Energy(e) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.energy = e; }
