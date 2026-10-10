@@ -1,7 +1,12 @@
 [workspace]
-members = ["crates/greenup-driver", "crates/greenup-everest",
+members = [
+    "crates/greenup-driver", 
+    "crates/greenup-everest",
     "crates/greenup-link",
     "crates/greenup-protocol"
 ]
 resolver = "2"
+
+[workspace.package]
+version = "0.2.0-dev"
 
