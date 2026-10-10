@@ -199,9 +199,12 @@ fn update_charge_status(tel: &mut Telemetry) {
     let is_forced_by_d = tel.d_state.unwrap_or(false);
     tel.charge_authorized = !is_blocked_by_fm2 || is_forced_by_d;
 
-    // Paused if SB is 0. 
+    // Paused if SB is 0 (software command) or SBF is 1 (physical button). 
     // The command SBNOK (pause) sets SB:0. SBOK (resume) sets SB:1. So SB:0 => paused.
-    tel.charge_paused = !tel.sb_state.unwrap_or(true);
+    let software_paused = !tel.sb_state.unwrap_or(true);
+    let hardware_paused = tel.sbf_state.unwrap_or(false);
+    
+    tel.charge_paused = software_paused || hardware_paused;
 }
 
 fn parse_incoming_line(line: &str, state: &SharedState) {
@@ -349,9 +352,8 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut tel) = state.telemetry.lock() { tel.sb_state = Some(v); update_charge_status(&mut tel); }
         }
         ProtocolEvent::SbfState(v) => {
-            // SbfState acts as another toggle or flag, currently we just log it or you can store it if needed
-            // The pause logic relies on sb_state for now.
             logger::log("SERIAL", &format!("ℹ️ SBF (Front Stop Button) = {}", v));
+            if let Ok(mut tel) = state.telemetry.lock() { tel.sbf_state = Some(v); update_charge_status(&mut tel); }
         }
         ProtocolEvent::Energy(e) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.energy = e; }
