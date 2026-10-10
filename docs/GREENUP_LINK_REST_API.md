@@ -33,13 +33,13 @@ This API allows interfacing the Green'Up Link software with any standard home au
     "software_version": "V01.18.10",
     "hardware_version": "V02.01.01",
     "serial_number": "015184",
-    "reference": "058001",
+
     "week_year_production": "42W22",
     "bluetooth_enabled": false,
     "link_version": "0.1.0",
     "capabilities": {
-      "name": "Green'up Premium 3,7–7,4 kW T2",
-      "reference": "058001",
+
+
       "phases": 1,
       "max_power_kw": 7.4,
       "max_current_amps": 32,
@@ -63,13 +63,12 @@ This API allows interfacing the Green'Up Link software with any standard home au
     "power": 3619.2,
     "energy": 12.5,
     "frequency": 50.0,
-    "greenup_state": "E",
     "error_code": "0000",
     "limit_amps": 16,
     "eliot_limit_amps": 16,
     "cp_voltage": 6,
-    "t2c_enabled": true,
-    "sb_state": true,
+
+
     "iec_state": "Charging_C",
     "charge_complete": false,
     "tic_mode": "9600"
@@ -78,7 +77,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   - `greenup_state`: Legrand proprietary state (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). See `docs/STATE_MACHINE.md`.
   - `iec_state`: Deduced standard IEC state: `Disconnected_A`, `Connected_B`, `Charging_C`, `Error_E`, `Faulted_F`. Returns `null` if it cannot be deduced.
   - `cp_voltage` (`CP?`): Control Pilot voltage in volts (`12`, `9`, `6`).
-  - `t2c_enabled` (`T2C?`) / `sb_state` (`SB?`): Software states of the T2 socket and the Start/Stop button.
+
   - `eliot_limit_amps` (`CCEl?`): Effective current limit applied by the station.
   - `tic_mode`: `"0"` (absent), `"1200"` (historical), `"9600"` (standard), `"detecting"` (detection in progress) or `""` (unknown, no detection started).
 
@@ -187,3 +186,5 @@ This API allows interfacing the Green'Up Link software with any standard home au
   ```json
   { "status": "success", "message": "Command sent" }
   ```
+
+
