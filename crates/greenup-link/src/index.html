@@ -136,7 +136,7 @@
             <div class="relative z-10 w-full flex flex-col mx-auto mt-2 mb-4">
                 
                 <!-- 12-Column Grid Layout for perfect responsive wire routing without overlapping -->
-                <div class="grid grid-cols-12 gap-y-4 w-full max-w-2xl mx-auto relative z-20">
+                <div class="grid grid-cols-12 gap-y-0 w-full max-w-2xl mx-auto relative z-20">
                     
                     <!-- TOP ROW -->
                     
@@ -183,8 +183,8 @@
                     <!-- BOTTOM ROW -->
 
                     <!-- Car (Cols 1-9) -->
-                    <div class="col-span-9 flex justify-end items-end relative z-20 pr-4 mt-8">
-                        <div class="w-full max-w-[400px] flex items-center justify-center relative transition-transform duration-500" id="carBox">
+                    <div class="col-span-9 flex justify-end items-end relative z-20 pr-4 mt-0">
+                        <div class="w-full max-w-[250px] md:max-w-[400px] flex items-center justify-end relative transition-transform duration-500" id="carBox">
                             <!-- Custom Sedan EV Side Profile SVG from user -->
                             <svg class="w-full h-full text-slate-700 transition-all duration-500 drop-shadow-2xl" id="carIcon" viewBox="0 0 1280 671" fill="currentColor">
                                 <defs>
@@ -206,7 +206,7 @@
                     </div>
 
                     <!-- Wire 3: Bottom Loop (Cols 10-12) -->
-                    <div class="col-span-3 relative z-10 pointer-events-none min-h-[100px] mt-8">
+                    <div class="col-span-3 relative z-10 pointer-events-none min-h-[100px] mt-0">
                         <svg class="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
                             <!-- Starts top-right, arcs to bottom-left (into the car's charge port) -->
                             <path d="M 100 0 C 100 65 50 65 -15 65" fill="none" stroke="#1e293b" stroke-width="5" stroke-linecap="round" vector-effect="non-scaling-stroke" />
