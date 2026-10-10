@@ -50,9 +50,6 @@ async fn main() {
     // Listen on all network interfaces (0.0.0.0) on port 8080
     let addr = "0.0.0.0:8080";
     greenup_driver::logger::log("SYS", &format!("🌍 Web server started: http://{}", addr));
-    greenup_driver::logger::log("SYS", "   - GET  /api/info, /api/telemetry");
-    greenup_driver::logger::log("SYS", "   - POST /api/charge/start, /api/charge/stop, /api/current/:amps");
-    greenup_driver::logger::log("SYS", "   - POST /api/tic/refresh, /api/bluetooth");
     
     let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind port 8080");
     axum::serve(listener, router).await.expect("Fatal web server error");

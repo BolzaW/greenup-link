@@ -21,8 +21,6 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/current/:amps", post(set_current))
         .route("/api/charge/start", post(start_charge))
         .route("/api/charge/stop", post(stop_charge))
-        .route("/api/t2/enable", post(enable_t2))
-        .route("/api/t2/disable", post(disable_t2))
         .route("/api/init", post(init_sequence))
         .route("/api/reset", post(reset_board))
         .route("/api/tic/refresh", post(refresh_tic))
@@ -101,9 +99,9 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
 
 /// POST /api/charge/start
 async fn start_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "▶ Charge resume request (SBOK)");
-    if state.serial_tx.send(Command::SetStartButton(true)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge authorized (Type 2)"})))
+    logger::log("API", "▶ Charge resume request (DOK)");
+    if state.serial_tx.send(Command::SetDerogation(true)).await.is_ok() {
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge authorized (DOK)"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
     }
@@ -124,14 +122,7 @@ async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
     (StatusCode::OK, Json(json!({"status": "success", "message": "Initialization sequence started"})))
 }
 
-async fn enable_t2(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "🔓 Activating Type 2 plug (T2COK)");
-    if state.serial_tx.send(Command::AuthorizeType2(true)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Plug activated (T2COK)"})))
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
-    }
-}
+
 
 /// POST /api/reset
 async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
@@ -143,22 +134,20 @@ async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
     }
 }
 
-/// POST /api/t2/disable
-async fn disable_t2(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "🔒 Deactivating Type 2 plug (T2CNOK)");
-    if state.serial_tx.send(Command::AuthorizeType2(false)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Plug deactivated (T2CNOK)"})))
-    } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
-    }
-}
-
+/// POST /api/charge/stop
 async fn stop_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "⏹ Charge pause request (SBNOK)");
-    if state.serial_tx.send(Command::SetStartButton(false)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge stopped (Type 2)"})))
+    logger::log("API", "⏹ Charge pause request (FM2:1 + DNOK)");
+    
+    // First we send FM2:1 to explicitly block the charge
+    if let Err(_) = state.serial_tx.send(Command::SetExternalSignal(true)).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (FM2:1)"})));
+    }
+    
+    // Then we send DNOK to release the derogation
+    if state.serial_tx.send(Command::SetDerogation(false)).await.is_ok() {
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge stopped (FM2:1 + DNOK)"})))
     } else {
-        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
+        (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (DNOK)"})))
     }
 }
 

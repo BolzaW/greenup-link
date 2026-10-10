@@ -97,6 +97,25 @@ The Legrand state machine is consistent and can be translated directly:
 *   `State:R` / `State:X` (Fault / Reboot) ➡️ **Error_E**
 *   `State:V` (Fatal power loss) ➡️ **Faulted_F** *(occurs with E:0012 right before shutdown)*
 
+### Managing State B and Charge Authorization
+
+By default, the ATmega automatically validates `State:B` to immediately transition to `State:C` (waiting for car / ready). To implement Smart Charging, we need to artificially block the state machine in `State:B` (car connected but charge not authorized) and control the transition to charge.
+
+Several methods were explored to block the state at `B`:
+- **`SBNOK` (Stop Button)**: Sending this command during the brief window where the state is `B` works, but it's a fragile timing-based mechanism and has the side effect of pushing the machine into `State:M` (Manual Stop).
+- **`FM2:1` (Simulated External Signal)**: This natively blocks the charge and maintains the machine cleanly in `State:B`. It is the healthiest and most standard behavior.
+- **TIC Signal (Peak Hours / HP)**: If present, the physical Linky TIC signal naturally blocks the charge in `State:B` during Peak Hours.
+
+While `FM2` seems like the perfect software lock, there is a catch: during Off-Peak (Heures Creuses), the physical TIC signal takes priority over `FM2`.
+
+**The Retained Solution: Derogation (`DOK`)**
+To cleanly solve this and gain absolute software control while keeping hardware safety active:
+- **To block the charge:** Send `FM2:1` (secures the lock in `State:B`) followed by `DNOK` (removes any derogation).
+- **To start the charge:** Send `DOK`. The Derogation cleanly bypasses both the `FM2:1` lock and the physical TIC (Peak/Off-Peak) restrictions, forcing the transition from `B` to Charge.
+- **Hardware Load-Balancing:** A massive advantage of this method is that the physical TIC load-balancing (Délestage) remains completely active even under Derogation, protecting the main breaker autonomously.
+
+*Note on Charge State:* When authorization is granted via `DOK`, the Legrand state machine enters **`State:D`** (Charge under Derogation) instead of the standard normal charge state (`State:E`). Our Level 2 mapping explicitly treats `State:D` as `Charging_C`.
+
 ## 4. Inconsistencies found in logs (Quirks)
 
 ### The A-B-C automatic sequence in FM:1
