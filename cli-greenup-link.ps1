@@ -12,7 +12,7 @@ function Show-Menu {
     Write-Host "=================================================" -ForegroundColor Cyan
     Write-Host "1. Get board info (Hardware/Firmware)"
     Write-Host "2. Get real-time telemetry"
-    Write-Host "3. Control charging (Start/Stop)"
+    Write-Host "3. Control charging (Enable/Disable/Pause/Resume)"
     Write-Host "4. Set current limit (7A - 32A)"
     Write-Host "5. Control Bluetooth module"
     Write-Host "6. Restart initialization sequence"
@@ -38,13 +38,13 @@ while ($true) {
                 $response | ConvertTo-Json -Depth 5 | Write-Host -ForegroundColor Green
             }
             "3" {
-                $state = Read-Host "Start (S) / Stop (T) / Pause (P) / Resume (R) the charge?"
-                if ($state -match "^[Ss]") {
-                    Write-Host "`n[POST] $BASE_URL/api/charge/start..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/start" -Method Post
-                } elseif ($state -match "^[Tt]") {
-                    Write-Host "`n[POST] $BASE_URL/api/charge/stop..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/stop" -Method Post
+                $state = Read-Host "Enable (E) / Disable (D) / Pause (P) / Resume (R) the charge?"
+                if ($state -match "^[Ee]") {
+                    Write-Host "`n[POST] $BASE_URL/api/charge/enable..." -ForegroundColor Yellow
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/enable" -Method Post
+                } elseif ($state -match "^[Dd]") {
+                    Write-Host "`n[POST] $BASE_URL/api/charge/disable..." -ForegroundColor Yellow
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/disable" -Method Post
                 } elseif ($state -match "^[Pp]") {
                     Write-Host "`n[POST] $BASE_URL/api/charge/pause..." -ForegroundColor Yellow
                     $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge/pause" -Method Post

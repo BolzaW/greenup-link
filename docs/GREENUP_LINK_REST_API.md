@@ -8,8 +8,8 @@ This API allows interfacing the Green'Up Link software with any standard home au
 | :--- | :--- | :--- |
 | `GET` | `/api/info` | Hardware info (Firmware, Serial, Capabilities) |
 | `GET` | `/api/telemetry` | Real-time telemetry + Legrand / IEC states |
-| `POST` | `/api/charge/start` | Force charge (`DOK`, bypasses restrictions) |
-| `POST` | `/api/charge/stop` | Secure stop (`FM2:1 + DNOK`) |
+| `POST` | `/api/charge/enable` | Force charge (`DOK`, bypasses restrictions) |
+| `POST` | `/api/charge/disable` | Secure stop (`FM2:1 + DNOK`) |
 | `POST` | `/api/charge/pause` | Natural pause (`SBNOK`) |
 | `POST` | `/api/charge/resume` | Natural resume (`SBOK`) |
 | `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`) |
@@ -86,22 +86,22 @@ This API allows interfacing the Green'Up Link software with any standard home au
 
 ## 🛠️ Action Endpoints (POST)
 
-### 3. Resume charge
-- **URL**: `/api/charge/start`
+### 3. Enable charge
+- **URL**: `/api/charge/enable`
 - **Method**: `POST`
-- **Description**: Authorizes and forces the charge by activating Derogation (sends `DOK`). This overrides the physical TIC (Peak/Off-Peak) and the external signal (`FM2`) limitations, while keeping the local hardware load-balancing (Délestage) active to protect the main breaker. The station will report `State:D` (Derogation Charge) which is equivalent to `State:C`.
+- **Description**: Authorizes and forces the charge. First sends `FM2:0` to unblock any external restrictions, then activates Derogation (`DOK`). This overrides the physical TIC (Peak/Off-Peak) and the external signal (`FM2`) limitations, while keeping the local hardware load-balancing (Délestage) active to protect the main breaker. The station will report `State:D` (Derogation Charge) which is equivalent to `State:C`.
 - **Typical Response**:
   ```json
-  { "status": "success", "message": "Charge authorized (DOK)" }
+  { "status": "success", "message": "Charge enabled (FM2:0 + DOK)" }
   ```
 
-### 4. Stop charge
-- **URL**: `/api/charge/stop`
+### 4. Disable charge
+- **URL**: `/api/charge/disable`
 - **Method**: `POST`
-- **Description**: Securely stops the charge. First sends `FM2:1` to firmly block the charge via the simulated external contact (preventing TIC from accidentally starting it during Off-Peak hours), then sends `DNOK` to release the derogation.
+- **Description**: Securely disables the charge. First sends `FM2:1` to firmly block the charge via the simulated external contact (preventing TIC from accidentally starting it during Off-Peak hours), then sends `DNOK` to release the derogation.
 - **Typical Response**:
   ```json
-  { "status": "success", "message": "Charge stopped (FM2:1 + DNOK)" }
+  { "status": "success", "message": "Charge disabled (FM2:1 + DNOK)" }
   ```
 
 ### 5. Pause charge (Natural)

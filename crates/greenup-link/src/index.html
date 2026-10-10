@@ -303,18 +303,15 @@
 
             <!-- Action Buttons -->
             <div class="flex gap-4 mt-auto">
-                <button id="btnStart" class="flex-1 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 font-bold py-4 rounded-xl transition-all active:scale-95 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    <span data-i18n="controls.start">DÉMARRER</span>
+                <button id="btnEnableDisable" class="flex-1 font-bold py-4 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none">
+                    <svg id="iconEnable" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    <svg id="iconDisable" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+                    <span id="lblEnableDisable" data-i18n="controls.disable">DÉSACTIVER</span>
                 </button>
                 <button id="btnPauseResume" class="flex-1 bg-amber-500 hover:bg-amber-400 text-amber-950 font-bold py-4 rounded-xl transition-all active:scale-95 shadow-[0_0_20px_rgba(245,158,11,0.2)] hover:shadow-[0_0_25px_rgba(245,158,11,0.4)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
                     <svg id="iconPause" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     <svg id="iconResume" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     <span id="lblPauseResume" data-i18n="controls.pause">PAUSE</span>
-                </button>
-                <button id="btnStop" class="flex-1 bg-rose-500 hover:bg-rose-400 text-white font-bold py-4 rounded-xl transition-all active:scale-95 shadow-[0_0_20px_rgba(244,63,94,0.2)] hover:shadow-[0_0_25px_rgba(244,63,94,0.4)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
-                    <span data-i18n="controls.stop">ARRÊTER</span>
                 </button>
             </div>
         </div>
@@ -332,8 +329,7 @@
     const valEnergy = document.getElementById('valEnergy');
     const slider = document.getElementById('currentSlider');
     const lblSlider = document.getElementById('lblSlider');
-    const btnStart = document.getElementById('btnStart');
-    const btnStop = document.getElementById('btnStop');
+    const btnEnableDisable = document.getElementById('btnEnableDisable');
     const controlsPanel = document.getElementById('controlsPanel');
     
     // Visualizer Elements
@@ -503,7 +499,7 @@
         }
     }
 
-    function updateVisuals(greenup_state, isChargeComplete, currentAmps, iec_state, error_code, charge_paused) {
+    function updateVisuals(greenup_state, isChargeComplete, currentAmps, iec_state, error_code, charge_paused, charge_authorized) {
         let amps = Math.max(0, Math.min(32, currentAmps || 0));
         let speed = (8.0 - (amps * (6.5 / 33.0))) / 6.0;
         speed = Math.max(0.1, speed);
@@ -513,6 +509,7 @@
             isChargeComplete === window.lastChargeComplete && 
             isActionPending === window.lastActionPending &&
             charge_paused === window.lastChargePaused &&
+            charge_authorized === window.lastChargeAuthorized &&
             typeof window.lastAppliedSpeed !== 'undefined' && Math.abs(speed - window.lastAppliedSpeed) < 0.05) {
             return;
         }
@@ -522,6 +519,7 @@
         window.lastIecState = iec_state;
         window.lastChargeComplete = isChargeComplete;
         window.lastChargePaused = charge_paused;
+        window.lastChargeAuthorized = charge_authorized;
         window.lastAppliedSpeed = speed;
 
         // Reset base styles
@@ -541,41 +539,18 @@
         chargerBox.classList.remove('animate-pulse');
         
         let stateLabel = iec_state || greenup_state;
-        let startEnabled = false;
-        let stopEnabled = false;
-        let pauseEnabled = false;
-
         switch(iec_state) {
             case 'Disconnected_A':
                 stateLabel = t('state.disconnected') + " (" + greenup_state + ")";
-                startEnabled = true;
                 break;
 
             case 'Connected_B':
                 stateLabel = t('state.connected') + " (" + greenup_state + ")";
-                startEnabled = true;
-                pauseEnabled = true;
-                // Cable vert (solide, pas d'animation)
-                if(animWire1) animWire1.classList.remove('opacity-0');
-                if(animWire2) animWire2.classList.remove('opacity-0');
-                
-                carIcon.classList.replace('text-slate-700', 'text-sky-500');
-                
-                if (greenup_state === 'B') {
-                    // Borne clignote en bleu
-                    chargerBox.classList.add('animate-pulse', 'border-sky-500/50', 'shadow-[0_0_15px_rgba(14,165,233,0.3)]');
-                    chargerIcon.classList.replace('text-slate-600', 'text-sky-400');
-                    chargerLed.classList.replace('bg-slate-700', 'bg-sky-400');
-                    carIcon.classList.remove('animate-pulse');
-                } else if (greenup_state === 'C') {
-                    // Voiture clignote en bleu
-                    carIcon.classList.add('animate-pulse');
-                }
                 break;
 
             case 'Charging_C':
                 stateLabel = t('state.charging') + " (" + greenup_state + ")";
-                stopEnabled = true; pauseEnabled = true;
+
                 // Cable vert animé
                 if(animWire1) {
                     animWire1.classList.remove('opacity-0');
@@ -624,28 +599,41 @@
             carIcon.classList.replace('text-sky-500', 'text-emerald-500');
         }
 
+        const btnEnableDisable = document.getElementById('btnEnableDisable');
+        const iconEnable = document.getElementById('iconEnable');
+        const iconDisable = document.getElementById('iconDisable');
+        const lblEnableDisable = document.getElementById('lblEnableDisable');
         const btnPauseResume = document.getElementById('btnPauseResume');
         const iconPause = document.getElementById('iconPause');
         const iconResume = document.getElementById('iconResume');
         const lblPauseResume = document.getElementById('lblPauseResume');
 
-        if (startEnabled && !isActionPending) {
-            btnStart.classList.remove('opacity-50', 'pointer-events-none');
-            btnStop.classList.add('opacity-50', 'pointer-events-none');
-        } else if (stopEnabled && !isActionPending) {
-            btnStart.classList.add('opacity-50', 'pointer-events-none');
-            btnStop.classList.remove('opacity-50', 'pointer-events-none');
-        } else if (!isActionPending) {
-            btnStart.classList.add('opacity-50', 'pointer-events-none');
-            btnStop.classList.add('opacity-50', 'pointer-events-none');
+        if (isActionPending) {
+            btnEnableDisable.classList.add('opacity-50', 'pointer-events-none');
+            btnPauseResume.classList.add('opacity-50', 'pointer-events-none');
+        } else {
+            btnEnableDisable.classList.remove('opacity-50', 'pointer-events-none');
+            btnPauseResume.classList.remove('opacity-50', 'pointer-events-none');
         }
 
-        if (pauseEnabled && !isActionPending) {
-            btnPauseResume.classList.remove('opacity-50', 'pointer-events-none');
-            btnPauseResume.disabled = false;
+        if (charge_authorized) {
+            iconEnable.classList.add('hidden');
+            iconDisable.classList.remove('hidden');
+            lblEnableDisable.innerText = t('controls.disable');
+            btnEnableDisable.classList.replace('bg-emerald-500', 'bg-rose-500');
+            btnEnableDisable.classList.replace('hover:bg-emerald-400', 'hover:bg-rose-400');
+            btnEnableDisable.classList.replace('text-emerald-950', 'text-white');
+            btnEnableDisable.classList.replace('shadow-[0_0_20px_rgba(16,185,129,0.2)]', 'shadow-[0_0_20px_rgba(244,63,94,0.2)]');
+            btnEnableDisable.classList.replace('hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]', 'hover:shadow-[0_0_25px_rgba(244,63,94,0.4)]');
         } else {
-            btnPauseResume.classList.add('opacity-50', 'pointer-events-none');
-            btnPauseResume.disabled = true;
+            iconDisable.classList.add('hidden');
+            iconEnable.classList.remove('hidden');
+            lblEnableDisable.innerText = t('controls.enable');
+            btnEnableDisable.classList.replace('bg-rose-500', 'bg-emerald-500');
+            btnEnableDisable.classList.replace('hover:bg-rose-400', 'hover:bg-emerald-400');
+            btnEnableDisable.classList.replace('text-white', 'text-emerald-950');
+            btnEnableDisable.classList.replace('shadow-[0_0_20px_rgba(244,63,94,0.2)]', 'shadow-[0_0_20px_rgba(16,185,129,0.2)]');
+            btnEnableDisable.classList.replace('hover:shadow-[0_0_25px_rgba(244,63,94,0.4)]', 'hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]');
         }
 
         if (charge_paused) {
@@ -670,10 +658,7 @@
 
         lblState.innerText = stateLabel;
         
-        if (!isActionPending) {
-            btnStart.disabled = !startEnabled;
-            btnStop.disabled = !stopEnabled;
-        }
+
     }
 
     let isDraggingSlider = false;
@@ -701,7 +686,7 @@
 
             lastReportedState = data.greenup_state;
             updateLinky(data.tic_mode);
-            updateVisuals(data.greenup_state, data.charge_complete, data.current, data.iec_state, data.error_code, data.charge_paused);
+            updateVisuals(data.greenup_state, data.charge_complete, data.current, data.iec_state, data.error_code, data.charge_paused, data.charge_authorized);
             
         } catch (err) {
             console.error("Erreur polling", err);
@@ -734,8 +719,8 @@
         }, 1000);
     }
 
-    btnStart.addEventListener('click', () => sendPostAction('/api/charge/start'));
-    btnStop.addEventListener('click', () => sendPostAction('/api/charge/stop'));
+    btnEnableDisable.addEventListener('click', () => sendPostAction(window.lastChargeAuthorized ? '/api/charge/disable' : '/api/charge/enable'));
+    
     btnPauseResume.addEventListener('click', () => sendPostAction(window.lastChargePaused ? '/api/charge/resume' : '/api/charge/pause'));
     
     slider.addEventListener('mousedown', () => isDraggingSlider = true);
@@ -761,3 +746,9 @@
 </script>
 </body>
 </html>
+
+
+
+
+
+

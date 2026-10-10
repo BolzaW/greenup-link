@@ -19,8 +19,8 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/info", get(get_info))
         .route("/api/telemetry", get(get_telemetry))
         .route("/api/current/:amps", post(set_current))
-        .route("/api/charge/start", post(start_charge))
-        .route("/api/charge/stop", post(stop_charge))
+        .route("/api/charge/enable", post(enable_charge))
+        .route("/api/charge/disable", post(disable_charge))
         .route("/api/charge/pause", post(pause_charge))
         .route("/api/charge/resume", post(resume_charge))
         .route("/api/init", post(init_sequence))
@@ -99,17 +99,20 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
     }
 }
 
-/// POST /api/charge/start
-async fn start_charge(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "▶ Charge resume request (DOK)");
+/// POST /api/charge/enable
+async fn enable_charge(State(state): State<SharedState>) -> impl IntoResponse {
+    logger::log("API", "▶ Charge enable request (FM2:0 + DOK)");
+    if let Err(_) = state.serial_tx.send(Command::SetExternalSignal(false)).await {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error (FM2:0)"})));
+    }
     if state.serial_tx.send(Command::SetDerogation(true)).await.is_ok() {
-        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge authorized (DOK)"})))
+        (StatusCode::OK, Json(json!({"status": "success", "message": "Charge enabled (FM2:0 + DOK)"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
     }
 }
 
-/// POST /api/charge/stop
+/// POST /api/charge/disable
 
 /// POST /api/t2/enable
 
@@ -136,8 +139,8 @@ async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
     }
 }
 
-/// POST /api/charge/stop
-async fn stop_charge(State(state): State<SharedState>) -> impl IntoResponse {
+/// POST /api/charge/disable
+async fn disable_charge(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("API", "⏹ Charge pause request (FM2:1 + DNOK)");
     
     // First we send FM2:1 to explicitly block the charge
