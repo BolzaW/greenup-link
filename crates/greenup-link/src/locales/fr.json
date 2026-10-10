@@ -27,8 +27,8 @@
   "controls": {
     "charge_params": "Paramètres de charge",
     "current_limit": "Consigne de Courant",
-    "start": "DÉMARRER",
-    "stop": "ARRÊTER", "pause": "PAUSE", "resume": "REPRENDRE"
+    "enable": "ACTIVER",
+    "disable": "DÉSACTIVER", "pause": "PAUSE", "resume": "REPRENDRE"
   },
   "tic": {
     "standard": "TIC Standard (9600 bauds)",
