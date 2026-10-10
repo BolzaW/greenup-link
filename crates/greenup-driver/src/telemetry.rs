@@ -13,7 +13,9 @@ pub struct Telemetry {
     pub eliot_limit_amps: Option<u32>,
     pub cp_voltage: Option<u32>,
     pub t2c_enabled: Option<bool>,
+    #[serde(skip)]
     pub fm2_state: Option<bool>,
+    #[serde(skip)]
     pub d_state: Option<bool>,
     pub charge_authorized: bool,
     pub charge_paused: bool,
