@@ -198,9 +198,6 @@ fn update_charge_status(tel: &mut Telemetry) {
     let is_blocked_by_fm2 = tel.fm2_state.unwrap_or(false);
     let is_forced_by_d = tel.d_state.unwrap_or(false);
     tel.charge_authorized = !is_blocked_by_fm2 || is_forced_by_d;
-
-    // Paused if the start button logical state (SB or SBF) is 0.
-    tel.charge_paused = !tel.sb_state.unwrap_or(true);
 }
 
 fn parse_incoming_line(line: &str, state: &SharedState) {
@@ -345,11 +342,11 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut tel) = state.telemetry.lock() { tel.t2c_enabled = Some(v); update_iec_state(&mut tel); }
         }
         ProtocolEvent::SbState(v) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.sb_state = Some(v); update_charge_status(&mut tel); }
+            if let Ok(mut tel) = state.telemetry.lock() { tel.charge_paused = !v; }
         }
         ProtocolEvent::SbfState(v) => {
             logger::log("SERIAL", &format!("ℹ️ SBF (Front Stop Button) = {}", v));
-            if let Ok(mut tel) = state.telemetry.lock() { tel.sb_state = Some(v); update_charge_status(&mut tel); }
+            if let Ok(mut tel) = state.telemetry.lock() { tel.charge_paused = !v; }
         }
         ProtocolEvent::Energy(e) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.energy = e; }
