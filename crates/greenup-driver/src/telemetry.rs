@@ -23,8 +23,6 @@ pub struct Telemetry {
     pub iec_state: Option<String>,
     pub charge_complete: bool,
     pub tic_mode: String, // "": unknown, "0": not present, "1200": historical, "9600": standard
-    pub evcc_status: Option<String>,
-    pub evcc_enabled: bool,
     #[serde(skip)]
     pub last_power_update: Option<std::time::Instant>,
 }
@@ -49,8 +47,6 @@ impl Default for Telemetry {
             charge_paused: false,
             iec_state: None,
             charge_complete: false,
-            evcc_status: None,
-            evcc_enabled: false,
             tic_mode: String::new(),
             last_power_update: None,
         }

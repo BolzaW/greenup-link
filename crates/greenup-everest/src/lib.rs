@@ -71,11 +71,11 @@ impl EverestAdapter {
             // Detect IEC state changes to generate BspEvents
             if current_iec != last_iec {
                 let evt = match current_iec.as_str() {
-                    "Disconnected_A" => Some(EverestBspEvent::Disconnected),
-                    "Connected_B" => Some(EverestBspEvent::Connected),
-                    "Charging_C" => Some(EverestBspEvent::Charging),
-                    "Error_E" => Some(EverestBspEvent::Error),
-                    "Faulted_F" => Some(EverestBspEvent::Faulted),
+                    "A" => Some(EverestBspEvent::Disconnected),
+                    "B" => Some(EverestBspEvent::Connected),
+                    "C" => Some(EverestBspEvent::Charging),
+                    "E" => Some(EverestBspEvent::Error),
+                    "F" => Some(EverestBspEvent::Faulted),
                     _ => None,
                 };
 

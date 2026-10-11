@@ -167,25 +167,24 @@ use crate::telemetry::Telemetry;
 
 fn update_iec_state(tel: &mut Telemetry) {
     if tel.greenup_state == "V" {
-        tel.iec_state = Some("Faulted_F".to_string());
+        tel.iec_state = Some("F".to_string());
     } else if tel.greenup_state == "R" || tel.greenup_state == "X" {
-        tel.iec_state = Some("Error_E".to_string());
+        tel.iec_state = Some("E".to_string());
     } else if let Some(false) = tel.t2c_enabled {
         match tel.cp_voltage {
-            Some(12) => tel.iec_state = Some("Disconnected_A".to_string()),
-            Some(9) => tel.iec_state = Some("Connected_B".to_string()),
-            Some(6) => tel.iec_state = Some("Charging_C".to_string()),
+            Some(12) => tel.iec_state = Some("A".to_string()),
+            Some(9) => tel.iec_state = Some("B".to_string()),
+            Some(6) => tel.iec_state = Some("C".to_string()),
             _ => {}
         }
     } else {
         match tel.greenup_state.as_str() {
-            "A" | "L" => tel.iec_state = Some("Disconnected_A".to_string()),
-            "B" | "C" | "I" | "W" | "M" => tel.iec_state = Some("Connected_B".to_string()),
-            "D" | "E" => tel.iec_state = Some("Charging_C".to_string()),
+            "A" | "L" => tel.iec_state = Some("A".to_string()),
+            "B" | "C" | "I" | "W" | "M" => tel.iec_state = Some("B".to_string()),
+            "D" | "E" => tel.iec_state = Some("C".to_string()),
             _ => {}
         }
     }
-    tel.evcc_status = tel.iec_state.as_ref().map(|s| s.chars().last().unwrap_or('A').to_string());
 }
 
 pub fn update_charge_status(tel: &mut Telemetry) {
