@@ -361,13 +361,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::SbfState(v) => {
             logger::log("SERIAL", &format!("ℹ️ SBF (Front Stop Button) = {}", v));
-            if let Ok(mut tel) = state.telemetry.lock() {
-                if tel.greenup_state == "A" {
-                    tel.charge_paused = false;
-                } else {
-                    tel.charge_paused = !v;
-                }
-            }
+            if let Ok(mut tel) = state.telemetry.lock() { tel.charge_paused = !v; }
         }
         ProtocolEvent::Energy(e) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.energy = e; }
