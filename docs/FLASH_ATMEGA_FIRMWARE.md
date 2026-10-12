@@ -272,9 +272,9 @@ python3 scripts/calc_update_auth.py
 > ### ⚠️ OFFICIAL LEGRAND KITCOM INCOMPATIBILITY
 > This custom firmware is designed exclusively for use with **`greenup-link`**.
 >
-> It is **NOT compatible with the official Legrand KitCom software suite** (`SoftwareCommunication.jar`). Due to rigid string parsing in the factory Java software (`inputLine.split(":")[1]`), the custom `MacAdr:TIC:...` serial responses will corrupt internal communication state files (such as line 43 of `chargePointCom.txt`).
+> It is **NOT compatible with the official Legrand KitCom software**: KitCom expects a fixed 12-character MAC string from the `MacAdr?` query and cannot parse this format.
 >
-> If you ever wish to use the official Legrand KitCom software suite or official Legrand mobile apps again, you **must reflash an official Legrand firmware release** (such as official `V01.17.77` or `V01.18.10`).
+> If you ever wish to use the official Legrand KitCom software again, you **must reflash an official Legrand firmware release** (such as official `V01.17.77` or `V01.18.10`).
 
 ### 5.1. What is the Green'Up Linky TIC Firmware?
 
