@@ -18,6 +18,7 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/locales/en.json", get(serve_en_json))
         .route("/api/info", get(get_info))
         .route("/api/telemetry", get(get_telemetry))
+        .route("/api/tic", get(get_custom_tic))
         .route("/api/current/:amps", post(set_current))
         .route("/api/charge", post(set_charge_state))
         .route("/api/init", post(init_sequence))
@@ -60,6 +61,13 @@ async fn get_telemetry(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("TRACE", "📡 GET request /api/telemetry");
     let telemetry = state.telemetry.lock().unwrap().clone();
     Json(telemetry)
+}
+
+/// GET /api/tic
+async fn get_custom_tic(State(state): State<SharedState>) -> impl IntoResponse {
+    logger::log("TRACE", "📡 GET request /api/tic");
+    let custom_tic = state.custom_tic.lock().unwrap().clone();
+    Json(custom_tic)
 }
 
 /// POST /api/current/:amps

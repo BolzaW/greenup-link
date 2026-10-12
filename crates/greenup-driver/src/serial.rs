@@ -235,6 +235,9 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::BluetoothState(enabled) => {
             if let Ok(mut info) = state.info.lock() { info.bluetooth_enabled = Some(enabled); }
         }
+        ProtocolEvent::MacAddress(val) => {
+            handle_mac_address(&val, state);
+        }
         ProtocolEvent::StateChange(state_val) => {
             if state_val == "V" {
                 logger::log("SYS", "!!! CRITICAL ALERT: POWER OUTAGE DETECTED (State:V) - IMMINENT SHUTDOWN !!!");
@@ -360,3 +363,40 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
 }
 
 
+
+pub fn handle_mac_address(val: &str, state: &SharedState) {
+    if val.starts_with("TIC:") {
+        logger::log("SERIAL", &format!("🔌 TIC custom frame received: {}", val));
+        
+        let parsed = crate::custom_tic::CustomTicTelemetry::parse(val);
+        if let Ok(mut tic) = state.custom_tic.lock() {
+            *tic = parsed;
+        }
+
+        // Trigger special 10s routine if not already started
+        if !state.custom_tic_active.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            logger::log("SYS", "✨ Custom Linky TIC firmware detected (MacAdr:TIC)! Starting 10s periodic polling routine");
+            
+            let state_clone = state.clone();
+            state.tokio_handle.spawn(async move {
+                let mut interval = tokio::time::interval(Duration::from_secs(10));
+                // Discard first immediate tick
+                interval.tick().await;
+
+                loop {
+                    interval.tick().await;
+                    logger::log("DEBUG", "🔄 Polling MacAdr? for custom TIC telemetry (10s)");
+                    if state_clone.serial_tx.send(Command::GetMacAddress).await.is_err() {
+                        logger::log("SERIAL", "Custom TIC polling routine stopped: serial channel closed");
+                        break;
+                    }
+                }
+            });
+        }
+    } else {
+        logger::log("SERIAL", &format!("MAC address detected: {}", val));
+        if let Ok(mut info) = state.info.lock() {
+            info.mac_address = Some(val.to_string());
+        }
+    }
+}

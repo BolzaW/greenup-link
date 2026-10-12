@@ -1,8 +1,8 @@
 use rumqttc::{AsyncClient, MqttOptions, QoS, Event, Incoming};
 use std::time::Duration;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::mpsc;
-use greenup_driver::state::{AppState, BoardInfo, Telemetry, TicDetectionState};
+use greenup_driver::state::AppState;
 use greenup_driver::logger;
 use greenup_everest::{EverestAdapter, EverestBspEvent};
 
@@ -10,12 +10,7 @@ use greenup_everest::{EverestAdapter, EverestBspEvent};
 async fn main() {
     // 1. Initialize the serial driver (borrowed from greenup-link)
     let (serial_tx, serial_rx) = mpsc::channel(32);
-    let driver_state = Arc::new(AppState {
-        telemetry: Mutex::new(Telemetry::default()),
-        info: Mutex::new(BoardInfo::default()),
-        serial_tx,
-        tic_detection: Mutex::new(TicDetectionState::default()),
-    });
+    let driver_state = Arc::new(AppState::new(serial_tx));
 
     let state_for_serial = driver_state.clone();
     std::thread::spawn(move || {

@@ -27,6 +27,9 @@ async fn main() {
         info: Mutex::new(initial_info),
         serial_tx: tx,
         tic_detection: Mutex::new(greenup_driver::state::TicDetectionState::default()),
+        custom_tic: Mutex::new(greenup_driver::state::CustomTicTelemetry::default()),
+        custom_tic_active: std::sync::atomic::AtomicBool::new(false),
+        tokio_handle: tokio::runtime::Handle::current(),
     });
 
     // 1. Start the Serial communication daemon
