@@ -3,17 +3,29 @@
 Lightweight mock server to preview and test the Green'Up Link Web UI locally on Windows (or any OS)
 without needing a physical serial port or Raspberry Pi.
 
+Supports Live Logs streaming (SSE) and raw command simulation.
+
 Usage:
     python scripts/mock_server.py
     Then open http://localhost:8080 in your browser.
 """
 
+import datetime
 import http.server
 import json
 import os
 import pathlib
 import sys
+import time
 import webbrowser
+
+# Ensure UTF-8 output on Windows consoles
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
 
 PORT = 8080
 BASE_DIR = pathlib.Path(__file__).parent.parent / "crates" / "greenup-link" / "src"
@@ -35,9 +47,43 @@ state = {
     "bluetooth_enabled": True,
 }
 
+mock_logs = []
+log_counter = 0
+
+def add_mock_log(category, level, message):
+    global log_counter
+    log_counter += 1
+    now = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    entry = {
+        "id": log_counter,
+        "timestamp": now,
+        "category": category,
+        "level": level,
+        "message": message,
+    }
+    mock_logs.append(entry)
+    if len(mock_logs) > 500:
+        mock_logs.pop(0)
+    return entry
+
+# Seed initial logs
+add_mock_log("SYS", "INFO", "=== GreenUp Link started in Mock Mode ===")
+add_mock_log("SERIAL", "INFO", "Serial port opened: /dev/mock_ttyUSB0 @ 115200 baud")
+add_mock_log("SERIAL_TX", "INFO", "RPIMODEOK")
+add_mock_log("SERIAL_RX", "INFO", "RPIMODE:OK")
+add_mock_log("SERIAL_TX", "INFO", "!GET_REF")
+add_mock_log("SERIAL_RX", "INFO", "Ref:059001")
+add_mock_log("SERIAL_TX", "INFO", "!GET_SW_VER")
+add_mock_log("SERIAL_RX", "INFO", "SwVer:17.77")
+add_mock_log("SERIAL_TX", "INFO", "!GET_STATE")
+add_mock_log("SERIAL_RX", "INFO", "State:E")
+add_mock_log("API", "INFO", "🔍 System ready, telemetry streaming active")
+
 class MockHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
-        # Clean logging
+        # Mute high frequency polling logs
+        if self.path in ("/api/telemetry", "/api/logs/stream"):
+            return
         print(f"[{self.command}] {self.path}")
 
     def do_GET(self):
@@ -54,10 +100,9 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             filename = url[len("/locales/"):]
             self.serve_file(BASE_DIR / "locales" / filename, "application/json; charset=utf-8")
         elif url == "/api/telemetry":
-            # Add small random noise to voltage/current if charging
             if state["iec_state"] == "C" and not state["charge_paused"]:
                 state["power"] = state["voltage"] * state["current"]
-                state["energy"] += (state["power"] * 2.0 / 3600.0)  # increment energy slightly
+                state["energy"] += (state["power"] * 2.0 / 3600.0)
             self.send_json(state)
         elif url == "/api/info":
             info = {
@@ -72,8 +117,49 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             self.send_json(info)
         elif url == "/api/tic":
             self.send_json({"mode": "HISTORIQUE", "iinst": 2, "isousc": 30, "ptec": "HC"})
+        elif url == "/api/logs":
+            self.send_json(mock_logs)
+        elif url == "/api/logs/stream":
+            self.handle_sse_stream()
         else:
             self.send_error(404, "Not Found")
+
+    def handle_sse_stream(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        last_sent_id = mock_logs[-1]["id"] if mock_logs else 0
+        counter = 0
+
+        try:
+            while True:
+                # Check for new logs in mock_logs
+                for entry in list(mock_logs):
+                    if entry["id"] > last_sent_id:
+                        data = json.dumps(entry)
+                        self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                        self.wfile.flush()
+                        last_sent_id = entry["id"]
+
+                # Periodically generate mock serial telemetry log every ~4s
+                counter += 1
+                if counter % 8 == 0:
+                    v = round(state["voltage"] + (0.3 if counter % 16 == 0 else -0.2), 1)
+                    i = round(state["current"], 1)
+                    msg = f"I:{i} V:{v} State:{state['greenup_state']}"
+                    entry = add_mock_log("SERIAL_RX", "INFO", msg)
+                    data = json.dumps(entry)
+                    self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                    last_sent_id = entry["id"]
+
+                time.sleep(0.5)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def do_POST(self):
         url = self.path.split("?")[0]
@@ -86,7 +172,9 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 state["eliot_limit_amps"] = amps
                 state["current"] = float(amps) if state["charge_authorized"] and not state["charge_paused"] else 0.0
                 state["power"] = state["voltage"] * state["current"]
-                print(f"⚡ Setpoint changed to: {amps}A")
+                add_mock_log("API", "INFO", f"⚡ Setpoint changed to: {amps}A")
+                add_mock_log("SERIAL_TX", "INFO", f"FM1:{amps}")
+                add_mock_log("SERIAL_RX", "INFO", f"FM1:{amps}:OK")
                 self.send_json({"status": "success", "message": f"Current limit set to {amps}A"})
             except ValueError:
                 self.send_error(400, "Invalid amps value")
@@ -99,22 +187,33 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                     state["iec_state"] = "C"
                     state["greenup_state"] = "E"
                     state["current"] = float(state["eliot_limit_amps"])
+                    add_mock_log("API", "INFO", "⚡ Charge enable requested (T2COK + FM2:0 + DOK)")
+                    add_mock_log("SERIAL_TX", "INFO", "T2COK")
+                    add_mock_log("SERIAL_RX", "INFO", "T2C:OK")
                 elif action == "disable":
                     state["charge_authorized"] = False
                     state["iec_state"] = "B"
                     state["greenup_state"] = "B"
                     state["current"] = 0.0
+                    add_mock_log("API", "INFO", "🛑 Charge disable requested (FM2:1 + DNOK)")
+                    add_mock_log("SERIAL_TX", "INFO", "DNOK")
+                    add_mock_log("SERIAL_RX", "INFO", "D:NOK")
                 elif action == "pause":
                     state["charge_paused"] = True
                     state["iec_state"] = "B"
                     state["greenup_state"] = "M"
                     state["current"] = 0.0
+                    add_mock_log("API", "INFO", "⏸ Charge pause requested (SBNOK)")
+                    add_mock_log("SERIAL_TX", "INFO", "SBNOK")
+                    add_mock_log("SERIAL_RX", "INFO", "SB:NOK")
                 elif action == "resume":
                     state["charge_paused"] = False
                     state["iec_state"] = "C"
                     state["greenup_state"] = "E"
                     state["current"] = float(state["eliot_limit_amps"])
-                print(f"🔄 Charge action applied: {action}")
+                    add_mock_log("API", "INFO", "▶ Charge resume requested (SBOK)")
+                    add_mock_log("SERIAL_TX", "INFO", "SBOK")
+                    add_mock_log("SERIAL_RX", "INFO", "SB:OK")
                 self.send_json({"status": "success"})
             except Exception as e:
                 self.send_error(400, str(e))
@@ -122,13 +221,31 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             try:
                 data = json.loads(body) if body else {}
                 state["bluetooth_enabled"] = data.get("enabled", True)
-                print(f"📡 Bluetooth toggled: {state['bluetooth_enabled']}")
+                add_mock_log("API", "INFO", f"🔵 Bluetooth toggled: {state['bluetooth_enabled']}")
                 self.send_json({"status": "success"})
             except Exception as e:
                 self.send_error(400, str(e))
         elif url == "/api/tic/refresh":
-            print("🔄 TIC refresh requested")
+            add_mock_log("API", "INFO", "🔄 TIC refresh requested (TICTM:1)")
+            add_mock_log("SERIAL_TX", "INFO", "TICTM:1")
+            add_mock_log("SERIAL_RX", "INFO", "TICTM:1:OK")
             self.send_json({"status": "success"})
+        elif url == "/api/command":
+            cmd = body.strip()
+            add_mock_log("API", "INFO", f"🔧 Raw command received: {cmd}")
+            add_mock_log("SERIAL_TX", "INFO", cmd)
+            # Simulated responses
+            if cmd == "!GET_STATE":
+                add_mock_log("SERIAL_RX", "INFO", f"State:{state['greenup_state']}")
+            elif cmd == "!GET_ALL":
+                add_mock_log("SERIAL_RX", "INFO", f"State:{state['greenup_state']} I:{state['current']} V:{state['voltage']}")
+            elif cmd.startswith("FM1:"):
+                add_mock_log("SERIAL_RX", "INFO", f"{cmd}:OK")
+            elif cmd == "RPIMODEOK":
+                add_mock_log("SERIAL_RX", "INFO", "RPIMODE:OK")
+            else:
+                add_mock_log("SERIAL_RX", "INFO", "ACK")
+            self.send_json({"status": "success", "message": "Command sent"})
         else:
             self.send_json({"status": "success"})
 
@@ -153,18 +270,12 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(payload)
 
 def main():
-    server = http.server.HTTPServer(("127.0.0.1", PORT), MockHandler)
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), MockHandler)
     url = f"http://localhost:{PORT}"
     print(f"=======================================================")
     print(f"🚀 Green'Up Link Mock UI Server running at: {url}")
     print(f"Press Ctrl+C to stop.")
     print(f"=======================================================")
-    
-    # Try opening the default browser automatically
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
 
     try:
         server.serve_forever()

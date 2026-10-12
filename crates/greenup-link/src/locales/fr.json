@@ -1,7 +1,23 @@
 {
   "header": {
     "subtitle": "IHM",
-    "ble_module": "Module BLE"
+    "ble_module": "Module BLE",
+    "debug": "Debug"
+  },
+  "console": {
+    "title": "Console Live",
+    "all": "TOUT",
+    "serial": "SÉRIE",
+    "api": "API",
+    "sys": "SYS",
+    "info": "INFO",
+    "debug": "DEBUG",
+    "search_placeholder": "Filtrer...",
+    "prompt_placeholder": "Commande raw (ex: !GET_STATE, FM2:0, T2COK...)",
+    "send": "Envoyer",
+    "clear_title": "Effacer la console",
+    "pause_title": "Mettre en pause le défilement",
+    "hint": "Entrée pour envoyer • ↑↓ Historique"
   },
   "visualizer": {
     "force_tic_refresh": "Forcer l'actualisation du mode TIC",

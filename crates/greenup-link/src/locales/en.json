@@ -1,7 +1,23 @@
 {
   "header": {
     "subtitle": "GUI",
-    "ble_module": "BLE Module"
+    "ble_module": "BLE Module",
+    "debug": "Debug"
+  },
+  "console": {
+    "title": "Live Console",
+    "all": "ALL",
+    "serial": "SERIAL",
+    "api": "API",
+    "sys": "SYS",
+    "info": "INFO",
+    "debug": "DEBUG",
+    "search_placeholder": "Filter logs...",
+    "prompt_placeholder": "Raw command (e.g. !GET_STATE, FM2:0, T2COK...)",
+    "send": "Send",
+    "clear_title": "Clear console",
+    "pause_title": "Pause auto-scroll",
+    "hint": "Enter to send • ↑↓ History"
   },
   "visualizer": {
     "force_tic_refresh": "Force TIC mode refresh",

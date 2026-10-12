@@ -1,10 +1,16 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::{Html, IntoResponse},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Html, IntoResponse,
+    },
     routing::{get, post},
     Json, Router,
 };
+use std::convert::Infallible;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 use serde_json::json;
 use greenup_driver::logger;
 use greenup_driver::SharedState;
@@ -23,10 +29,13 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/js/controls.js", get(serve_js_controls))
         .route("/js/visuals.js", get(serve_js_visuals))
         .route("/js/api.js", get(serve_js_api))
+        .route("/js/console.js", get(serve_js_console))
         .route("/js/main.js", get(serve_js_main))
         .route("/api/info", get(get_info))
         .route("/api/telemetry", get(get_telemetry))
         .route("/api/tic", get(get_custom_tic))
+        .route("/api/logs", get(get_logs))
+        .route("/api/logs/stream", get(stream_logs))
         .route("/api/current/:amps", post(set_current))
         .route("/api/charge", post(set_charge_state))
         .route("/api/init", post(init_sequence))
@@ -95,6 +104,33 @@ async fn serve_js_api() -> impl IntoResponse {
 /// GET /js/main.js
 async fn serve_js_main() -> impl IntoResponse {
     ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/main.js"))
+}
+
+/// GET /js/console.js
+async fn serve_js_console() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/console.js"))
+}
+
+/// GET /api/logs
+async fn get_logs() -> impl IntoResponse {
+    Json(logger::get_recent_logs())
+}
+
+/// GET /api/logs/stream (SSE)
+async fn stream_logs() -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
+    let rx = logger::subscribe();
+    let stream = BroadcastStream::new(rx).filter_map(|res| match res {
+        Ok(entry) => {
+            if let Ok(data) = serde_json::to_string(&entry) {
+                Some(Ok(Event::default().data(data)))
+            } else {
+                None
+            }
+        }
+        Err(_) => None,
+    });
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 /// GET /api/info

@@ -5,5 +5,6 @@ document.getElementById('langSelector').value = savedLang;
 setLanguage(savedLang).then(() => {
     fetchTelemetry();
     fetchInfo();
+    initConsole();
 });
 setInterval(fetchTelemetry, 2000);
