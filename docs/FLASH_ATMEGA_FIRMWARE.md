@@ -1,85 +1,94 @@
-# Guide de Flashage Firmware ATmega2560 (Officiel & Custom)
+# ATmega2560 Power Board Firmware Flashing Guide (Official & Custom)
 
-Ce document décrit la procédure complète, universelle et éprouvée pour flasher un firmware officiel ou personnalisé sur la carte électronique de puissance (microcontrôleur Microchip/Atmel ATmega2560) d'une borne de recharge **Legrand Green'Up Premium**.
+> [!CAUTION]
+> ### ⚠️ PROCEED AT YOUR OWN RISK - HIGH RISK OF PERMANENT BRICKING
+>
+> Flashing firmware onto the ATmega2560 microcontroller of the Legrand Green'Up Premium charging station is an **advanced, high-risk hardware operation**.
+>
+> * **Irreversible Damage Risk**: If any interruption, power loss, USB serial disconnect, communication timeout, or incorrect file upload occurs during the flashing process, the charging station **may become completely unusable and permanently bricked (HS)**.
+> * **No Rollback Procedure**: **No rollback or unbrick procedure is currently identified, documented, or supported**. The board does not expose a standard ISP programming header or hardware DTR auto-reset circuit without specialized laboratory hardware.
+> * **No Warranty or Liability**: This guide, procedures, and accompanying scripts are provided for educational and research purposes only, "AS IS", without warranty of any kind. Neither the authors nor contributors shall be held liable for any damages, hardware failure, fire hazards, or personal injury resulting from following these instructions.
+>
+> **Do not attempt this procedure unless you fully understand the risks and accept total personal responsibility for the outcome.**
 
 ---
 
-## 1. Principe de Fonctionnement & Déverrouillage Bootloader
+## 1. Operating Principle & Bootloader Unlock Mechanism
 
-Sur les bornes Legrand Green'Up Premium, la ligne DTR du convertisseur USB-Série n'est **pas reliée** à la broche RESET du microcontrôleur ATmega2560 (sécurité industrielle anti-reboot inopiné en cours de charge).
+On Legrand Green'Up Premium charging stations, the DTR control line of the USB-to-Serial interface is **physically disconnected** from the RESET pin of the Microchip/Atmel ATmega2560 microcontroller. This is an industrial safety design to prevent accidental MCU reboots or relay cut-offs during high-current EV charging sessions.
 
-Pour forcer le microcontrôleur à basculer dans son bootloader série (**Wiring / STK500v2** à **115 200 bauds**), Legrand a implémenté un mécanisme de **Challenge-Response** :
+To force the microcontroller into its serial bootloader (**Wiring / STK500v2** protocol at **115,200 baud**), Legrand implemented a software **Challenge-Response** handshake:
 
-1. L'application envoie une commande série `UpdateAuth:<CRC16-Modbus>` calculée à partir des 5 identifiants uniques de la borne (`Date`, `SW`, `SN`, `HW`, `Ref`).
-2. L'ATmega valide le code, répond `UpdateCodeOK\r\n` et arme un drapeau persistant en mémoire vive (`RAM[0x0ACC] = 1`).
-3. Dès que l'outil de flash `avrdude` ouvre le port et transmet son premier octet de synchronisation `0x1B`, l'ATmega détecte le drapeau armé et déclenche un **Watchdog Reset** immédiat (`0x0EEC4`).
-4. L'ATmega redémarre instantanément dans le bootloader STK500v2 et `avrdude` prend la main pour programmer la Flash.
+1. The supervisor software sends a serial command `UpdateAuth:<CRC16-Modbus>` computed from 5 unique factory hardware identifiers stored on the board (`Date`, `SW`, `SN`, `HW`, `Ref`).
+2. The ATmega verifies the checksum, replies with `UpdateCodeOK\r\n`, and sets a persistent volatile flag in SRAM (`RAM[0x0ACC] = 1`).
+3. As soon as the flashing utility `avrdude` opens `/dev/ttyUSB0` and transmits its initial synchronization byte (`0x1B`), the ATmega detects the armed flag and immediately triggers a hardware **Watchdog Reset** (`0x0EEC4`).
+4. The ATmega reboots instantly into the STK500v2 Wiring bootloader, allowing `avrdude` to take control of programming the on-chip Flash memory.
 
 > [!WARNING]
-> **Le code `UpdateAuth` est unique pour CHAQUE borne !**
-> Il ne s'agit pas d'un mot de passe universel constructeur. Il est recalculé dynamiquement par la carte à chaque requête en croisant ses identifiants matériels et son numéro de version logicielle active.
+> **The `UpdateAuth` unlock code is unique to EACH individual station!**
+> It is NOT a universal manufacturer backdoor. It is dynamically verified by the microcontroller on every request by cross-referencing its 5 hardware parameters and currently active software version.
 
 ---
 
-## 2. Procédure Pas à Pas (Simple et Rapide)
+## 2. Step-by-Step Flashing Procedure
 
-### Étape 1 : Calculer le code et armer le bootloader (`UpdateAuth`)
+### Step 1: Compute Code and Arm Bootloader (`UpdateAuth`)
 
-Tant que `greenup-link` (ou votre superviseur) est actif sur `/dev/ttyUSB0` :
+While `greenup-link` (or your serial supervisor) is actively communicating on `/dev/ttyUSB0`:
 
-1. **Option A (100% automatique avec le script) :**
+1. **Option A (100% Automated via REST API):**
    ```bash
    python3 scripts/calc_update_auth.py --api http://localhost:8080 --arm
    ```
-   *Le script interroge la borne via l'API REST locale, extrait les 5 paramètres, calcule le CRC16 et envoie la commande `UpdateAuth` à la carte.*
+   *The script automatically queries the station via the local REST API, parses the 5 parameters, computes the CRC16-Modbus code, and sends the `UpdateAuth` unlock command.*
 
-2. **Option B (Manuelle via curl) :**
-   Calculez votre code via le script :
+2. **Option B (Manual calculation & curl):**
+   Compute your station's unlock code:
    ```bash
    python3 scripts/calc_update_auth.py <DATE> <SW> <SN> <HW> <REF>
-   # Exemple : python3 scripts/calc_update_auth.py 42W22 V01.17.78 015184 V02.01.01 058001
+   # Example: python3 scripts/calc_update_auth.py 42W22 V01.17.78 015184 V02.01.01 058001
    ```
-   Puis transmettez la commande :
+   Then send the command to the API:
    ```bash
-   curl -X POST http://localhost:8080/api/command -d "UpdateAuth:<CODE_CALCULÉ>"
+   curl -X POST http://localhost:8080/api/command -d "UpdateAuth:<COMPUTED_CODE>"
    ```
 
-3. **Vérification :**
-   Confirmez dans les logs de `greenup-link` la validation immédiate par la carte :
+3. **Verification:**
+   Confirm in `greenup-link` logs that the board acknowledged the unlock request:
    ```text
    [SERIAL_TX] UpdateAuth:xxxxx
    [SERIAL_RX] UpdateCodeOK
    ```
 
 > [!NOTE]
-> Le drapeau d'armement `0x0ACC = 1` reste en RAM tant que la carte est sous tension ou jusqu'à la première trame `avrdude`.
+> The bootloader arming flag `0x0ACC = 1` remains persistent in SRAM as long as the board remains powered on, until the first `avrdude` sync byte arrives.
 
 ---
 
-### Étape 2 : Libérer le port série pour le système
+### Step 2: Release the Serial Port for the System
 
-Arrêtez le superviseur pour libérer `/dev/ttyUSB0` au profit d'`avrdude` :
+Stop `greenup-link` to release `/dev/ttyUSB0` so that `avrdude` can claim the device:
 
 ```bash
-# Si exécuté dans un terminal / tmux :
+# If running in a terminal or tmux session:
 pkill -f greenup-link
-# (ou Ctrl+C dans le terminal)
+# (or press Ctrl+C in its terminal)
 
-# Si exécuté en tant que service systemd :
+# If running as a systemd service:
 sudo systemctl stop greenup-link
 ```
 
 ---
 
-### Étape 3 : Lancer la programmation Flash avec `avrdude`
+### Step 3: Flash the Firmware with `avrdude`
 
-Exécutez `avrdude` avec le programmeur **wiring** à 115 200 bauds :
+Execute `avrdude` using the **wiring** programmer profile at 115,200 baud:
 
 ```bash
-sudo avrdude -C /etc/avrdude.conf -v -p atmega2560 -c wiring -P /dev/ttyUSB0 -b 115200 -D -U flash:w:/chemin/vers/<FIRMWARE>.hex:i
+sudo avrdude -C /etc/avrdude.conf -v -p atmega2560 -c wiring -P /dev/ttyUSB0 -b 115200 -D -U flash:w:/path/to/<FIRMWARE>.hex:i
 ```
 
-**Sortie attendue :**
+**Expected output:**
 ```text
 avrdude: AVR device initialized and ready to accept instructions
 avrdude: Device signature = 0x1e9801 (probably m2560)
@@ -95,146 +104,157 @@ avrdude done.  Thank you.
 ```
 
 > [!TIP]
-> Le message final `stk500v2_disable(): failed to leave programming mode` est **tout à fait normal** avec le bootloader Wiring d'Atmel : le microcontrôleur saute directement dans la nouvelle application flashée sans accuser réception de la trame de déconnexion.
+> The trailing message `stk500v2_disable(): failed to leave programming mode` is **completely normal and expected** with the Atmel Wiring bootloader: upon completion, the bootloader directly jumps to the freshly programmed Flash application address without sending an STK500 leave acknowledgment.
 
 ---
 
-### Étape 4 : Relancer `greenup-link` et vérifier la version
+### Step 4: Restart `greenup-link` and Verify Version
 
-Relancez le service :
+Restart `greenup-link`:
 ```bash
 ./target/release/greenup-link
-# ou : sudo systemctl start greenup-link
+# or: sudo systemctl start greenup-link
 ```
 
-Puis vérifiez la prise en compte du nouveau firmware :
+Verify that the station boots properly and reports its version:
 ```bash
 curl -X POST http://localhost:8080/api/command -d "SoftwareVersion?"
 ```
 
 ---
 
-## 3. Spécification Mathématique de la Formule `UpdateAuth`
+## 3. Mathematical Specification of the `UpdateAuth` Formula
 
-### 3.1. Les 5 Paramètres d'Entrée
+### 3.1. The 5 Input Parameters
 
-Les valeurs sont interrogées sur le port série USB (USART1) via les requêtes officielles :
+Parameters are queried over the serial port (USART1) using official protocol commands:
 
-| Paramètre | Commande Série | Format Attendu | Exemple |
+| Parameter | Serial Query | Expected Format | Example |
 | :--- | :--- | :--- | :--- |
-| **`Date`** | `WeekYearProduction?` | 5 caractères ASCII : `SSWAA` | `42W22` (semaine 42, année 2022) |
-| **`SW`** | `SoftwareVersion?` | 9 caractères normalisés : `Vxx.yy.zz` | `V01.17.78` ou `V01.18.10` |
-| **`SN`** | `SerialNumber?` | 6 chiffres ASCII | `015184` |
-| **`HW`** | `HardwareVersion?` | 9 caractères normalisés : `Vxx.yy.zz` | `V02.01.01` |
-| **`Ref`** | `Reference?` | 6 chiffres ASCII | `058001` |
+| **`Date`** | `WeekYearProduction?` | 5 ASCII chars: `WWYYY` | `42W22` (Week 42, Year 2022) |
+| **`SW`** | `SoftwareVersion?` | 9 normalized chars: `Vxx.yy.zz` | `V01.17.78` or `V01.18.10` |
+| **`SN`** | `SerialNumber?` | 6 ASCII digits | `015184` |
+| **`HW`** | `HardwareVersion?` | 9 normalized chars: `Vxx.yy.zz` | `V02.01.01` |
+| **`Ref`** | `Reference?` | 6 ASCII digits | `058001` |
 
 > [!IMPORTANT]
-> La version logicielle `SW` doit correspondre à **la version active sur la carte au moment de l'envoi de la commande**, et non à la version du firmware que vous vous apprêtez à flasher !
+> The software version `SW` must correspond to **the firmware version currently active on the board when the command is sent**, NOT the target version you intend to flash!
 
 ---
 
-### 3.2. Formule d'Entrelacement des Caractères (Clé de 28 octets)
+### 3.2. 28-Character Interleaving Formula
 
-L'algorithme Legrand construit une chaîne ASCII intermédiaire de **28 caractères** en entrelaçant précisément les indices des 5 paramètres :
+The Legrand bootloader verification routine constructs an intermediate **28-character ASCII string** by interleaving specific character indices of the 5 parameters:
 
 ```text
 Position :  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16  17  18  19  20  21  22  23  24  25  26  27
-Origine  : Date SW  SN  HW Ref Date SW  SN  HW Ref Date SW  SN  HW Ref Date SW  SN  HW Ref  SW  SN  HW Ref  SW  SN  HW Ref
-Indice   : [0] [8] [2] [8] [1] [4] [1] [1] [7] [3] [1] [4] [5] [1] [4] [3] [2] [0] [2] [5] [5] [4] [4] [2] [7] [3] [5] [0]
+Source   : Date SW  SN  HW Ref Date SW  SN  HW Ref Date SW  SN  HW Ref Date SW  SN  HW Ref  SW  SN  HW Ref  SW  SN  HW Ref
+Index    : [0] [8] [2] [8] [1] [4] [1] [1] [7] [3] [1] [4] [5] [1] [4] [3] [2] [0] [2] [5] [5] [4] [4] [2] [7] [3] [5] [0]
 ```
 
-**Tableau détaillé d'entrelacement :**
+**Index mapping table:**
 
-| Bloc | Indice Clé | Variable | Indice dans la chaîne | Rôle / Valeur extraite |
+| Block | Key Index | Variable | Character Index | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| **1** | `0` | `Date` | `[0]` | Premier chiffre de la semaine de prod |
-| | `1` | `SW` | `[8]` | Dernier chiffre du numéro de version |
-| | `2` | `SN` | `[2]` | 3ème chiffre du numéro de série |
-| | `3` | `HW` | `[8]` | Dernier chiffre de version HW |
-| | `4` | `Ref` | `[1]` | 2ème chiffre de référence |
-| **2** | `5` | `Date` | `[4]` | Dernier chiffre de l'année de prod |
-| | `6` | `SW` | `[1]` | Premier chiffre majeur SW |
-| | `7` | `SN` | `[1]` | 2ème chiffre du numéro de série |
-| | `8` | `HW` | `[7]` | Avant-dernier chiffre HW |
-| | `9` | `Ref` | `[3]` | 4ème chiffre de référence |
-| **3** | `10` | `Date` | `[1]` | 2ème chiffre de la semaine de prod |
-| | `11` | `SW` | `[4]` | Premier chiffre mineur SW |
-| | `12` | `SN` | `[5]` | Dernier chiffre du numéro de série |
-| | `13` | `HW` | `[1]` | Premier chiffre majeur HW |
-| | `14` | `Ref` | `[4]` | 5ème chiffre de référence |
-| **4** | `15` | `Date` | `[3]` | Premier chiffre de l'année de prod |
-| | `16` | `SW` | `[2]` | 2ème chiffre majeur SW |
-| | `17` | `SN` | `[0]` | Premier chiffre du numéro de série |
-| | `18` | `HW` | `[2]` | 2ème chiffre majeur HW |
-| | `19` | `Ref` | `[5]` | Dernier chiffre de référence |
-| **5** | `20` | `SW` | `[5]` | 2ème chiffre mineur SW |
-| | `21` | `SN` | `[4]` | 5ème chiffre du numéro de série |
-| | `22` | `HW` | `[4]` | Premier chiffre mineur HW |
-| | `23` | `Ref` | `[2]` | 3ème chiffre de référence |
-| **6** | `24` | `SW` | `[7]` | Premier chiffre patch/build SW |
-| | `25` | `SN` | `[3]` | 4ème chiffre du numéro de série |
-| | `26` | `HW` | `[5]` | 2ème chiffre mineur HW |
-| | `27` | `Ref` | `[0]` | Premier chiffre de référence |
+| **1** | `0` | `Date` | `[0]` | 1st digit of production week |
+| | `1` | `SW` | `[8]` | Last digit of active SW version |
+| | `2` | `SN` | `[2]` | 3rd digit of serial number |
+| | `3` | `HW` | `[8]` | Last digit of HW version |
+| | `4` | `Ref` | `[1]` | 2nd digit of commercial reference |
+| **2** | `5` | `Date` | `[4]` | 2nd digit of production year |
+| | `6` | `SW` | `[1]` | 1st major version digit |
+| | `7` | `SN` | `[1]` | 2nd digit of serial number |
+| | `8` | `HW` | `[7]` | Penultimate digit of HW version |
+| | `9` | `Ref` | `[3]` | 4th digit of commercial reference |
+| **3** | `10` | `Date` | `[1]` | 2nd digit of production week |
+| | `11` | `SW` | `[4]` | 1st minor version digit |
+| | `12` | `SN` | `[5]` | Last digit of serial number |
+| | `13` | `HW` | `[1]` | 1st major digit of HW version |
+| | `14` | `Ref` | `[4]` | 5th digit of commercial reference |
+| **4** | `15` | `Date` | `[3]` | 1st digit of production year |
+| | `16` | `SW` | `[2]` | 2nd major version digit |
+| | `17` | `SN` | `[0]` | 1st digit of serial number |
+| | `18` | `HW` | `[2]` | 2nd major digit of HW version |
+| | `19` | `Ref` | `[5]` | Last digit of commercial reference |
+| **5** | `20` | `SW` | `[5]` | 2nd minor version digit |
+| | `21` | `SN` | `[4]` | 5th digit of serial number |
+| | `22` | `HW` | `[4]` | 1st minor digit of HW version |
+| | `23` | `Ref` | `[2]` | 3rd digit of commercial reference |
+| **6** | `24` | `SW` | `[7]` | 1st patch/build version digit |
+| | `25` | `SN` | `[3]` | 4th digit of serial number |
+| | `26` | `HW` | `[5]` | 2nd minor digit of HW version |
+| | `27` | `Ref` | `[0]` | 1st digit of commercial reference |
 
 ---
 
-### 3.3. Calcul du CRC-16 Modbus
+### 3.3. CRC-16 Modbus Computation
 
-La chaîne de 28 octets ASCII résultante est passée à l'algorithme standard **CRC-16 Modbus** :
-- **Polynôme (inversé / LSB first)** : `0xA001` (équivalent à `0x8005` normal).
-- **Valeur initiale du registre** : `0xFFFF`.
-- **Sens de traitement** : bit de poids faible en premier (LSB first).
-- **Résultat** : entier non signé 16 bits (0 à 65535) converti en décimal ASCII.
+The resulting 28-character ASCII string is passed to the standard **CRC-16 Modbus** algorithm:
+- **Polynomial (reversed / LSB first)**: `0xA001` (equivalent to `0x8005` forward).
+- **Initial register value**: `0xFFFF`.
+- **Processing order**: Least Significant Bit (LSB) first.
+- **Output**: 16-bit unsigned integer (0 to 65535) formatted as a decimal ASCII string.
 
 ---
 
-### 3.4. Vecteur de Test de Référence (Pour Validation)
+### 3.4. Reference Test Vector (Validation)
 
-Pour valider le bon fonctionnement de votre implémentation ou calcul :
+To test and validate your calculation or script implementation:
 
-- **Paramètres :**
+- **Input parameters:**
   - `WeekYearProduction` = `"42W22"`
   - `SoftwareVersion` = `"V01.17.78"`
   - `SerialNumber` = `"015184"`
   - `HardwareVersion` = `"V02.01.01"`
   - `Reference` = `"058001"`
-- **Clé entrelacée générée :**
+- **Generated 28-char key:**
   `4851520100214002102178087110`
-- **Code CRC16 Modbus attendu :**
+- **Expected CRC-16 Modbus output:**
   `43417`
-- **Commande résultante :**
+- **Final serial command:**
   `UpdateAuth:43417`
 
 ---
 
-## 4. Script Universel Autonome : `calc_update_auth.py`
+## 4. Standalone Calculator Script: `calc_update_auth.py`
 
-Le script officiel est présent dans [`greenup-link/scripts/calc_update_auth.py`](file:///c:/Users/rapha/Desktop/Maj%20borne%20legrand/retro_ingenierie/legrand/greenup-link/scripts/calc_update_auth.py). Il ne dépend d'**aucune bibliothèque tierce** (utilise uniquement la bibliothèque standard Python 3).
+The standalone Python utility is located in [`greenup-link/scripts/calc_update_auth.py`](file:///c:/Users/rapha/Desktop/Maj%20borne%20legrand/retro_ingenierie/legrand/greenup-link/scripts/calc_update_auth.py). It requires **no third-party dependencies** and runs on any standard Python 3 installation.
 
-### Modes d'utilisation :
+### Usage examples:
 
-#### 1. Mode Direct (arguments positionnels) :
+#### 1. Positional Arguments:
 ```bash
 python3 scripts/calc_update_auth.py 42W22 V01.17.78 015184 V02.01.01 058001
 ```
 
-#### 2. Mode Flags explicites :
+#### 2. Named Flags:
 ```bash
 python3 scripts/calc_update_auth.py --date 42W22 --sw V01.17.78 --sn 015184 --hw V02.01.01 --ref 058001
 ```
 
-#### 3. Mode Automatique via l'API REST `greenup-link` :
+#### 3. Automatic Mode via `greenup-link` REST API:
 ```bash
-# Lit les paramètres sur l'API et affiche le code :
+# Query parameters from local API and display computed code:
 python3 scripts/calc_update_auth.py --api http://localhost:8080
 
-# Lit les paramètres, calcule le code, et arme directement le bootloader :
+# Query parameters, compute code, and IMMEDIATELY ARM the bootloader:
 python3 scripts/calc_update_auth.py --api http://localhost:8080 --arm
 ```
 
-#### 4. Mode Interactif :
-Lancez simplement le script sans arguments :
+#### 4. Interactive Mode:
+Run without arguments to be prompted for the 5 parameters:
 ```bash
 python3 scripts/calc_update_auth.py
 ```
-Le script vous posera interactivement les 5 questions.
+
+---
+
+## 5. Firmware Patcher Script: `patch_firmware_17_77.py`
+
+To reproducibly patch an official Legrand 17.77 firmware file with the real-time Linky TIC telemetry handler, use [`scripts/patch_firmware_17_77.py`](file:///c:/Users/rapha/Desktop/Maj%20borne%20legrand/retro_ingenierie/legrand/greenup-link/scripts/patch_firmware_17_77.py):
+
+```bash
+python3 scripts/patch_firmware_17_77.py -i hex/FirmwareBoardA-V01_17_77.hex -o hex/FirmwareBoardA-V01_17_77c.hex
+```
+
+This utility performs strict SHA-256 pre-validation against the official Legrand 17.77 binary payload (`d46a6bd6...`), applies the surgical bytecode patch, and verifies the output file integrity (`1fca0124...`). It aborts safely if the input file does not match the official firmware.
