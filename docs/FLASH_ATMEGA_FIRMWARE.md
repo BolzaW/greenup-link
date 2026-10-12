@@ -266,6 +266,15 @@ python3 scripts/calc_update_auth.py
 > Flashing modified or custom firmware carries **substantially higher risks** than flashing official vendor firmware.
 >
 > Although this patch has been meticulously reverse-engineered, assembly-crafted, byte-audited, and validated in real operating conditions on physical hardware, **unforeseen side effects or unexpected behavior with severe consequences (including hardware malfunction, charging lockup, or thermal failure) cannot be entirely ruled out**.
+>
+> ---
+>
+> ### ⚠️ OFFICIAL LEGRAND KITCOM INCOMPATIBILITY
+> This custom firmware is designed exclusively for use with **`greenup-link`**.
+>
+> It is **NOT compatible with the official Legrand KitCom software suite** (`SoftwareCommunication.jar`). Due to rigid string parsing in the factory Java software (`inputLine.split(":")[1]`), the custom `MacAdr:TIC:...` serial responses will corrupt internal communication state files (such as line 43 of `chargePointCom.txt`).
+>
+> If you ever wish to use the official Legrand KitCom software suite or official Legrand mobile apps again, you **must reflash an official Legrand firmware release** (such as official `V01.17.77` or `V01.18.10`).
 
 ### 5.1. What is the Green'Up Linky TIC Firmware?
 
