@@ -17,6 +17,11 @@
     box-sizing: border-box;
 }
 
+.console-panel.hidden,
+.hidden {
+    display: none !important;
+}
+
 .console-toolbar {
     display: flex;
     flex-direction: column;
@@ -190,7 +195,7 @@
     padding: 7px 12px 7px 24px;
     font-family: ui-monospace, monospace;
     font-size: 11px;
-    color: #34d399;
+    color: #ffffff;
     outline: none;
     box-sizing: border-box;
     transition: border-color 0.15s ease;
