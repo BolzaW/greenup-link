@@ -40,7 +40,9 @@ async function fetchTelemetry() {
         valEnergy.innerText = (data.energy).toFixed(0);
 
         if (data.error_code && data.error_code !== "0000" && data.error_code !== "") {
-            lblError.innerText = t('error.hardware_code') + data.error_code;
+            const desc = t('hardware_errors.' + data.error_code);
+            const descText = (desc && desc !== 'hardware_errors.' + data.error_code) ? ` - ${desc}` : '';
+            lblError.innerText = `${t('error.hardware_code')}${data.error_code}${descText}`;
         } else {
             lblError.innerText = "";
         }

@@ -45,5 +45,22 @@
   },
   "error": {
     "hardware_code": "Hardware Code: "
+  },
+  "hardware_errors": {
+    "0000": "No error",
+    "0001": "T2S socket locking failure",
+    "0002": "T2S socket unlocking failure",
+    "0003": "Control Pilot short-circuit (cable/vehicle)",
+    "0004": "Control Pilot short-circuit (station board)",
+    "0005": "Domestic contactor opening failure",
+    "0006": "Domestic contactor closing failure",
+    "0007": "T2S contactor opening failure",
+    "0008": "T2S contactor closing failure",
+    "0009": "Vehicle diode not detected",
+    "0010": "T2S current overload",
+    "0011": "Domestic current overload",
+    "0012": "Power outage / Under-voltage",
+    "0013": "Internal communication error",
+    "0015": "6mA DC leakage fault"
   }
 }
