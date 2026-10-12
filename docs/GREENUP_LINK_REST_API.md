@@ -8,7 +8,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
 | :--- | :--- | :--- |
 | `GET` | `/api/info` | Hardware info (Firmware, Serial, Capabilities) |
 | `GET` | `/api/telemetry` | Real-time telemetry + Legrand / IEC states |
-| | `POST` | `/api/charge` | Control charge state (nable, disable, pause, esume) |
+| `POST` | `/api/charge` | Control charge state (`enable`, `disable`, `pause`, `resume`) |
 | `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`) |
 | `POST` | `/api/init` | Relaunch startup sequence |
 | `POST` | `/api/reset` | ATmega board hardware restart (`Reset`) |
@@ -30,13 +30,11 @@ This API allows interfacing the Green'Up Link software with any standard home au
     "software_version": "V01.18.10",
     "hardware_version": "V02.01.01",
     "serial_number": "015184",
-
+    "reference": "058001",
     "week_year_production": "42W22",
     "bluetooth_enabled": false,
     "link_version": "0.1.0",
     "capabilities": {
-
-
       "phases": 1,
       "max_power_kw": 7.4,
       "max_current_amps": 32,
@@ -64,61 +62,48 @@ This API allows interfacing the Green'Up Link software with any standard home au
     "limit_amps": 16,
     "eliot_limit_amps": 16,
     "cp_voltage": 6,
-
-
+    "charge_authorized": true,
+    "charge_paused": false,
+    "greenup_state": "C",
     "iec_state": "C",
     "charge_complete": false,
     "tic_mode": "9600"
   }
   ```
-  - `greenup_state`: Legrand proprietary state (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). See `docs/STATE_MACHINE.md`.
-  - `iec_state`: Deduced standard IEC state: `Disconnected_A`, `Connected_B`, `Charging_C`, `Error_E`, `Faulted_F`. Returns `null` if it cannot be deduced.
+  - `greenup_state`: Legrand proprietary state (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). See [`STATE_MACHINE.md`](STATE_MACHINE.md).
+  - `iec_state`: Deduced standard IEC 61851-1 state (`A`, `B`, `C`, `E`, `F`). Returns `null` if it cannot be deduced.
   - `cp_voltage` (`CP?`): Control Pilot voltage in volts (`12`, `9`, `6`).
-
+  - `charge_authorized`: Indicates whether charging is currently authorized (`true`) or blocked (`false`).
+  - `charge_paused`: Indicates whether charging has been paused via the Stop button (`true`).
   - `eliot_limit_amps` (`CCEl?`): Effective current limit applied by the station.
+  - `charge_complete`: True if charging has terminated (vehicle battery full).
   - `tic_mode`: `"0"` (absent), `"1200"` (historical), `"9600"` (standard), `"detecting"` (detection in progress) or `""` (unknown, no detection started).
 
 ---
 
 ## 🛠️ Action Endpoints (POST)
 
-### 3. Enable charge
-- **URL**: `/api/charge/enable`
+### 3. Control charge state
+- **URL**: `/api/charge`
 - **Method**: `POST`
-- **Description**: Authorizes and forces the charge. First sends `T2COK` to ensure the Type 2 port is active, then `FM2:0` to unblock any external restrictions, then activates Derogation (`DOK`). This overrides the physical TIC (Peak/Off-Peak) and the external signal (`FM2`) limitations, while keeping the local hardware load-balancing (Délestage) active to protect the main breaker. The station will report `State:D` (Derogation Charge) which is equivalent to `State:C`.
+- **Body (JSON)**:
+  ```json
+  { "action": "enable" }
+  ```
+  *(Supported actions: `"enable"`, `"disable"`, `"pause"`, `"resume"`)*
+
+#### Actions detail:
+- **`enable`**: Authorizes and forces the charge. First sends `T2COK` to ensure the Type 2 port is active, then `FM2:0` to unblock any external restrictions, then activates Derogation (`DOK`). This overrides the physical TIC (Peak/Off-Peak) and the external signal (`FM2`) limitations, while keeping the local hardware load-balancing (Délestage) active to protect the main breaker. The station will report `State:D` (Derogation Charge) which is equivalent to `State:C`.
+- **`disable`**: Securely disables the charge. First sends `FM2:1` to firmly block the charge via the simulated external contact (preventing TIC from accidentally starting it during Off-Peak hours), then sends `DNOK` to release the derogation.
+- **`pause`**: Pauses the charge naturally by simulating a press on the physical Stop button (`SBNOK`). This puts the station in a paused state (`SB:1`).
+- **`resume`**: Resumes the charge naturally by simulating a press on the physical Start button (`SBOK`), removing the paused state (`SB:0`).
+
 - **Typical Response**:
   ```json
-  { "status": "success", "message": "Charge enabled (T2COK + FM2:0 + DOK)" }
+  { "status": "success" }
   ```
 
-### 4. Disable charge
-- **URL**: `/api/charge/disable`
-- **Method**: `POST`
-- **Description**: Securely disables the charge. First sends `FM2:1` to firmly block the charge via the simulated external contact (preventing TIC from accidentally starting it during Off-Peak hours), then sends `DNOK` to release the derogation.
-- **Typical Response**:
-  ```json
-  { "status": "success", "message": "Charge disabled (FM2:1 + DNOK)" }
-  ```
-
-### 5. Pause charge (Natural)
-- **URL**: `/api/charge/pause`
-- **Method**: `POST`
-- **Description**: Pauses the charge naturally by simulating a press on the physical Stop button (`SBNOK`). This puts the station in a paused state (`SB:1`).
-- **Typical Response**:
-  ```json
-  { "status": "success", "message": "Charge paused (SBNOK)" }
-  ```
-
-### 6. Resume charge (Natural)
-- **URL**: `/api/charge/resume`
-- **Method**: `POST`
-- **Description**: Resumes the charge naturally by simulating a press on the physical Start button (`SBOK`), removing the paused state (`SB:0`).
-- **Typical Response**:
-  ```json
-  { "status": "success", "message": "Charge resumed (SBOK)" }
-  ```
-
-### 7. Modify current limit
+### 4. Modify current limit
 - **URL**: `/api/current/:amps`
 - **Method**: `POST`
 - **URL Parameter**: `:amps` (integer between **7** and **32**).
@@ -129,7 +114,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "Current limit set to 16A" }
   ```
 
-### 8. Relaunch initialization sequence
+### 5. Relaunch initialization sequence
 - **URL**: `/api/init`
 - **Method**: `POST`
 - **Description**: Replays the startup sequence: `RaspberryPiModeOK`, then querying information (`SoftwareVersion?`, `HardwareVersion?`, `SerialNumber?`, `Reference?`, `WeekYearProduction?`) and states (`State?`, `FM?`, `CC?`, `CCEl?`, `CP?`, `T2C?`, `SB?`, `E?`, `BT?`). The response is immediate, the sequence runs in the background.
@@ -139,7 +124,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "Initialization sequence started" }
   ```
 
-### 9. Restart power board
+### 6. Restart power board
 - **URL**: `/api/reset`
 - **Method**: `POST`
 - **Description**: Sends the `Reset` command to the ATmega board to force a hardware restart. Useful to unblock the station when it remains stuck in `State:A` while `T2C:1` and `CP:9` (vehicle plugged in): state `B` never arrives without a reset.
@@ -148,7 +133,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "ATmega board restart requested" }
   ```
 
-### 10. Start TIC (Linky) detection
+### 7. Start TIC (Linky) detection
 - **URL**: `/api/tic/refresh`
 - **Method**: `POST`
 - **Description**: Starts the customer tele-information (TIC) speed detection. The server sends `TICTM:1`, parses the return (e.g. `TICTestB:9600`), updates `tic_mode`, then disables test mode with `TICTM:0`.
@@ -161,7 +146,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "TIC detection started" }
   ```
 
-### 11. Enable / Disable Bluetooth
+### 8. Enable / Disable Bluetooth
 - **URL**: `/api/bluetooth`
 - **Method**: `POST`
 - **Body (JSON)**:
@@ -174,16 +159,12 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "Bluetooth disabled successfully" }
   ```
 
-### 12. Send raw command (Debug/Advanced)
+### 9. Send raw command (Debug/Advanced)
 - **URL**: `/api/command`
 - **Method**: `POST`
 - **Body (Plain text)**: the command to send (e.g., `State?`)
-- **Description**: Directly transmits the string on the serial port. Reserved for testing and debugging. See [LEGRAND_SERIAL_PROTOCOL.md](LEGRAND_SERIAL_PROTOCOL.md) for the list of known commands.
+- **Description**: Directly transmits the string on the serial port. Reserved for testing and debugging. See [`LEGRAND_SERIAL_PROTOCOL.md`](LEGRAND_SERIAL_PROTOCOL.md) for the list of known commands.
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Command sent" }
   ```
-
-
-
-
