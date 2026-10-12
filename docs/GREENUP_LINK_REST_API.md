@@ -8,6 +8,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
 | :--- | :--- | :--- |
 | `GET` | `/api/info` | Hardware info (Firmware, Serial, Capabilities) |
 | `GET` | `/api/telemetry` | Real-time telemetry + Legrand / IEC states |
+| `GET` | `/api/tic` | Real-time Linky TIC telemetry (Historique & Standard) |
 | `POST` | `/api/charge` | Control charge state (`enable`, `disable`, `pause`, `resume`) |
 | `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`) |
 | `POST` | `/api/init` | Relaunch startup sequence |
@@ -33,6 +34,8 @@ This API allows interfacing the Green'Up Link software with any standard home au
     "reference": "058001",
     "week_year_production": "42W22",
     "bluetooth_enabled": false,
+    "mac_address": "000000000000",
+    "side": 1,
     "link_version": "0.1.0",
     "capabilities": {
       "phases": 1,
@@ -44,6 +47,8 @@ This API allows interfacing the Green'Up Link software with any standard home au
     }
   }
   ```
+  - `side`: Active socket side (`1` or `2`), decoded from the ATmega `Side:` response (`49` -> `1`, `50` -> `2`).
+  - `mac_address`: Bluetooth controller MAC address (12-char hex or `"000000000000"` if BLE is disabled).
   - *Note:* `capabilities` is `null` until the reference has been received.
 
 ### 2. Get real-time telemetry
@@ -79,11 +84,75 @@ This API allows interfacing the Green'Up Link software with any standard home au
   - `charge_complete`: True if charging has terminated (vehicle battery full).
   - `tic_mode`: `"0"` (absent), `"1200"` (historical), `"9600"` (standard), `"detecting"` (detection in progress) or `""` (unknown, no detection started).
 
+### 3. Get real-time Linky TIC telemetry
+- **URL**: `/api/tic`
+- **Method**: `GET`
+- **Description**: Returns detailed real-time telemetry decoded from the physical Linky meter TIC interface (Customer Tele-Information / Télé-Information Client) when the ATmega power board is running a firmware version supporting extended TIC reporting (queried periodically via `MacAdr?`). Polled by home automation systems (Home Assistant, Jeedom, etc.) for dynamic power monitoring and solar diversion.
+- **Typical Response (Historique Mode - Single-phase)**:
+  ```json
+  {
+    "active": true,
+    "mode": "HISTORIQUE",
+    "ptec": "HP",
+    "isousc": 45,
+    "iinst": 18,
+    "iinst1": 18,
+    "iinst2": null,
+    "iinst3": null,
+    "urms1": null,
+    "urms2": null,
+    "urms3": null,
+    "irms1": null,
+    "pref": null,
+    "sinst1": null,
+    "sinst2": null,
+    "sinst3": null,
+    "raw": "TIC:HISTORIQUE;IINST:18;ISOUSC:45;PTEC:HP",
+    "timestamp": "2026-10-12T21:30:00+02:00"
+  }
+  ```
+- **Typical Response (Standard Mode - Single-phase)**:
+  ```json
+  {
+    "active": true,
+    "mode": "STANDARD",
+    "ptec": "TH..",
+    "isousc": null,
+    "iinst": 16,
+    "iinst1": 16,
+    "iinst2": null,
+    "iinst3": null,
+    "urms1": 234,
+    "urms2": null,
+    "urms3": null,
+    "irms1": 16,
+    "pref": 9,
+    "sinst1": 3740,
+    "sinst2": null,
+    "sinst3": null,
+    "raw": "TIC:STANDARD;URMS1:234;IRMS1:16;PREF:09;PTEC:TH..;SINST1:03740",
+    "timestamp": "2026-10-12T21:30:00+02:00"
+  }
+  ```
+- **Fields description**:
+  - `active`: Indicates whether extended TIC telemetry is actively received (`true`) or inactive/unsupported (`false`).
+  - `mode`: TIC protocol mode (`"HISTORIQUE"`, `"STANDARD"`, or `"AUCUN"`).
+  - `ptec`: Current tariff period (e.g. `"HP"` Heures Pleines, `"HC"` Heures Creuses, `"TH"` Toutes Heures).
+  - `isousc`: Subscribed current limit in Amperes (Historique mode).
+  - `iinst`: Instantaneous current draw in Amperes.
+  - `iinst1`, `iinst2`, `iinst3`: Instantaneous current draw per phase in Amperes.
+  - `urms1`, `urms2`, `urms3`: RMS voltage per phase in Volts (Standard mode).
+  - `irms1`: RMS current for phase 1 in Amperes (Standard mode).
+  - `pref`: Reference apparent power contract limit in kVA (Standard mode).
+  - `sinst1`, `sinst2`, `sinst3`: Instantaneous apparent power per phase in VA (Standard mode).
+  - `raw`: Full unparsed raw ASCII payload string emitted by the ATmega.
+  - `timestamp`: ISO 8601 timestamp of when the telemetry was received.
+
 ---
 
 ## 🛠️ Action Endpoints (POST)
 
-### 3. Control charge state
+### 4. Control charge state
 - **URL**: `/api/charge`
 - **Method**: `POST`
 - **Body (JSON)**:
@@ -103,7 +172,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success" }
   ```
 
-### 4. Modify current limit
+### 5. Modify current limit
 - **URL**: `/api/current/:amps`
 - **Method**: `POST`
 - **URL Parameter**: `:amps` (integer between **7** and **32**).
@@ -114,7 +183,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "Current limit set to 16A" }
   ```
 
-### 5. Relaunch initialization sequence
+### 6. Relaunch initialization sequence
 - **URL**: `/api/init`
 - **Method**: `POST`
 - **Description**: Replays the startup sequence: `RaspberryPiModeOK`, then querying information (`SoftwareVersion?`, `HardwareVersion?`, `SerialNumber?`, `Reference?`, `WeekYearProduction?`) and states (`State?`, `FM?`, `CC?`, `CCEl?`, `CP?`, `T2C?`, `SB?`, `E?`, `BT?`). The response is immediate, the sequence runs in the background.
@@ -124,7 +193,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "Initialization sequence started" }
   ```
 
-### 6. Restart power board
+### 7. Restart power board
 - **URL**: `/api/reset`
 - **Method**: `POST`
 - **Description**: Sends the `Reset` command to the ATmega board to force a hardware restart. Useful to unblock the station when it remains stuck in `State:A` while `T2C:1` and `CP:9` (vehicle plugged in): state `B` never arrives without a reset.
@@ -133,7 +202,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "ATmega board restart requested" }
   ```
 
-### 7. Start TIC (Linky) detection
+### 8. Start TIC (Linky) detection
 - **URL**: `/api/tic/refresh`
 - **Method**: `POST`
 - **Description**: Starts the customer tele-information (TIC) speed detection. The server sends `TICTM:1`, parses the return (e.g. `TICTestB:9600`), updates `tic_mode`, then disables test mode with `TICTM:0`.
@@ -146,7 +215,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "TIC detection started" }
   ```
 
-### 8. Enable / Disable Bluetooth
+### 9. Enable / Disable Bluetooth
 - **URL**: `/api/bluetooth`
 - **Method**: `POST`
 - **Body (JSON)**:
@@ -159,7 +228,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
   { "status": "success", "message": "Bluetooth disabled successfully" }
   ```
 
-### 9. Send raw command (Debug/Advanced)
+### 10. Send raw command (Debug/Advanced)
 - **URL**: `/api/command`
 - **Method**: `POST`
 - **Body (Plain text)**: the command to send (e.g., `State?`)

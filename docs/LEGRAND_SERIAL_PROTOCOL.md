@@ -15,13 +15,14 @@ Commands used at startup to establish dialogue and identify the board.
 
 | Command (TX) | Expected Reply Prefix (RX) | Explanation |
 | :--- | :--- | :--- |
-| `RaspberryPiModeOK` | `Side:` | Magic frame that tells the power board that the Pi has taken control. Acknowledged by the board dumping its active side. |
+| `RaspberryPiModeOK` | `DIP1:` | Magic frame that tells the power board that the Pi has taken control. Acknowledged by the board's hardware switch state (`DIP1:X`). |
 | `SoftwareVersion?` | `SoftwareVersion:` | Requests the power board's firmware version. |
 | `HardwareVersion?` | `HardwareVersion:` | Requests the board's hardware version. |
 | `SerialNumber?` | `SerialNumber:` | Requests the station's serial number. |
 | `Reference?` | `Reference:` | Requests the Legrand product reference. |
 | `WeekYearProduction?`| `WeekYearProduction:`| Requests the manufacturing date (Week/Year). |
-| `Side?` | `Side:` | Requests the active side (Side 1 or 2). Often useful on dual-socket stations. |
+| `Side?` | `Side:` | Requests the active side on multi-socket stations (Side 1 or 2). The ATmega replies with the ASCII decimal value of the socket number (`Side:49` for Side 1, `Side:50` for Side 2). |
+| `MacAdr?` | `MacAdr:` | Requests the Bluetooth module MAC address (*see Chapter 7*). |
 | `Reset` | `State:` | Reboots the power board. Acknowledged by the board's first state upon rebooting. |
 | `Z` | None | **⚠️ CRITICAL WARNING:** Triggers a software reset and drops the ATmega into **Bootloader mode** for firmware flashing. Do NOT use unless you intend to run `avrdude` immediately after. |
 | `ping` | `pong` | Basic ping to check if the board's serial interface is responsive. |
@@ -117,6 +118,7 @@ The station has an integrated Bluetooth module (for the smartphone app) which ca
 | `BT?` | `BT:` | Requests the current state of the Bluetooth module (`BT:1` = On, `BT:0` = Off). |
 | `BTOK` | `BT:1` | Orders the Bluetooth module to turn on. |
 | `BTNOK`| `BT:0` | Orders the Bluetooth module to turn off. |
+| `MacAdr?` | `MacAdr:` | Requests the MAC address of the Bluetooth controller. When Bluetooth is active (`BT:1`), the ATmega queries the BLE transceiver and returns its 12-character hexadecimal MAC address (e.g., `MacAdr:001A7DDA7113\r\n`). When Bluetooth is turned off (`BT:0`), the ATmega returns twelve zeros (`MacAdr:000000000000\r\n`). |
 
 ---
 
