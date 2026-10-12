@@ -25,6 +25,7 @@ pub enum ProtocolEvent {
     SbfState(bool),
     Energy(f32),
     Frequency(f32),
+    MacAddress(String),
     CommandNotUnderstood(String),
     Unknown(String),
 }
@@ -118,6 +119,8 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         } else {
             ProtocolEvent::Unknown(line.to_string())
         }
+    } else if let Some(val) = line.strip_prefix("MacAdr:") {
+        ProtocolEvent::MacAddress(val.trim().to_string())
     } else if line.starts_with("Freq:") {
         if let Ok(val) = line.replace("Freq:", "").parse::<f32>() {
             ProtocolEvent::Frequency(val)
@@ -128,5 +131,22 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         ProtocolEvent::CommandNotUnderstood(cmd.trim().to_string())
     } else {
         ProtocolEvent::Unknown(line.to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_mac_address_frames() {
+        assert_eq!(
+            parse_line("MacAdr:000000000000"),
+            ProtocolEvent::MacAddress("000000000000".into())
+        );
+        assert_eq!(
+            parse_line("MacAdr:TIC:HISTORIQUE;IINST:18;ISOUSC:45;PTEC:HP"),
+            ProtocolEvent::MacAddress("TIC:HISTORIQUE;IINST:18;ISOUSC:45;PTEC:HP".into())
+        );
     }
 }

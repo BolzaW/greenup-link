@@ -90,6 +90,8 @@ pub enum Command {
     GetReference,
     /// `WeekYearProduction?`
     GetWeekYearProduction,
+    /// `MacAdr?` – Bluetooth MAC address or Linky TIC custom telemetry frame.
+    GetMacAddress,
     /// `Side?` – Active side (dual-socket stations).
     GetSide,
     /// `Reset` – Reboots the power board.
@@ -208,6 +210,7 @@ impl Command {
             Command::GetSerialNumber => "SerialNumber?".into(),
             Command::GetReference => "Reference?".into(),
             Command::GetWeekYearProduction => "WeekYearProduction?".into(),
+            Command::GetMacAddress => "MacAdr?".into(),
             Command::GetSide => "Side?".into(),
             Command::Reset => "Reset".into(),
             Command::FactoryTest => "Test".into(),
@@ -267,6 +270,7 @@ impl Command {
             Command::GetSerialNumber => Some("SerialNumber:"),
             Command::GetReference => Some("Reference:"),
             Command::GetWeekYearProduction => Some("WeekYearProduction:"),
+            Command::GetMacAddress => Some("MacAdr:"),
             Command::GetSide => Some("Side:"),
             Command::Reset => Some("State:"), // Reset returns the state after reboot
             Command::FactoryTest => None,
@@ -325,6 +329,7 @@ impl Command {
             Command::GetSerialNumber,
             Command::GetReference,
             Command::GetWeekYearProduction,
+            Command::GetMacAddress,
             Command::GetState,
             Command::GetFunctioningMode,
             Command::GetExternalSignal,
@@ -386,7 +391,7 @@ mod tests {
 
     #[test]
     fn validates_current_range() {
-        assert!(Command::set_current_limit(9).is_err());
+        assert!(Command::set_current_limit(6).is_err());
         assert!(Command::set_current_limit(33).is_err());
         assert_eq!(
             Command::set_current_limit(16),

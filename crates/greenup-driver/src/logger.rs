@@ -30,19 +30,19 @@ pub fn init() {
 }
 
 /// Writes an entry to the log file AND to stdout.
-///   category : "SERIAL_RX", "SERIAL_TX", "API", "IHM", "SYS"
+///   category : "SERIAL_RX", "SERIAL_TX", "API", "IHM", "SYS", "DEBUG", "TRACE"
 ///   message  : the content to log
 pub fn log(category: &str, message: &str) {
     let now = Local::now();
     let timestamp = now.format("%Y-%m-%d %H:%M:%S%.3f");
     let entry = format!("[{}] [{}] {}", timestamp, category, message);
 
-    // Stdout (console)
-    if category != "TRACE" {
+    // Stdout (console): skip TRACE and DEBUG by default to avoid spamming the console
+    if category != "TRACE" && (category != "DEBUG" || std::env::var("GREENUP_DEBUG").is_ok()) {
         println!("{}", entry);
     }
 
-    // File
+    // File: all categories are written
     if let Ok(guard) = LOG_FILE.lock() {
         if let Some(ref path) = *guard {
             if let Ok(mut f) = OpenOptions::new().append(true).open(path) {

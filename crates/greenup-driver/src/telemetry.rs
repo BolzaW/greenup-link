@@ -63,9 +63,7 @@ pub struct BoardInfo {
     pub reference: String,
     pub week_year_production: String,
     pub bluetooth_enabled: Option<bool>,
+    pub mac_address: Option<String>,
     pub link_version: String,
     pub capabilities: Option<HardwareCapabilities>,
 }
-
-
-
