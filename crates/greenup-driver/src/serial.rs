@@ -113,7 +113,7 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
     // TX Loop (Current thread)
     while let Some(cmd) = rx_channel.blocking_recv() {
         let encoded = cmd.encode();
-        let expected_prefix = cmd.expected_rx_prefix();
+        let expects_response = cmd.expects_response();
         
         let mut retries = 1;
         let mut success = false;
@@ -127,14 +127,14 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
                 logger::log("SERIAL", &format!("Serial write error: {}", e));
             }
 
-            if let Some(prefix) = expected_prefix {
+            if expects_response {
                 let start_wait = std::time::Instant::now();
                 let mut matched = false;
                 let mut got_default = false;
 
                 while start_wait.elapsed() < Duration::from_millis(1000) {
                     if let Ok(rx_line) = internal_rx.recv_timeout(Duration::from_millis(50)) {
-                        if rx_line.starts_with(prefix) {
+                        if cmd.matches_response(&rx_line) {
                             matched = true;
                             break;
                         } else if rx_line.starts_with("Default:") {
@@ -361,7 +361,13 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::SbfState(v) => {
             logger::log("SERIAL", &format!("ℹ️ SBF (Front Stop Button) = {}", v));
-            if let Ok(mut tel) = state.telemetry.lock() { tel.charge_paused = !v; }
+            if let Ok(mut tel) = state.telemetry.lock() {
+                if tel.greenup_state == "A" {
+                    tel.charge_paused = false;
+                } else {
+                    tel.charge_paused = !v;
+                }
+            }
         }
         ProtocolEvent::Energy(e) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.energy = e; }

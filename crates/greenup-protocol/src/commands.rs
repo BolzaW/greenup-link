@@ -321,6 +321,31 @@ impl Command {
         }
     }
 
+    /// Determines whether this command expects an acknowledgment from the power board.
+    pub fn expects_response(&self) -> bool {
+        self.expected_rx_prefix().is_some()
+    }
+
+    /// Checks if a received line from the serial port acknowledges this command.
+    ///
+    /// Special cases:
+    /// - `SBOK` (`Command::SetStartButton(true)`): normally acknowledged by `SB:`, but when the
+    ///   charging station is in `State:A` with no vehicle connected, the ATmega returns `SBF:0`.
+    pub fn matches_response(&self, rx_line: &str) -> bool {
+        match self {
+            Command::SetStartButton(true) => {
+                rx_line.starts_with("SB:") || rx_line.starts_with("SBF:")
+            }
+            _ => {
+                if let Some(prefix) = self.expected_rx_prefix() {
+                    rx_line.starts_with(prefix)
+                } else {
+                    false
+                }
+            }
+        }
+    }
+
     /// Recommended query sequence at startup (excluding `RaspberryPiModeOK` and TIC).
     pub fn startup_queries() -> Vec<Command> {
         vec![
@@ -407,5 +432,20 @@ mod tests {
             assert_eq!(m.code(), code);
         }
         assert!(FunctioningMode::from_code("7").is_none());
+    }
+
+    #[test]
+    fn sbok_matches_sb_and_sbf_in_state_a() {
+        let sbok = Command::SetStartButton(true);
+        assert!(sbok.matches_response("SB:0"));
+        assert!(sbok.matches_response("SB:1"));
+        assert!(sbok.matches_response("SBF:0"));
+        assert!(sbok.matches_response("SBF:1"));
+        assert!(!sbok.matches_response("Default:SBOK"));
+
+        let sbnok = Command::SetStartButton(false);
+        assert!(sbnok.matches_response("SB:0"));
+        assert!(sbnok.matches_response("SB:1"));
+        assert!(!sbnok.matches_response("SBF:0"));
     }
 }
