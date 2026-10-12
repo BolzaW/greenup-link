@@ -110,10 +110,23 @@
         </div>
 
         <!-- Language Selector -->
-        <select id="langSelector" class="bg-slate-800 text-[10px] md:text-xs text-slate-300 border border-slate-700 rounded px-2 py-1 outline-none cursor-pointer mt-3">
-            <option value="fr">🇫🇷 FR</option>
-            <option value="en">🇬🇧 EN</option>
-        </select>
+        <div class="relative mt-3">
+            <button type="button" id="langDropdownBtn" class="bg-slate-800 hover:bg-slate-700/80 text-[10px] md:text-xs text-slate-300 border border-slate-700 rounded px-2.5 py-1 outline-none cursor-pointer flex items-center gap-1.5 transition-colors shadow-sm">
+                <span id="langCurrentFlag" class="inline-flex items-center"></span>
+                <span id="langCurrentLabel" class="font-semibold tracking-wide">FR</span>
+                <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            <div id="langMenu" class="hidden absolute right-0 top-full mt-1.5 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl z-50 py-1 min-w-[95px] backdrop-blur-md">
+                <button type="button" onclick="selectLanguage('fr')" class="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] md:text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-left">
+                    <svg class="w-4 h-3 rounded-[2px] shadow-sm flex-shrink-0" viewBox="0 0 3 2"><rect width="1" height="2" x="0" fill="#002395"/><rect width="1" height="2" x="1" fill="#ffffff"/><rect width="1" height="2" x="2" fill="#ed2939"/></svg>
+                    <span class="font-medium">FR</span>
+                </button>
+                <button type="button" onclick="selectLanguage('en')" class="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] md:text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-left">
+                    <svg class="w-4 h-3 rounded-[2px] shadow-sm flex-shrink-0" viewBox="0 0 60 30"><rect width="60" height="30" fill="#012169"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" stroke-width="2"/><path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/><path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/></svg>
+                    <span class="font-medium">EN</span>
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Board Info (Bottom Full-width on Mobile, Middle on Desktop) -->
@@ -361,6 +374,7 @@
 
     async function setLanguage(lang) {
         try {
+            updateLangDropdownUI(lang);
             const response = await fetch('/locales/' + lang + '.json');
             currentTranslations = await response.json();
             localStorage.setItem('prefLang', lang);
@@ -380,9 +394,37 @@
         } catch(err) { console.error('Failed to load translations', err); }
     }
 
-    document.getElementById('langSelector').addEventListener('change', (e) => {
-        setLanguage(e.target.value);
-    });
+    const flagsSvg = {
+        fr: `<svg class="w-4 h-3 rounded-[2px] shadow-sm flex-shrink-0" viewBox="0 0 3 2"><rect width="1" height="2" x="0" fill="#002395"/><rect width="1" height="2" x="1" fill="#ffffff"/><rect width="1" height="2" x="2" fill="#ed2939"/></svg>`,
+        en: `<svg class="w-4 h-3 rounded-[2px] shadow-sm flex-shrink-0" viewBox="0 0 60 30"><rect width="60" height="30" fill="#012169"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" stroke-width="2"/><path d="M30,0 v30 M0,15 h60" stroke="#fff" stroke-width="10"/><path d="M30,0 v30 M0,15 h60" stroke="#C8102E" stroke-width="6"/></svg>`
+    };
+
+    function updateLangDropdownUI(lang) {
+        const flagEl = document.getElementById('langCurrentFlag');
+        const labelEl = document.getElementById('langCurrentLabel');
+        if (flagEl) flagEl.innerHTML = flagsSvg[lang] || flagsSvg.fr;
+        if (labelEl) labelEl.innerText = lang.toUpperCase();
+    }
+
+    function selectLanguage(lang) {
+        setLanguage(lang);
+        const menu = document.getElementById('langMenu');
+        if (menu) menu.classList.add('hidden');
+    }
+
+    const langBtn = document.getElementById('langDropdownBtn');
+    const langMenu = document.getElementById('langMenu');
+    if (langBtn && langMenu) {
+        langBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            langMenu.classList.toggle('hidden');
+        });
+        document.addEventListener('click', (e) => {
+            if (!langMenu.contains(e.target) && !langBtn.contains(e.target)) {
+                langMenu.classList.add('hidden');
+            }
+        });
+    }
 
     function updateLinky(ticMode) {
         lastReportedTicMode = ticMode;
@@ -737,7 +779,6 @@
 
     // Initialize Language
     const savedLang = localStorage.getItem('prefLang') || (navigator.language.startsWith('fr') ? 'fr' : 'en');
-    document.getElementById('langSelector').value = savedLang;
     setLanguage(savedLang).then(() => {
         fetchTelemetry(); 
         fetchInfo(); 
