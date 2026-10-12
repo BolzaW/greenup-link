@@ -19,3 +19,7 @@ logs/
 # Release archives
 *.zip
 release_pkg/
+
+# Python cache
+__pycache__/
+*.pyc
