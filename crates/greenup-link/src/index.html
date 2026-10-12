@@ -167,10 +167,10 @@
         </div>
 
         <!-- Live Logs & Command Console Panel (Replaces visualizer in Debug mode) -->
-        <div id="consolePanel" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-5 shadow-xl relative flex-col justify-between flex-1 min-h-[380px]">
+        <div id="consolePanel" class="hidden console-panel">
             <!-- Top Toolbar : Title, Filters, Search, Actions -->
-            <div class="flex flex-col gap-2 mb-3">
-                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+            <div class="console-toolbar">
+                <div class="flex flex-wrap items-center justify-between gap-2">
                     <!-- Title & Status -->
                     <div class="flex items-center space-x-2">
                         <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -180,60 +180,60 @@
 
                     <!-- Action buttons: Pause Autoscroll, Clear -->
                     <div class="flex items-center space-x-1">
-                        <button id="btnConsolePause" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 text-xs transition" title="Mettre en pause le défilement" data-i18n-title="console.pause_title">
+                        <button id="btnConsolePause" class="console-btn-tool" title="Mettre en pause le défilement" data-i18n-title="console.pause_title">
                             <span>⏸</span>
                         </button>
-                        <button id="btnConsoleClear" class="px-2 py-1 rounded bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 text-xs transition" title="Effacer la console" data-i18n-title="console.clear_title">
+                        <button id="btnConsoleClear" class="console-btn-tool hover:bg-rose-500/20 hover:text-rose-400" title="Effacer la console" data-i18n-title="console.clear_title">
                             <span>🗑️</span>
                         </button>
                     </div>
                 </div>
 
                 <!-- Filter Pills Row -->
-                <div class="flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold">
+                <div class="flex flex-wrap items-center justify-between gap-2">
                     <!-- Origin Filters -->
                     <div class="flex items-center space-x-1">
-                        <button data-log-type="ALL" class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30 transition" data-i18n="console.all">TOUT</button>
-                        <button data-log-type="SERIAL" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/50 transition" data-i18n="console.serial">SÉRIE</button>
-                        <button data-log-type="API" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/50 transition" data-i18n="console.api">API</button>
-                        <button data-log-type="SYS" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/50 transition" data-i18n="console.sys">SYS</button>
+                        <button data-log-type="ALL" class="console-pill active" data-i18n="console.all">TOUT</button>
+                        <button data-log-type="SERIAL" class="console-pill" data-i18n="console.serial">SÉRIE</button>
+                        <button data-log-type="API" class="console-pill" data-i18n="console.api">API</button>
+                        <button data-log-type="SYS" class="console-pill" data-i18n="console.sys">SYS</button>
                     </div>
 
                     <!-- Level Filters -->
                     <div class="flex items-center space-x-1">
-                        <button data-log-level="ALL" class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-400 border border-sky-500/30 transition" data-i18n="console.all">TOUT</button>
-                        <button data-log-level="INFO" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/50 transition" data-i18n="console.info">INFO</button>
-                        <button data-log-level="DEBUG" class="px-2 py-0.5 rounded bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700/50 transition" data-i18n="console.debug">DEBUG</button>
+                        <button data-log-level="ALL" class="console-pill active" data-i18n="console.all">TOUT</button>
+                        <button data-log-level="INFO" class="console-pill" data-i18n="console.info">INFO</button>
+                        <button data-log-level="DEBUG" class="console-pill" data-i18n="console.debug">DEBUG</button>
                     </div>
 
                     <!-- Free Search -->
-                    <div class="flex-1 min-w-[120px] max-w-[200px]">
-                        <input type="text" id="consoleSearchInput" placeholder="Filtrer..." data-i18n-placeholder="console.search_placeholder" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-0.5 text-[10px] text-slate-300 placeholder-slate-600 outline-none focus:border-sky-500/50"/>
+                    <div>
+                        <input type="text" id="consoleSearchInput" placeholder="Filtrer..." data-i18n-placeholder="console.search_placeholder" class="console-search"/>
                     </div>
                 </div>
             </div>
 
-            <!-- Terminal Log Output Area -->
-            <div id="consoleScrollArea" class="bg-slate-950 rounded-xl border border-slate-800 p-3 overflow-y-auto flex-1 h-[260px] md:h-[300px] shadow-inner select-text">
-                <div id="consoleLogList" class="flex flex-col space-y-0.5">
+            <!-- Terminal Log Output Area with visible scrollbar -->
+            <div id="consoleScrollArea" class="console-terminal select-text">
+                <div id="consoleLogList">
                     <!-- Log entries inserted here -->
                 </div>
             </div>
 
             <!-- Bottom Prompt Zone -->
-            <div class="mt-3 pt-2 border-t border-slate-800/80 flex flex-col gap-1">
-                <div class="flex items-center space-x-2">
-                    <div class="relative flex-1">
-                        <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 font-mono text-xs select-none">&gt;</span>
-                        <input type="text" id="consoleCommandInput" placeholder="Commande raw (ex: !GET_STATE, FM2:0, T2COK...)" data-i18n-placeholder="console.prompt_placeholder" class="w-full bg-slate-950 border border-slate-700/80 rounded-lg pl-7 pr-3 py-2 text-xs font-mono text-emerald-400 placeholder-slate-600 outline-none focus:border-sky-400 focus:ring-1 focus:ring-sky-400/50"/>
+            <div class="console-prompt-box">
+                <div class="console-prompt-row">
+                    <div class="console-input-wrap">
+                        <span class="console-input-prefix">&gt;</span>
+                        <input type="text" id="consoleCommandInput" placeholder="Commande raw (ex: !GET_STATE, FM2:0, T2COK...)" data-i18n-placeholder="console.prompt_placeholder" class="console-input"/>
                     </div>
-                    <button id="btnConsoleSend" class="px-4 py-2 bg-sky-500 hover:bg-sky-400 text-sky-950 font-bold text-xs rounded-lg transition active:scale-95 whitespace-nowrap shadow-[0_0_15px_rgba(14,165,233,0.3)]">
+                    <button id="btnConsoleSend" class="console-btn-send">
                         <span data-i18n="console.send">Envoyer</span>
                     </button>
                 </div>
                 <div class="flex justify-between items-center px-1">
                     <span id="consoleCommandFeedback" class="text-[10px] font-mono text-slate-500"></span>
-                    <span class="text-[9px] text-slate-600 select-none" data-i18n="console.hint">Entrée pour envoyer • ↑↓ Historique</span>
+                    <span class="text-[9px] text-slate-500 select-none" data-i18n="console.hint">Entrée pour envoyer • ↑↓ Historique</span>
                 </div>
             </div>
         </div>
