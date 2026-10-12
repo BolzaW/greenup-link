@@ -45,5 +45,22 @@
   },
   "error": {
     "hardware_code": "Code Hardware : "
+  },
+  "hardware_errors": {
+    "0000": "Aucune erreur",
+    "0001": "Erreur verrouillage prise T2S",
+    "0002": "Erreur déverrouillage prise T2S",
+    "0003": "Court-circuit fil pilote (câble/véhicule)",
+    "0004": "Court-circuit fil pilote (carte borne)",
+    "0005": "Erreur ouverture contacteur domestique",
+    "0006": "Erreur fermeture contacteur domestique",
+    "0007": "Erreur ouverture contacteur T2S",
+    "0008": "Erreur fermeture contacteur T2S",
+    "0009": "Diode véhicule non détectée",
+    "0010": "Surcharge courant prise T2S",
+    "0011": "Surcharge courant prise domestique",
+    "0012": "Coupure secteur / Défaut alimentation",
+    "0013": "Erreur communication interne",
+    "0015": "Défaut fuite courant continu (6mA DC)"
   }
 }

@@ -25,5 +25,7 @@ async function setLanguage(lang) {
 }
 
 document.getElementById('langSelector').addEventListener('change', (e) => {
-    setLanguage(e.target.value);
+    setLanguage(e.target.value).then(() => {
+        if (typeof fetchTelemetry === 'function') fetchTelemetry();
+    });
 });
