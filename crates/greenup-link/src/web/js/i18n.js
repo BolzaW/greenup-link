@@ -19,6 +19,11 @@ async function setLanguage(lang) {
             if (translation && translation !== el.getAttribute('data-i18n-title')) el.title = translation;
         });
 
+        document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            const translation = t(el.getAttribute('data-i18n-placeholder'));
+            if (translation && translation !== el.getAttribute('data-i18n-placeholder')) el.placeholder = translation;
+        });
+
         if (lastReportedTicMode) updateLinky(lastReportedTicMode);
         window.lastVisualState = null; // force visual update on next poll
     } catch(err) { console.error('Failed to load translations', err); }
