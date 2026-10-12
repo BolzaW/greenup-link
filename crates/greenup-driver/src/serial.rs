@@ -122,7 +122,12 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
             // Empty the channel of old messages
             while let Ok(_) = internal_rx.try_recv() {}
 
-            logger::log("SERIAL_TX", encoded.trim());
+            let tx_category = if matches!(cmd, Command::GetMacAddress) && state.custom_tic_active.load(std::sync::atomic::Ordering::Relaxed) {
+                "DEBUG"
+            } else {
+                "SERIAL_TX"
+            };
+            logger::log(tx_category, encoded.trim());
             if let Err(e) = port.write_all(encoded.as_bytes()) {
                 logger::log("SERIAL", &format!("Serial write error: {}", e));
             }
@@ -199,7 +204,12 @@ pub fn update_charge_status(tel: &mut Telemetry) {
 }
 
 fn parse_incoming_line(line: &str, state: &SharedState) {
-    logger::log("SERIAL_RX", line);
+    let rx_category = if line.starts_with("MacAdr:TIC:") {
+        "DEBUG"
+    } else {
+        "SERIAL_RX"
+    };
+    logger::log(rx_category, line);
 
     let event = parse_line(line);
 
@@ -380,7 +390,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
 
 pub fn handle_mac_address(val: &str, state: &SharedState) {
     if val.starts_with("TIC:") {
-        logger::log("SERIAL", &format!("🔌 TIC custom frame received: {}", val));
+        logger::log("DEBUG", &format!("🔌 TIC custom frame received: {}", val));
         
         let parsed = crate::custom_tic::CustomTicTelemetry::parse(val);
         if let Ok(mut tic) = state.custom_tic.lock() {
