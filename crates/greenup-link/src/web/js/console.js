@@ -5,6 +5,7 @@
 let logEntries = [];
 let maxLogEntries = 500;
 let isLogStreamPaused = false;
+let userScrolledUp = false;
 let currentTypeFilter = 'ALL';
 let currentLevelFilter = 'ALL';
 let currentSearchTerm = '';
@@ -15,7 +16,6 @@ let logEventSource = null;
 function initConsole() {
     setupConsoleDomListeners();
     loadConsoleHistory();
-    // Do not connect SSE until user toggles debug on or if already on
     const debugStored = localStorage.getItem('greenup_debug_mode');
     if (debugStored === 'true') {
         setDebugMode(true);
@@ -32,16 +32,10 @@ function setDebugMode(enabled) {
 
     if (enabled) {
         if (visualizerPanel) visualizerPanel.classList.add('hidden');
-        if (consolePanel) {
-            consolePanel.classList.remove('hidden');
-            consolePanel.classList.add('flex');
-        }
+        if (consolePanel) consolePanel.classList.remove('hidden');
         startLogStream();
     } else {
-        if (consolePanel) {
-            consolePanel.classList.add('hidden');
-            consolePanel.classList.remove('flex');
-        }
+        if (consolePanel) consolePanel.classList.add('hidden');
         if (visualizerPanel) visualizerPanel.classList.remove('hidden');
         stopLogStream();
     }
@@ -50,7 +44,6 @@ function setDebugMode(enabled) {
 function startLogStream() {
     if (logEventSource) return;
 
-    // First fetch historical recent logs
     fetch('/api/logs')
         .then(res => res.json())
         .then(logs => {
@@ -79,7 +72,7 @@ function connectSse() {
             }
         };
         logEventSource.onerror = function() {
-            // EventSource will automatically retry in modern browsers
+            // EventSource automatically retries
         };
     } catch (e) {
         console.warn('SSE not supported or connection error:', e);
@@ -101,7 +94,7 @@ function addLogEntry(entry) {
 
     if (matchesFilter(entry)) {
         appendLogDom(entry);
-        if (!isLogStreamPaused) {
+        if (!isLogStreamPaused && !userScrolledUp) {
             scrollConsoleToBottom();
         }
     }
@@ -134,17 +127,19 @@ function renderLogs() {
         fragment.appendChild(createLogLineElement(entry));
     }
     list.appendChild(fragment);
-    scrollConsoleToBottom();
+    if (!userScrolledUp) {
+        scrollConsoleToBottom();
+    }
     updateLogCount();
 }
 
 function createLogLineElement(entry) {
     const line = document.createElement('div');
-    line.className = 'font-mono text-[11px] leading-relaxed py-0.5 border-b border-slate-900/60 flex items-start space-x-2 select-text';
+    line.className = 'console-line';
 
     // Time
     const timeSpan = document.createElement('span');
-    timeSpan.className = 'text-slate-500 whitespace-nowrap text-[10px] select-none';
+    timeSpan.className = 'console-time';
     timeSpan.textContent = entry.timestamp;
 
     // Badge category
@@ -167,29 +162,28 @@ function appendLogDom(entry) {
     const list = document.getElementById('consoleLogList');
     if (!list) return;
     list.appendChild(createLogLineElement(entry));
-    // Keep DOM trimmed
     if (list.children.length > maxLogEntries) {
         list.removeChild(list.firstChild);
     }
 }
 
 function getCategoryBadgeClass(cat) {
-    if (cat === 'SERIAL_RX') return 'text-emerald-400 font-bold whitespace-nowrap';
-    if (cat === 'SERIAL_TX') return 'text-sky-400 font-bold whitespace-nowrap';
-    if (cat === 'API') return 'text-amber-400 font-bold whitespace-nowrap';
-    if (cat === 'DEBUG' || cat === 'TRACE') return 'text-purple-400 font-bold whitespace-nowrap opacity-80';
-    if (cat === 'ERROR') return 'text-rose-400 font-bold whitespace-nowrap';
-    return 'text-slate-400 font-bold whitespace-nowrap';
+    if (cat === 'SERIAL_RX') return 'console-badge-rx';
+    if (cat === 'SERIAL_TX') return 'console-badge-tx';
+    if (cat === 'API') return 'console-badge-api';
+    if (cat === 'DEBUG' || cat === 'TRACE') return 'console-badge-dbg';
+    if (cat === 'ERROR') return 'console-badge-err';
+    return 'console-badge-sys';
 }
 
 function getMessageClass(entry) {
-    if (entry.level === 'ERROR') return 'text-rose-400 break-all';
-    if (entry.level === 'WARN') return 'text-amber-300 break-all';
-    if (entry.category === 'SERIAL_RX') return 'text-emerald-300/90 break-all';
-    if (entry.category === 'SERIAL_TX') return 'text-sky-300/90 break-all';
-    if (entry.category === 'API') return 'text-slate-200 break-all';
-    if (entry.level === 'DEBUG') return 'text-slate-400 break-all';
-    return 'text-slate-300 break-all';
+    if (entry.level === 'ERROR') return 'console-msg-err';
+    if (entry.level === 'WARN') return 'console-msg-warn';
+    if (entry.category === 'SERIAL_RX') return 'console-msg-rx';
+    if (entry.category === 'SERIAL_TX') return 'console-msg-tx';
+    if (entry.category === 'API') return 'console-msg-api';
+    if (entry.level === 'DEBUG') return 'console-msg-dbg';
+    return 'console-msg';
 }
 
 function scrollConsoleToBottom() {
@@ -215,14 +209,21 @@ function setupConsoleDomListeners() {
         });
     }
 
+    // Scroll listener for detecting user scrolling up
+    const scrollArea = document.getElementById('consoleScrollArea');
+    if (scrollArea) {
+        scrollArea.addEventListener('scroll', () => {
+            const distanceFromBottom = scrollArea.scrollHeight - scrollArea.scrollTop - scrollArea.clientHeight;
+            userScrolledUp = distanceFromBottom > 35;
+        });
+    }
+
     // Type filters
     const typePills = document.querySelectorAll('[data-log-type]');
     typePills.forEach(pill => {
         pill.addEventListener('click', () => {
-            typePills.forEach(p => p.classList.replace('bg-sky-500/20', 'bg-slate-800'));
-            typePills.forEach(p => p.classList.replace('text-sky-400', 'text-slate-400'));
-            pill.classList.replace('bg-slate-800', 'bg-sky-500/20');
-            pill.classList.replace('text-slate-400', 'text-sky-400');
+            typePills.forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
             currentTypeFilter = pill.getAttribute('data-log-type');
             renderLogs();
         });
@@ -232,10 +233,8 @@ function setupConsoleDomListeners() {
     const levelPills = document.querySelectorAll('[data-log-level]');
     levelPills.forEach(pill => {
         pill.addEventListener('click', () => {
-            levelPills.forEach(p => p.classList.replace('bg-sky-500/20', 'bg-slate-800'));
-            levelPills.forEach(p => p.classList.replace('text-sky-400', 'text-slate-400'));
-            pill.classList.replace('bg-slate-800', 'bg-sky-500/20');
-            pill.classList.replace('text-slate-400', 'text-sky-400');
+            levelPills.forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
             currentLevelFilter = pill.getAttribute('data-log-level');
             renderLogs();
         });
@@ -264,10 +263,13 @@ function setupConsoleDomListeners() {
     if (btnPause) {
         btnPause.addEventListener('click', () => {
             isLogStreamPaused = !isLogStreamPaused;
-            btnPause.classList.toggle('text-amber-400', isLogStreamPaused);
-            btnPause.classList.toggle('text-slate-400', !isLogStreamPaused);
+            btnPause.classList.toggle('active', isLogStreamPaused);
             const icon = btnPause.querySelector('span');
             if (icon) icon.textContent = isLogStreamPaused ? '▶' : '⏸';
+            if (!isLogStreamPaused) {
+                userScrolledUp = false;
+                scrollConsoleToBottom();
+            }
         });
     }
 
