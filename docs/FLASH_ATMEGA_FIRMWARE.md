@@ -19,7 +19,7 @@ This document provides a comprehensive, field-tested guide on how to flash firmw
 
 This flashing procedure can be used to:
 - **Flash official Legrand firmware releases**: upgrade to newer factory firmware versions or downgrade to previous official releases.
-- **Flash custom, modified firmware**: deploy patched community firmware (such as the real-time Linky TIC telemetry edition).
+- **Flash custom, modified firmware**: deploy community firmware releases, such as the **Green'Up Linky TIC Firmware (V01.17.78)** providing real-time Linky TIC telemetry.
 
 ---
 
@@ -259,7 +259,7 @@ python3 scripts/calc_update_auth.py
 
 ---
 
-## 5. Custom "MacAdr" Firmware (Linky TIC Telemetry)
+## 5. Green'Up Linky TIC Custom Firmware (V01.17.78)
 
 > [!WARNING]
 > ### ⚠️ EXPERIMENTAL CUSTOM FIRMWARE - USE AT YOUR OWN RISK
@@ -267,13 +267,13 @@ python3 scripts/calc_update_auth.py
 >
 > Although this patch has been meticulously reverse-engineered, assembly-crafted, byte-audited, and validated in real operating conditions on physical hardware, **unforeseen side effects or unexpected behavior with severe consequences (including hardware malfunction, charging lockup, or thermal failure) cannot be entirely ruled out**.
 
-### 5.1. What is the Custom "MacAdr" Firmware?
+### 5.1. What is the Green'Up Linky TIC Firmware?
 
-In official Legrand firmware releases, the serial query `MacAdr?` over USB (USART1) returns an obsolete dummy string of 12 zeros (`MacAdr:000000000000\r\n`).
+In official Legrand firmware releases, the serial query `MacAdr?` over USB (USART1) returns either a dummy string of 12 zeros (`MacAdr:000000000000\r\n`) when Bluetooth is disabled, or the Bluetooth controller MAC address when enabled. However, over the USB serial interface connected to the Raspberry Pi, this Bluetooth MAC address is completely redundant and unused by supervisory software.
 
-Meanwhile, the ATmega2560 firmware already contains a background task that continuously reads and decodes the **Enedis Linky Télé-Information Client (TIC)** signal (when wired to the board's dedicated TIC screw terminals). However, in stock firmware, this telemetry is strictly confined to internal calculations and is never exposed or reported to the supervisor.
+Meanwhile, the ATmega2560 firmware already contains a background task that continuously reads and decodes the **Enedis Linky Télé-Information Client (TIC)** signal (when wired to the board's dedicated TIC screw terminals). In stock firmware, this telemetry is strictly confined to internal calculations and is never exposed or reported to the supervisor.
 
-The **Custom MacAdr Firmware** (version `V01.17.78`, derived from official `V01.17.77`) hijacks the `MacAdr?` serial handler to extract this internal TIC telemetry directly from the ATmega's SRAM and stream it over the serial link in real time.
+The **Green'Up Linky TIC Firmware** (version `V01.17.78`, derived from official `V01.17.77`) hijacks the `MacAdr?` serial handler to extract this internal TIC telemetry directly from the ATmega's SRAM and stream it over the serial link in real time.
 
 > [!IMPORTANT]
 > **If no Linky TIC cable is wired to the charging station, this patch is of NO practical use.** The station will simply report `MacAdr:TIC:AUCUN`.
@@ -310,12 +310,6 @@ MacAdr:TIC:STANDARD;URMS1:<volts>;IRMS1:<amps>;PREF:<kVA>;SINST1:<VA>;PTEC:<HC|H
 ```text
 MacAdr:TIC:STANDARD;URMS1:<v1>;URMS2:<v2>;URMS3:<v3>;IRMS1:<amps>;PREF:<kVA>;SINST1:<va1>;SINST2:<va2>;SINST3:<va3>;PTEC:<HC|HP>\r\n
 ```
-
-**Key features:**
-- **Dynamic 3-phase detection**: Variables for Phase 2 and Phase 3 (`IINST2`, `IINST3`, `URMS2`, `URMS3`, `SINST2`, `SINST3`) are tested against `0xFFFF`. If the installation is single-phase, these fields are omitted automatically, keeping the frame clean and concise.
-- **Instantaneous apparent power (`SINST1`)**: Restitutes active apparent power in VA (the Standard mode equivalent of `PAPP`), ideal for dynamic load shedding without calculating $U \times I \times \cos\varphi$.
-- **Active tariff period (`PTEC`)**: Indicates `;PTEC:HC` (Off-Peak / Heures Creuses) or `;PTEC:HP` (Peak / Heures Pleines).
-- **Software version**: Reports `SoftwareVersion:V01.17.78`.
 
 ---
 
