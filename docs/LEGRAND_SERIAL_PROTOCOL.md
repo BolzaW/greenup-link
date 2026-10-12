@@ -75,7 +75,7 @@ Low-level commands to interact with physical buttons, enable, disable, or force 
 | `2PCOK` / `2PCNOK` | `2PC:1` / `2PC:0` | Authorizes (`OK`) or Blocks (`NOK`) charging on the **Domestic** (Schuko / 2 Pins) socket. |
 | `T2FOK` / `T2FNOK` | `T2F:1` / `T2F:0` | **TBD**: **Forces** charging on the Type 2 socket (bypasses safety or schedule?). Not extensively tested. |
 | `2PFOK` / `2PFNOK` | `2PF:1` / `2PF:0` | **TBD**: **Forces** charging on the domestic socket. Not extensively tested. |
-| `SBOK` / `SBNOK` | `SB:` | **Pause/Resume**: Simulates pressing the physical START/STOP button on the front panel. `SBNOK` cleanly stops the charge (`State:M`). `SBOK` wakes the station and restarts the cycle. *Note: `SBNOK` can be overridden by a spontaneous `SBF:1` emitted by the board when a vehicle is plugged in.* |
+| `SBOK` / `SBNOK` | `SB:` (or `SBF:0`) | **Pause/Resume**: Simulates pressing the physical START/STOP button on the front panel. `SBNOK` cleanly stops the charge (`State:M`). `SBOK` wakes the station and restarts the cycle. *Special case:* In `State:A` when no vehicle is plugged in, the ATmega acknowledges `SBOK` with `SBF:0` instead of `SB:`. Also, `SBNOK` can be overridden by a spontaneous `SBF:1` emitted by the board when a vehicle is plugged in. |
 | `Unlock` | None | Orders the **physical unlocking** of the cable (if the station has a Type 2 socket lock mechanism). |
 
 ---
