@@ -16,6 +16,14 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/", get(serve_ui))
         .route("/locales/fr.json", get(serve_fr_json))
         .route("/locales/en.json", get(serve_en_json))
+        .route("/css/style.css", get(serve_css))
+        .route("/js/dom.js", get(serve_js_dom))
+        .route("/js/i18n.js", get(serve_js_i18n))
+        .route("/js/linky.js", get(serve_js_linky))
+        .route("/js/controls.js", get(serve_js_controls))
+        .route("/js/visuals.js", get(serve_js_visuals))
+        .route("/js/api.js", get(serve_js_api))
+        .route("/js/main.js", get(serve_js_main))
         .route("/api/info", get(get_info))
         .route("/api/telemetry", get(get_telemetry))
         .route("/api/tic", get(get_custom_tic))
@@ -47,6 +55,46 @@ async fn serve_fr_json() -> impl IntoResponse {
 /// GET /locales/en.json
 async fn serve_en_json() -> impl IntoResponse {
     ([(axum::http::header::CONTENT_TYPE, "application/json")], include_str!("locales/en.json"))
+}
+
+/// GET /css/style.css
+async fn serve_css() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "text/css; charset=utf-8")], include_str!("web/css/style.css"))
+}
+
+/// GET /js/dom.js
+async fn serve_js_dom() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/dom.js"))
+}
+
+/// GET /js/i18n.js
+async fn serve_js_i18n() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/i18n.js"))
+}
+
+/// GET /js/linky.js
+async fn serve_js_linky() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/linky.js"))
+}
+
+/// GET /js/controls.js
+async fn serve_js_controls() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/controls.js"))
+}
+
+/// GET /js/visuals.js
+async fn serve_js_visuals() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/visuals.js"))
+}
+
+/// GET /js/api.js
+async fn serve_js_api() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/api.js"))
+}
+
+/// GET /js/main.js
+async fn serve_js_main() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/main.js"))
 }
 
 /// GET /api/info
