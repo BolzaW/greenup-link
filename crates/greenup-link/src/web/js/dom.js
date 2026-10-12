@@ -20,6 +20,7 @@ const chargerIcon = document.getElementById('chargerIcon');
 const chargerLed = document.getElementById('chargerLed');
 const carIcon = document.getElementById('carIcon');
 const carBox = document.getElementById('carBox');
+const cableLabel = document.getElementById('cableLabel');
 
 // Linky
 const linkyBox = document.getElementById('linkyBox');

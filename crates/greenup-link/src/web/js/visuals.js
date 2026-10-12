@@ -31,6 +31,11 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     const animWire2 = document.getElementById('animWire2');
     if (animWire1) { animWire1.classList.add('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#10b981'); }
     if (animWire2) { animWire2.classList.add('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#10b981'); }
+    if (cableLabel) {
+        cableLabel.classList.add('opacity-0');
+        cableLabel.classList.remove('text-rose-500');
+        cableLabel.classList.add('text-emerald-400');
+    }
 
     carIcon.style.fill = '';
     carIcon.classList.remove('animate-pulse');
@@ -44,6 +49,13 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
 
         case 'B':
             stateLabel = t('state.connected') + " (" + greenup_state + ")";
+            // Solid green cable when plugged in
+            if(animWire1) { animWire1.classList.remove('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#10b981'); }
+            if(animWire2) { animWire2.classList.remove('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#10b981'); }
+            if (cableLabel) {
+                cableLabel.classList.remove('opacity-0', 'text-rose-500');
+                cableLabel.classList.add('text-emerald-400');
+            }
             break;
 
         case 'C':
@@ -53,10 +65,16 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
             if(animWire1) {
                 animWire1.classList.remove('opacity-0');
                 animWire1.classList.add('anim-flow');
+                animWire1.setAttribute('stroke', '#10b981');
             }
             if(animWire2) {
                 animWire2.classList.remove('opacity-0');
                 animWire2.classList.add('anim-flow');
+                animWire2.setAttribute('stroke', '#10b981');
+            }
+            if (cableLabel) {
+                cableLabel.classList.remove('opacity-0', 'text-rose-500');
+                cableLabel.classList.add('text-emerald-400');
             }
             // Green charger
             chargerBox.classList.add('border-emerald-500/50', 'shadow-[0_0_30px_rgba(16,185,129,0.15)]');
@@ -81,6 +99,10 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
 
             if(animWire1) { animWire1.classList.remove('opacity-0'); animWire1.setAttribute('stroke', '#f43f5e'); }
             if(animWire2) { animWire2.classList.remove('opacity-0'); animWire2.setAttribute('stroke', '#f43f5e'); }
+            if (cableLabel) {
+                cableLabel.classList.remove('opacity-0', 'text-emerald-400');
+                cableLabel.classList.add('text-rose-500');
+            }
             break;
 
         default:

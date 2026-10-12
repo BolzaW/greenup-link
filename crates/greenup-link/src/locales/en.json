@@ -1,6 +1,6 @@
 {
   "header": {
-    "subtitle": "Local control interface",
+    "subtitle": "GUI",
     "ble_module": "BLE Module"
   },
   "visualizer": {
@@ -31,8 +31,8 @@
     "disable": "DISABLE", "pause": "PAUSE", "resume": "RESUME"
   },
   "tic": {
-    "standard": "Standard TIC (9600 baud)",
-    "historic": "Historic TIC (1200 baud)",
+    "standard": "Standard TIC\n(9600 baud)",
+    "historic": "Historic TIC\n(1200 baud)",
     "detecting": "Detecting...",
     "disconnected": "TIC Not Connected"
   },

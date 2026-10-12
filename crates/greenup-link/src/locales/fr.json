@@ -1,6 +1,6 @@
 {
   "header": {
-    "subtitle": "Interface de contrôle locale",
+    "subtitle": "IHM",
     "ble_module": "Module BLE"
   },
   "visualizer": {
@@ -31,9 +31,9 @@
     "disable": "DÉSACTIVER", "pause": "PAUSE", "resume": "REPRENDRE"
   },
   "tic": {
-    "standard": "TIC Standard (9600 bauds)",
-    "historic": "TIC Historique (1200 bauds)",
-    "detecting": "Détection en cours...",
+    "standard": "TIC Standard\n(9600 bauds)",
+    "historic": "TIC Historique\n(1200 bauds)",
+    "detecting": "Détection...",
     "disconnected": "TIC Non Connecté"
   },
   "info": {
