@@ -24,7 +24,7 @@ Commands used at startup to establish dialogue and identify the board.
 | `Side?` | `Side:` | Requests the active side on multi-socket stations (Side 1 or 2). The ATmega replies with the ASCII decimal value of the socket number (`Side:49` for Side 1, `Side:50` for Side 2). |
 | `Reset` | `State:` | Reboots the power board. Acknowledged by the board's first state upon rebooting. |
 | `UpdateAuth:<CRC>` | `UpdateCodeOK` / `UpdateCodeNOK` | **Bootloader Unlock**: Arms the ATmega firmware flashing mechanism. Requires a 16-bit CRC calculated over an interleaved 28-character hardware authentication key (combining Reference, Serial, Production Date, Hardware & Software versions). When validated (`UpdateCodeOK`), receiving byte `0x1B` triggers a Watchdog Reset into the STK500v2 Wiring bootloader. *See [`FLASH_ATMEGA_FIRMWARE.md`](FLASH_ATMEGA_FIRMWARE.md) for full calculation and flashing instructions.* |
-| `Z` | `Default:Z` | **Invalid / Not a command**: Returns `Default:Z`. Historically misidentified as a bootloader trigger due to a confusion with the station state `State:Z` (*Initialization / Production mode*, recorded at index 14 in the legacy Java supervisor file). |
+| `service` | None | Launches an interactive console service menu (`---service menu---`) providing diagnostics and hardware test functions (Data, SelfTest, BLE Radio Test, TIC Test mode, Modbus Test mode, Dry Contact Test mode, Bluetooth Test mode). Does not wait for a single reply prefix. |
 | `ping` | `pong` | Basic ping to check if the board's serial interface is responsive. |
 
 ---

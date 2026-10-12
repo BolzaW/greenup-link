@@ -85,6 +85,11 @@ This API allows interfacing the Green'Up Link software with any standard home au
   - `tic_mode`: `"0"` (absent), `"1200"` (historical), `"9600"` (standard), `"detecting"` (detection in progress) or `""` (unknown, no detection started).
 
 ### 3. Get real-time Linky TIC telemetry
+
+> [!NOTE]
+> **Prerequisite:** This endpoint only provides telemetry if the ATmega power board is flashed with a **custom patched firmware** (such as the *Green'Up Linky TIC Firmware V01.17.78*). On stock official Legrand firmwares, this endpoint will always return `"active": false` because factory firmwares do not transmit TIC frames over the supervisor serial interface.
+> See the [ATmega Firmware Flashing Guide](FLASH_ATMEGA_FIRMWARE.md) for detailed instructions on flashing custom firmware.
+
 - **URL**: `/api/tic`
 - **Method**: `GET`
 - **Description**: Returns detailed real-time telemetry decoded from the physical Linky meter TIC interface (Customer Tele-Information / Télé-Information Client) when the ATmega power board is running a firmware version supporting extended TIC reporting (queried periodically via `MacAdr?`). Polled by home automation systems (Home Assistant, Jeedom, etc.) for dynamic power monitoring and solar diversion.
