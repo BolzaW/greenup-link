@@ -26,6 +26,8 @@ pub enum ProtocolEvent {
     Energy(f32),
     Frequency(f32),
     MacAddress(String),
+    Side(String),
+    Dip1(String),
     CommandNotUnderstood(String),
     Unknown(String),
 }
@@ -121,6 +123,10 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         }
     } else if let Some(val) = line.strip_prefix("MacAdr:") {
         ProtocolEvent::MacAddress(val.trim().to_string())
+    } else if let Some(val) = line.strip_prefix("Side:") {
+        ProtocolEvent::Side(val.trim().to_string())
+    } else if let Some(val) = line.strip_prefix("DIP1:") {
+        ProtocolEvent::Dip1(val.trim().to_string())
     } else if line.starts_with("Freq:") {
         if let Ok(val) = line.replace("Freq:", "").parse::<f32>() {
             ProtocolEvent::Frequency(val)
@@ -147,6 +153,14 @@ mod tests {
         assert_eq!(
             parse_line("MacAdr:TIC:HISTORIQUE;IINST:18;ISOUSC:45;PTEC:HP"),
             ProtocolEvent::MacAddress("TIC:HISTORIQUE;IINST:18;ISOUSC:45;PTEC:HP".into())
+        );
+        assert_eq!(
+            parse_line("Side:49"),
+            ProtocolEvent::Side("49".into())
+        );
+        assert_eq!(
+            parse_line("DIP1:1"),
+            ProtocolEvent::Dip1("1".into())
         );
     }
 }

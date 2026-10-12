@@ -264,7 +264,7 @@ impl Command {
     /// If `None`, the command does not require an acknowledgment or is "fire-and-forget" (e.g. Raw).
     pub fn expected_rx_prefix(&self) -> Option<&'static str> {
         match self {
-            Command::RaspberryPiModeOk => Some("Side:"),
+            Command::RaspberryPiModeOk => Some("DIP1:"),
             Command::GetSoftwareVersion => Some("SoftwareVersion:"),
             Command::GetHardwareVersion => Some("HardwareVersion:"),
             Command::GetSerialNumber => Some("SerialNumber:"),
@@ -329,6 +329,7 @@ impl Command {
             Command::GetSerialNumber,
             Command::GetReference,
             Command::GetWeekYearProduction,
+            Command::GetSide,
             Command::GetMacAddress,
             Command::GetState,
             Command::GetFunctioningMode,

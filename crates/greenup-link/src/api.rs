@@ -195,7 +195,7 @@ pub struct ChargeActionPayload { action: String }
 async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<ChargeActionPayload>) -> impl IntoResponse {
     match payload.action.as_str() {
         "enable" => {
-            logger::log("API", "▶ Charge enable request (T2COK + FM2:0 + DOK)");
+            logger::log("API", "⚡ Charge enable requested (T2COK + FM2:0 + DOK)");
             let _ = state.serial_tx.send(Command::AuthorizeType2(true)).await;
             let _ = state.serial_tx.send(Command::SetExternalSignal(false)).await;
             if state.serial_tx.send(Command::SetDerogation(true)).await.is_ok() {
@@ -205,7 +205,7 @@ async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<
             }
         },
         "disable" => {
-            logger::log("API", "▶ Charge disable request (FM2:1 + DNOK)");
+            logger::log("API", "🛑 Charge disable requested (FM2:1 + DNOK)");
             let _ = state.serial_tx.send(Command::SetExternalSignal(true)).await;
             if state.serial_tx.send(Command::SetDerogation(false)).await.is_ok() {
                 (StatusCode::OK, Json(json!({"status": "success"})))
@@ -214,7 +214,7 @@ async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<
             }
         },
         "pause" => {
-            logger::log("API", "▶ Charge pause request (SBNOK)");
+            logger::log("API", "⏸ Charge pause requested (SBNOK)");
             if state.serial_tx.send(Command::SetStartButton(false)).await.is_ok() {
                 (StatusCode::OK, Json(json!({"status": "success"})))
             } else {
@@ -222,7 +222,7 @@ async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<
             }
         },
         "resume" => {
-            logger::log("API", "▶ Charge resume request (SBOK)");
+            logger::log("API", "▶ Charge resume requested (SBOK)");
             if state.serial_tx.send(Command::SetStartButton(true)).await.is_ok() {
                 (StatusCode::OK, Json(json!({"status": "success"})))
             } else {

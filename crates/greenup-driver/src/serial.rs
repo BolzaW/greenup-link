@@ -238,6 +238,20 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::MacAddress(val) => {
             handle_mac_address(&val, state);
         }
+        ProtocolEvent::Side(val) => {
+            let side_num = match val.as_str() {
+                "49" | "1" => Some(1),
+                "50" | "2" => Some(2),
+                _ => val.parse::<u8>().ok(),
+            };
+            logger::log("SERIAL", &format!("ℹ️ Active socket side = {} (raw: {})", side_num.map(|s| s.to_string()).unwrap_or_else(|| "Unknown".to_string()), val));
+            if let Ok(mut info) = state.info.lock() {
+                info.side = side_num;
+            }
+        }
+        ProtocolEvent::Dip1(val) => {
+            logger::log("SERIAL", &format!("ℹ️ DIP1 received = {}", val));
+        }
         ProtocolEvent::StateChange(state_val) => {
             if state_val == "V" {
                 logger::log("SYS", "!!! CRITICAL ALERT: POWER OUTAGE DETECTED (State:V) - IMMINENT SHUTDOWN !!!");
