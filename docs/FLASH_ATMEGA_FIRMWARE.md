@@ -13,6 +13,16 @@
 
 ---
 
+## Introduction
+
+This document provides a comprehensive, field-tested guide on how to flash firmware onto the **Microchip/Atmel ATmega2560** microcontroller located on the electronic power board of the **Legrand Green'Up Premium** charging station.
+
+This flashing procedure can be used to:
+- **Flash official Legrand firmware releases**: upgrade to newer factory firmware versions or downgrade to previous official releases.
+- **Flash custom, modified firmware**: deploy patched community firmware (such as the real-time Linky TIC telemetry edition).
+
+---
+
 ## 1. Operating Principle & Bootloader Unlock Mechanism
 
 On Legrand Green'Up Premium charging stations, the DTR control line of the USB-to-Serial interface is **physically disconnected** from the RESET pin of the Microchip/Atmel ATmega2560 microcontroller. This is an industrial safety design to prevent accidental MCU reboots or relay cut-offs during high-current EV charging sessions.
@@ -249,12 +259,87 @@ python3 scripts/calc_update_auth.py
 
 ---
 
-## 5. Firmware Patcher Script: `patch_firmware_17_77.py`
+## 5. Custom "MacAdr" Firmware (Linky TIC Telemetry)
 
-To reproducibly patch an official Legrand 17.77 firmware file with the real-time Linky TIC telemetry handler, use [`scripts/patch_firmware_17_77.py`](file:///c:/Users/rapha/Desktop/Maj%20borne%20legrand/retro_ingenierie/legrand/greenup-link/scripts/patch_firmware_17_77.py):
+> [!WARNING]
+> ### ⚠️ EXPERIMENTAL CUSTOM FIRMWARE - USE AT YOUR OWN RISK
+> Flashing modified or custom firmware carries **substantially higher risks** than flashing official vendor firmware.
+>
+> Although this patch has been meticulously reverse-engineered, assembly-crafted, byte-audited, and validated in real operating conditions on physical hardware, **unforeseen side effects or unexpected behavior with severe consequences (including hardware malfunction, charging lockup, or thermal failure) cannot be entirely ruled out**.
 
-```bash
-python3 scripts/patch_firmware_17_77.py -i hex/FirmwareBoardA-V01_17_77.hex -o hex/FirmwareBoardA-V01_17_77c.hex
+### 5.1. What is the Custom "MacAdr" Firmware?
+
+In official Legrand firmware releases, the serial query `MacAdr?` over USB (USART1) returns an obsolete dummy string of 12 zeros (`MacAdr:000000000000\r\n`).
+
+Meanwhile, the ATmega2560 firmware already contains a background task that continuously reads and decodes the **Enedis Linky Télé-Information Client (TIC)** signal (when wired to the board's dedicated TIC screw terminals). However, in stock firmware, this telemetry is strictly confined to internal calculations and is never exposed or reported to the supervisor.
+
+The **Custom MacAdr Firmware** (version `V01.17.78`, derived from official `V01.17.77`) hijacks the `MacAdr?` serial handler to extract this internal TIC telemetry directly from the ATmega's SRAM and stream it over the serial link in real time.
+
+> [!IMPORTANT]
+> **If no Linky TIC cable is wired to the charging station, this patch is of NO practical use.** The station will simply report `MacAdr:TIC:AUCUN`.
+
+---
+
+### 5.2. Format of the Telemetry Frames
+
+The patched `MacAdr?` command outputs formatted ASCII strings that can be filtered and parsed effortlessly:
+
+#### 1. When TIC is disconnected or inactive:
+```text
+MacAdr:TIC:AUCUN\r\n
 ```
 
-This utility performs strict SHA-256 pre-validation against the official Legrand 17.77 binary payload (`d46a6bd6...`), applies the surgical bytecode patch, and verifies the output file integrity (`1fca0124...`). It aborts safely if the input file does not match the official firmware.
+#### 2. Linky in "Historique" Mode (1200 baud) - Single-Phase:
+```text
+MacAdr:TIC:HISTORIQUE;IINST:<amps>;ISOUSC:<amps>;PTEC:<HC|HP>\r\n
+# Example: MacAdr:TIC:HISTORIQUE;IINST:2;ISOUSC:30;PTEC:HP\r\n
+```
+
+#### 3. Linky in "Historique" Mode (1200 baud) - Three-Phase:
+```text
+MacAdr:TIC:HISTORIQUE;IINST1:<amps>;IINST2:<amps>;IINST3:<amps>;ISOUSC:<amps>;PTEC:<HC|HP>\r\n
+```
+
+#### 4. Linky in "Standard" Mode (9600 baud) - Single-Phase:
+```text
+MacAdr:TIC:STANDARD;URMS1:<volts>;IRMS1:<amps>;PREF:<kVA>;SINST1:<VA>;PTEC:<HC|HP>\r\n
+# Example: MacAdr:TIC:STANDARD;URMS1:234;IRMS1:14;PREF:9;SINST1:3220;PTEC:HC\r\n
+```
+
+#### 5. Linky in "Standard" Mode (9600 baud) - Three-Phase:
+```text
+MacAdr:TIC:STANDARD;URMS1:<v1>;URMS2:<v2>;URMS3:<v3>;IRMS1:<amps>;PREF:<kVA>;SINST1:<va1>;SINST2:<va2>;SINST3:<va3>;PTEC:<HC|HP>\r\n
+```
+
+**Key features:**
+- **Dynamic 3-phase detection**: Variables for Phase 2 and Phase 3 (`IINST2`, `IINST3`, `URMS2`, `URMS3`, `SINST2`, `SINST3`) are tested against `0xFFFF`. If the installation is single-phase, these fields are omitted automatically, keeping the frame clean and concise.
+- **Instantaneous apparent power (`SINST1`)**: Restitutes active apparent power in VA (the Standard mode equivalent of `PAPP`), ideal for dynamic load shedding without calculating $U \times I \times \cos\varphi$.
+- **Active tariff period (`PTEC`)**: Indicates `;PTEC:HC` (Off-Peak / Heures Creuses) or `;PTEC:HP` (Peak / Heures Pleines).
+- **Software version**: Reports `SoftwareVersion:V01.17.78`.
+
+---
+
+### 5.3. Technical Architecture: Surgical Bytecode Injection
+
+To ensure absolute safety and preserve the factory charging logic, the patch was engineered with zero displacement of existing functions:
+
+1. **Trampoline jump**: The useless 12-zero loop at Flash address `0x0B630` was replaced with a 22-bit AVR jump instruction (`jmp 0x23A70`) followed by 17 NOP instructions.
+2. **Appended payload**: The entire telemetry logic and string tables (538 bytes) reside in unused flash space at the end of the bytecode (`0x23A70` – `0x23C8A`).
+3. **Firmware integrity**: The remaining 145,989 bytes of the original 146,028-byte firmware are **100% bit-for-bit identical** to Legrand's official release. All hardware safety routines, relay control, contactor monitoring, and Bluetooth operations remain entirely untouched.
+
+---
+
+### 5.4. How to Generate the Patched Firmware
+
+Official Legrand firmware files are proprietary and **are not distributed in this repository**.
+
+However, if you have obtained the official `FirmwareBoardA-V01_17_77.hex` file, you can generate the exact certified `FirmwareBoardA-V01_17_77c.hex` binary using the standalone Python utility [`scripts/patch_firmware_17_77.py`](file:///c:/Users/rapha/Desktop/Maj%20borne%20legrand/retro_ingenierie/legrand/greenup-link/scripts/patch_firmware_17_77.py):
+
+```bash
+python3 scripts/patch_firmware_17_77.py -i /path/to/FirmwareBoardA-V01_17_77.hex -o /path/to/FirmwareBoardA-V01_17_77c.hex
+```
+
+**Automated verification performed by the script:**
+1. **Pre-check**: Verifies the input file SHA-256 against official factory signatures (`d46a6bd6...`). If the file is not the exact official 17.77 release, the script aborts immediately with an error.
+2. **Surgical Patching**: Injects the trampoline, version identifier (`V01.17.78`), and compiled telemetry bytecode.
+3. **Post-check**: Verifies the output file integrity against the certified SHA-256 (`1fca0124...` / binary `261d079e...`).
