@@ -228,27 +228,23 @@ function setupConsoleDomListeners() {
         });
     }
 
-    // Type filters
-    const typePills = document.querySelectorAll('[data-log-type]');
-    typePills.forEach(pill => {
-        pill.addEventListener('click', () => {
-            typePills.forEach(p => p.classList.remove('active'));
-            pill.classList.add('active');
-            currentTypeFilter = pill.getAttribute('data-log-type');
+    // Type/Source dropdown
+    const typeSelect = document.getElementById('consoleTypeSelect');
+    if (typeSelect) {
+        typeSelect.addEventListener('change', (e) => {
+            currentTypeFilter = e.target.value;
             renderLogs();
         });
-    });
+    }
 
-    // Level filters
-    const levelPills = document.querySelectorAll('[data-log-level]');
-    levelPills.forEach(pill => {
-        pill.addEventListener('click', () => {
-            levelPills.forEach(p => p.classList.remove('active'));
-            pill.classList.add('active');
-            currentLevelFilter = pill.getAttribute('data-log-level');
+    // Level dropdown
+    const levelSelect = document.getElementById('consoleLevelSelect');
+    if (levelSelect) {
+        levelSelect.addEventListener('change', (e) => {
+            currentLevelFilter = e.target.value;
             renderLogs();
         });
-    });
+    }
 
     // Search input
     const searchInput = document.getElementById('consoleSearchInput');

@@ -210,29 +210,27 @@
                     </div>
                 </div>
 
-                <!-- Filter Pills Row -->
-                <div class="flex items-center justify-between gap-1 sm:gap-2 overflow-x-auto no-scrollbar py-0.5">
-                    <!-- Origin & Level Filters -->
-                    <div class="flex items-center gap-1 flex-shrink-0">
-                        <!-- Origin Filters -->
-                        <button data-log-type="ALL" class="console-pill active" data-i18n="console.all">TOUT</button>
-                        <button data-log-type="SERIAL" class="console-pill" data-i18n="console.serial">SÉRIE</button>
-                        <button data-log-type="API" class="console-pill hidden sm:inline-block" data-i18n="console.api">API</button>
-                        <button data-log-type="SYS" class="console-pill hidden sm:inline-block" data-i18n="console.sys">SYS</button>
+                <!-- Console Filters Row (Dropdowns + Search) -->
+                <div class="flex items-center gap-2 py-0.5">
+                    <!-- Origin Selector -->
+                    <select id="consoleTypeSelect" class="console-select" aria-label="Filtrer par source">
+                        <option value="ALL" data-i18n="console.type_all">Source : Tout</option>
+                        <option value="SERIAL" data-i18n="console.type_serial">Source : Série</option>
+                        <option value="API" data-i18n="console.type_api">Source : API</option>
+                        <option value="SYS" data-i18n="console.type_sys">Source : Système</option>
+                    </select>
 
-                        <!-- Subtle vertical separator -->
-                        <span class="w-[1px] h-3.5 bg-slate-800 mx-0.5 flex-shrink-0"></span>
-
-                        <!-- Level Filters -->
-                        <button data-log-level="ERROR" class="console-pill" data-i18n="console.error">ERROR</button>
-                        <button data-log-level="WARN" class="console-pill" data-i18n="console.warn">WARN</button>
-                        <button data-log-level="INFO" class="console-pill" data-i18n="console.info">INFO</button>
-                        <button data-log-level="DEBUG" class="console-pill active" data-i18n="console.debug">DEBUG</button>
-                    </div>
+                    <!-- Level Selector -->
+                    <select id="consoleLevelSelect" class="console-select" aria-label="Filtrer par niveau">
+                        <option value="DEBUG" selected data-i18n="console.level_debug">Niveau : DEBUG</option>
+                        <option value="INFO" data-i18n="console.level_info">Niveau : INFO</option>
+                        <option value="WARN" data-i18n="console.level_warn">Niveau : WARN</option>
+                        <option value="ERROR" data-i18n="console.level_error">Niveau : ERROR</option>
+                    </select>
 
                     <!-- Free Search -->
-                    <div class="flex-shrink-0 ml-1">
-                        <input type="text" id="consoleSearchInput" placeholder="Filtrer..." data-i18n-placeholder="console.search_placeholder" class="console-search"/>
+                    <div class="flex-1 min-w-0">
+                        <input type="text" id="consoleSearchInput" placeholder="Filtrer..." data-i18n-placeholder="console.search_placeholder" class="console-search w-full"/>
                     </div>
                 </div>
             </div>
