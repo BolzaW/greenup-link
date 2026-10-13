@@ -157,14 +157,14 @@ async fn get_info(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// GET /api/telemetry
 async fn get_telemetry(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("TRACE", "📡 GET request /api/telemetry");
+    logger::log("DEBUG", "📡 GET request /api/telemetry");
     let telemetry = state.telemetry.lock().unwrap().clone();
     Json(telemetry)
 }
 
 /// GET /api/tic
 async fn get_custom_tic(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("TRACE", "📡 GET request /api/tic");
+    logger::log("DEBUG", "📡 GET request /api/tic");
     let custom_tic = state.custom_tic.lock().unwrap().clone();
     Json(custom_tic)
 }
