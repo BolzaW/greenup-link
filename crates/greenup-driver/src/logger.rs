@@ -108,8 +108,8 @@ pub fn log(category: &str, message: &str) {
     let full_timestamp = now.format("%Y-%m-%d %H:%M:%S%.3f");
     let entry_text = format!("[{}] [{}] {}", full_timestamp, category, message);
 
-    // Stdout (console): skip TRACE and DEBUG by default to avoid spamming the console
-    if category != "TRACE" && (category != "DEBUG" || std::env::var("GREENUP_DEBUG").is_ok()) {
+    // Stdout (console): skip DEBUG by default to avoid spamming the console
+    if category != "TRACE" && category != "DEBUG" || std::env::var("GREENUP_DEBUG").is_ok() {
         println!("{}", entry_text);
     }
 
