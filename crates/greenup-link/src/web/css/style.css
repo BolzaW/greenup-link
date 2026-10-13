@@ -5,8 +5,8 @@
 .console-panel {
     display: flex;
     flex-direction: column;
-    height: 480px;
-    max-height: 480px;
+    height: 550px;
+    max-height: 550px;
     background-color: #0b1120;
     border: 1px solid #1e293b;
     border-radius: 1rem;
