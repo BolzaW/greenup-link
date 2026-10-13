@@ -250,6 +250,12 @@ function setupConsoleDomListeners() {
         });
     }
 
+    // Copy visible logs button
+    const btnCopy = document.getElementById('btnConsoleCopy');
+    if (btnCopy) {
+        btnCopy.addEventListener('click', copyVisibleLogs);
+    }
+
     // Export active log file button
     const btnExport = document.getElementById('btnConsoleExport');
     if (btnExport) {
@@ -273,8 +279,12 @@ function setupConsoleDomListeners() {
         btnPause.addEventListener('click', () => {
             isLogStreamPaused = !isLogStreamPaused;
             btnPause.classList.toggle('active', isLogStreamPaused);
-            const icon = btnPause.querySelector('span');
-            if (icon) icon.textContent = isLogStreamPaused ? '▶' : '⏸';
+            const iconPause = document.getElementById('iconPause');
+            const iconPlay = document.getElementById('iconPlay');
+            if (iconPause && iconPlay) {
+                iconPause.classList.toggle('hidden', isLogStreamPaused);
+                iconPlay.classList.toggle('hidden', !isLogStreamPaused);
+            }
             if (!isLogStreamPaused) {
                 userScrolledUp = false;
                 scrollConsoleToBottom();
@@ -371,4 +381,57 @@ function navigateHistory(direction, input) {
         return;
     }
     input.value = commandHistory[commandHistoryIndex];
+}
+
+function copyVisibleLogs() {
+    const visibleEntries = logEntries.filter(matchesFilter);
+    if (visibleEntries.length === 0) {
+        showCopyFeedback(false);
+        return;
+    }
+    const textToCopy = visibleEntries.map(e => `[${e.timestamp}] [${e.level}] [${e.category}] ${e.message}`).join('\n');
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textToCopy)
+            .then(() => showCopyFeedback(true))
+            .catch(() => fallbackCopy(textToCopy));
+    } else {
+        fallbackCopy(textToCopy);
+    }
+}
+
+function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+        const ok = document.execCommand('copy');
+        showCopyFeedback(ok);
+    } catch (e) {
+        console.error('Failed to copy', e);
+        showCopyFeedback(false);
+    }
+    document.body.removeChild(ta);
+}
+
+function showCopyFeedback(success) {
+    const iconCopy = document.getElementById('iconCopy');
+    const iconCheck = document.getElementById('iconCopyCheck');
+    const btn = document.getElementById('btnConsoleCopy');
+    if (!iconCopy || !iconCheck || !btn) return;
+
+    if (success) {
+        iconCopy.classList.add('hidden');
+        iconCheck.classList.remove('hidden');
+        btn.classList.add('border-emerald-500/50');
+        setTimeout(() => {
+            iconCopy.classList.remove('hidden');
+            iconCheck.classList.add('hidden');
+            btn.classList.remove('border-emerald-500/50');
+        }, 1500);
+    }
 }

@@ -17,6 +17,7 @@
     "search_placeholder": "Filter logs...",
     "prompt_placeholder": "Raw command (e.g. !GET_STATE, FM2:0, T2COK...)",
     "send": "Send",
+    "copy_title": "Copy visible logs",
     "clear_title": "Clear console",
     "pause_title": "Pause auto-scroll",
     "export_title": "Export active log file",
