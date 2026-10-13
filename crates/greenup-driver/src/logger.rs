@@ -46,6 +46,37 @@ pub fn get_recent_logs() -> Vec<LogEntry> {
     }
 }
 
+/// Returns the path of the active log file, if any.
+pub fn get_log_file_path() -> Option<String> {
+    LOG_FILE.lock().ok().and_then(|guard| guard.clone())
+}
+
+/// Reads the current log file content or returns recent in-memory logs formatted as text.
+/// Returns (suggested_filename, file_content).
+pub fn get_current_log_content() -> (String, String) {
+    let now = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let default_filename = format!("greenup_{}.log", now);
+
+    if let Some(path) = get_log_file_path() {
+        if let Ok(content) = fs::read_to_string(&path) {
+            let filename = std::path::Path::new(&path)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&default_filename)
+                .to_string();
+            return (filename, content);
+        }
+    }
+
+    // Fallback: format recent in-memory logs
+    let recent = get_recent_logs();
+    let mut out = String::new();
+    for entry in recent {
+        out.push_str(&format!("[{}] [{}] [{}] {}\n", entry.timestamp, entry.level, entry.category, entry.message));
+    }
+    (default_filename, out)
+}
+
 /// Initializes the logger by creating the log file.
 /// The file is named with the startup date/time.
 /// Example: logs/greenup_2026-09-30_23-15-42.log

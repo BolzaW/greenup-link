@@ -178,12 +178,15 @@
                         <span id="consoleLogCount" class="text-[10px] font-mono text-slate-500 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">0 logs</span>
                     </div>
 
-                    <!-- Action buttons: Pause Autoscroll, Clear -->
+                    <!-- Action buttons: Export, Pause Autoscroll, Clear -->
                     <div class="flex items-center space-x-1">
+                        <button id="btnConsoleExport" class="console-btn-tool console-btn-export" title="Exporter le fichier de log en cours" data-i18n-title="console.export_title">
+                            <span>📥</span>
+                        </button>
                         <button id="btnConsolePause" class="console-btn-tool" title="Mettre en pause le défilement" data-i18n-title="console.pause_title">
                             <span>⏸</span>
                         </button>
-                        <button id="btnConsoleClear" class="console-btn-tool hover:bg-rose-500/20 hover:text-rose-400" title="Effacer la console" data-i18n-title="console.clear_title">
+                        <button id="btnConsoleClear" class="console-btn-tool console-btn-clear" title="Effacer la console" data-i18n-title="console.clear_title">
                             <span>🗑️</span>
                         </button>
                     </div>
@@ -203,6 +206,8 @@
                     <div class="flex items-center space-x-1">
                         <button data-log-level="ALL" class="console-pill active" data-i18n="console.all">TOUT</button>
                         <button data-log-level="INFO" class="console-pill" data-i18n="console.info">INFO</button>
+                        <button data-log-level="WARN" class="console-pill" data-i18n="console.warn">WARN</button>
+                        <button data-log-level="ERROR" class="console-pill" data-i18n="console.error">ERROR</button>
                         <button data-log-level="DEBUG" class="console-pill" data-i18n="console.debug">DEBUG</button>
                     </div>
 

@@ -11,12 +11,15 @@
     "api": "API",
     "sys": "SYS",
     "info": "INFO",
+    "warn": "WARN",
+    "error": "ERROR",
     "debug": "DEBUG",
     "search_placeholder": "Filter logs...",
     "prompt_placeholder": "Raw command (e.g. !GET_STATE, FM2:0, T2COK...)",
     "send": "Send",
     "clear_title": "Clear console",
     "pause_title": "Pause auto-scroll",
+    "export_title": "Export active log file",
     "hint": "Enter to send • ↑↓ History"
   },
   "visualizer": {

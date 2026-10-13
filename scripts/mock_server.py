@@ -78,6 +78,8 @@ add_mock_log("SERIAL_RX", "INFO", "SwVer:17.77")
 add_mock_log("SERIAL_TX", "INFO", "!GET_STATE")
 add_mock_log("SERIAL_RX", "INFO", "State:E")
 add_mock_log("API", "INFO", "🔍 System ready, telemetry streaming active")
+add_mock_log("SERIAL", "WARN", "⚠️ Retrying frame sync (mock warning)")
+add_mock_log("SYS", "ERROR", "❌ Simulated minor error check (mock error)")
 
 class MockHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -121,8 +123,24 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             self.send_json(mock_logs)
         elif url == "/api/logs/stream":
             self.handle_sse_stream()
+        elif url == "/api/logs/export":
+            self.handle_logs_export()
         else:
             self.send_error(404, "Not Found")
+
+    def handle_logs_export(self):
+        now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"greenup_{now}.log"
+        lines = []
+        for entry in mock_logs:
+            lines.append(f"[{entry['timestamp']}] [{entry['level']}] [{entry['category']}] {entry['message']}\n")
+        content = "".join(lines).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
 
     def handle_sse_stream(self):
         self.send_response(200)
