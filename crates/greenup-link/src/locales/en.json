@@ -21,7 +21,7 @@
     "clear_title": "Clear console",
     "pause_title": "Pause auto-scroll",
     "export_title": "Export active log file",
-    "hint": "E.g. State?, CC?, Side? • Enter to send • ↑↓ History"
+    "hint": "Enter to send • ↑↓ History"
   },
   "visualizer": {
     "force_tic_refresh": "Force TIC mode refresh",

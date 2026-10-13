@@ -21,7 +21,7 @@
     "clear_title": "Effacer la console",
     "pause_title": "Mettre en pause le défilement",
     "export_title": "Exporter le fichier de log en cours",
-    "hint": "Ex: State?, CC?, Side? • Entrée pour envoyer • ↑↓ Historique"
+    "hint": "Entrée pour envoyer • ↑↓ Historique"
   },
   "visualizer": {
     "force_tic_refresh": "Forcer l'actualisation du mode TIC",
