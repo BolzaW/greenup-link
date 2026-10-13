@@ -1,11 +1,81 @@
 use chrono::Local;
+use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Mutex, OnceLock,
+};
+use tokio::sync::broadcast;
 
-/// Centralized logger that writes to a timestamped file + stdout.
-/// A new file is created at each program startup.
+/// Structured log entry suitable for real-time streaming and Web UI rendering.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LogEntry {
+    pub id: u64,
+    pub timestamp: String,
+    pub category: String, // "SERIAL_RX", "SERIAL_TX", "API", "IHM", "SYS", "DEBUG", "TRACE", etc.
+    pub level: String,    // "INFO", "DEBUG", "WARN", "ERROR"
+    pub message: String,
+}
+
 static LOG_FILE: Mutex<Option<String>> = Mutex::new(None);
+static RECENT_LOGS: Mutex<VecDeque<LogEntry>> = Mutex::new(VecDeque::new());
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+const MAX_RECENT_LOGS: usize = 500;
+
+fn get_broadcast_sender() -> &'static broadcast::Sender<LogEntry> {
+    static SENDER: OnceLock<broadcast::Sender<LogEntry>> = OnceLock::new();
+    SENDER.get_or_init(|| {
+        let (tx, _rx) = broadcast::channel(500);
+        tx
+    })
+}
+
+/// Subscribes to the live log stream.
+pub fn subscribe() -> broadcast::Receiver<LogEntry> {
+    get_broadcast_sender().subscribe()
+}
+
+/// Retrieves a snapshot of the most recent in-memory logs.
+pub fn get_recent_logs() -> Vec<LogEntry> {
+    if let Ok(guard) = RECENT_LOGS.lock() {
+        guard.iter().cloned().collect()
+    } else {
+        Vec::new()
+    }
+}
+
+/// Returns the path of the active log file, if any.
+pub fn get_log_file_path() -> Option<String> {
+    LOG_FILE.lock().ok().and_then(|guard| guard.clone())
+}
+
+/// Reads the current log file content or returns recent in-memory logs formatted as text.
+/// Returns (suggested_filename, file_content).
+pub fn get_current_log_content() -> (String, String) {
+    let now = Local::now().format("%Y-%m-%d_%H-%M-%S").to_string();
+    let default_filename = format!("greenup_{}.log", now);
+
+    if let Some(path) = get_log_file_path() {
+        if let Ok(content) = fs::read_to_string(&path) {
+            let filename = std::path::Path::new(&path)
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or(&default_filename)
+                .to_string();
+            return (filename, content);
+        }
+    }
+
+    // Fallback: format recent in-memory logs
+    let recent = get_recent_logs();
+    let mut out = String::new();
+    for entry in recent {
+        out.push_str(&format!("[{}] [{}] [{}] {}\n", entry.timestamp, entry.level, entry.category, entry.message));
+    }
+    (default_filename, out)
+}
 
 /// Initializes the logger by creating the log file.
 /// The file is named with the startup date/time.
@@ -29,25 +99,56 @@ pub fn init() {
     println!("[Logger] 📝 Log file: {}", filename);
 }
 
-/// Writes an entry to the log file AND to stdout.
+/// Writes an entry to the log file, stdout, in-memory ring buffer, and live broadcast stream.
 ///   category : "SERIAL_RX", "SERIAL_TX", "API", "IHM", "SYS", "DEBUG", "TRACE"
 ///   message  : the content to log
 pub fn log(category: &str, message: &str) {
     let now = Local::now();
-    let timestamp = now.format("%Y-%m-%d %H:%M:%S%.3f");
-    let entry = format!("[{}] [{}] {}", timestamp, category, message);
+    let time_str = now.format("%H:%M:%S%.3f").to_string();
+    let full_timestamp = now.format("%Y-%m-%d %H:%M:%S%.3f");
+    let entry_text = format!("[{}] [{}] {}", full_timestamp, category, message);
 
-    // Stdout (console): skip TRACE and DEBUG by default to avoid spamming the console
-    if category != "TRACE" && (category != "DEBUG" || std::env::var("GREENUP_DEBUG").is_ok()) {
-        println!("{}", entry);
+    // Stdout (console): skip DEBUG by default to avoid spamming the console
+    if category != "TRACE" && category != "DEBUG" || std::env::var("GREENUP_DEBUG").is_ok() {
+        println!("{}", entry_text);
     }
 
     // File: all categories are written
     if let Ok(guard) = LOG_FILE.lock() {
         if let Some(ref path) = *guard {
             if let Ok(mut f) = OpenOptions::new().append(true).open(path) {
-                let _ = writeln!(f, "{}", entry);
+                let _ = writeln!(f, "{}", entry_text);
             }
         }
     }
+
+    // Determine level
+    let level = if category == "DEBUG" || category == "TRACE" {
+        "DEBUG"
+    } else if category == "ERROR" || message.contains("❌") || message.to_lowercase().contains("error") {
+        "ERROR"
+    } else if category == "WARN" || message.contains("⚠️") {
+        "WARN"
+    } else {
+        "INFO"
+    };
+
+    let log_item = LogEntry {
+        id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+        timestamp: time_str,
+        category: category.to_string(),
+        level: level.to_string(),
+        message: message.to_string(),
+    };
+
+    // Store in ring buffer
+    if let Ok(mut guard) = RECENT_LOGS.lock() {
+        if guard.len() >= MAX_RECENT_LOGS {
+            guard.pop_front();
+        }
+        guard.push_back(log_item.clone());
+    }
+
+    // Broadcast to SSE subscribers
+    let _ = get_broadcast_sender().send(log_item);
 }

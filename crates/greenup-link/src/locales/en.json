@@ -1,7 +1,27 @@
 {
   "header": {
     "subtitle": "GUI",
-    "ble_module": "BLE Module"
+    "ble_module": "BLE Module",
+    "debug": "Debug"
+  },
+  "console": {
+    "title": "Live Console",
+    "all": "ALL",
+    "serial": "SERIAL",
+    "api": "API",
+    "sys": "SYS",
+    "info": "INFO",
+    "warn": "WARN",
+    "error": "ERROR",
+    "debug": "DEBUG",
+    "search_placeholder": "Filter logs...",
+    "prompt_placeholder": "Raw command (e.g. State?, CC?, Side?...)",
+    "send": "Send",
+    "copy_title": "Copy visible logs",
+    "clear_title": "Clear console",
+    "pause_title": "Pause auto-scroll",
+    "export_title": "Export active log file",
+    "hint": "Enter to send • ↑↓ History"
   },
   "visualizer": {
     "force_tic_refresh": "Force TIC mode refresh",

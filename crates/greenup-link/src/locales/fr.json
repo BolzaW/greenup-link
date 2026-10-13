@@ -1,7 +1,27 @@
 {
   "header": {
     "subtitle": "IHM",
-    "ble_module": "Module BLE"
+    "ble_module": "Module BLE",
+    "debug": "Debug"
+  },
+  "console": {
+    "title": "Console Live",
+    "all": "TOUT",
+    "serial": "SÉRIE",
+    "api": "API",
+    "sys": "SYS",
+    "info": "INFO",
+    "warn": "WARN",
+    "error": "ERROR",
+    "debug": "DEBUG",
+    "search_placeholder": "Filtrer...",
+    "prompt_placeholder": "Commande raw (ex: State?, CC?, Side?...)",
+    "send": "Envoyer",
+    "copy_title": "Copier les logs affichés",
+    "clear_title": "Effacer la console",
+    "pause_title": "Mettre en pause le défilement",
+    "export_title": "Exporter le fichier de log en cours",
+    "hint": "Entrée pour envoyer • ↑↓ Historique"
   },
   "visualizer": {
     "force_tic_refresh": "Forcer l'actualisation du mode TIC",

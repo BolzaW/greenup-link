@@ -1,10 +1,16 @@
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    response::{Html, IntoResponse},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        Html, IntoResponse,
+    },
     routing::{get, post},
     Json, Router,
 };
+use std::convert::Infallible;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 use serde_json::json;
 use greenup_driver::logger;
 use greenup_driver::SharedState;
@@ -23,10 +29,14 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/js/controls.js", get(serve_js_controls))
         .route("/js/visuals.js", get(serve_js_visuals))
         .route("/js/api.js", get(serve_js_api))
+        .route("/js/console.js", get(serve_js_console))
         .route("/js/main.js", get(serve_js_main))
         .route("/api/info", get(get_info))
         .route("/api/telemetry", get(get_telemetry))
         .route("/api/tic", get(get_custom_tic))
+        .route("/api/logs", get(get_logs))
+        .route("/api/logs/stream", get(stream_logs))
+        .route("/api/logs/export", get(export_logs))
         .route("/api/current/:amps", post(set_current))
         .route("/api/charge", post(set_charge_state))
         .route("/api/init", post(init_sequence))
@@ -97,6 +107,47 @@ async fn serve_js_main() -> impl IntoResponse {
     ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/main.js"))
 }
 
+/// GET /js/console.js
+async fn serve_js_console() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/console.js"))
+}
+
+/// GET /api/logs
+async fn get_logs() -> impl IntoResponse {
+    Json(logger::get_recent_logs())
+}
+
+/// GET /api/logs/stream (SSE)
+async fn stream_logs() -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
+    let rx = logger::subscribe();
+    let stream = BroadcastStream::new(rx).filter_map(|res| match res {
+        Ok(entry) => {
+            if let Ok(data) = serde_json::to_string(&entry) {
+                Some(Ok(Event::default().data(data)))
+            } else {
+                None
+            }
+        }
+        Err(_) => None,
+    });
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+/// GET /api/logs/export
+async fn export_logs() -> impl IntoResponse {
+    let (filename, content) = logger::get_current_log_content();
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("text/plain; charset=utf-8"),
+    );
+    if let Ok(val) = axum::http::HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)) {
+        headers.insert(axum::http::header::CONTENT_DISPOSITION, val);
+    }
+    (headers, content)
+}
+
 /// GET /api/info
 async fn get_info(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("API", "🔍 GET request /api/info");
@@ -106,14 +157,14 @@ async fn get_info(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// GET /api/telemetry
 async fn get_telemetry(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("TRACE", "📡 GET request /api/telemetry");
+    logger::log("DEBUG", "📡 GET request /api/telemetry");
     let telemetry = state.telemetry.lock().unwrap().clone();
     Json(telemetry)
 }
 
 /// GET /api/tic
 async fn get_custom_tic(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("TRACE", "📡 GET request /api/tic");
+    logger::log("DEBUG", "📡 GET request /api/tic");
     let custom_tic = state.custom_tic.lock().unwrap().clone();
     Json(custom_tic)
 }

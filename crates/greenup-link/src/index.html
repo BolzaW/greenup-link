@@ -22,8 +22,20 @@
         </div>
     </div>
 
-    <!-- Controls: BT Toggle & Language (Top Right on Mobile, Right on Desktop) -->
-    <div class="col-span-1 flex items-center justify-end space-x-3 md:space-x-6 md:order-last">
+    <!-- Controls: Debug Toggle, BT Toggle & Language (Top Right on Mobile, Right on Desktop) -->
+    <div class="col-span-1 flex items-center justify-end space-x-2 md:space-x-4 md:order-last">
+        <!-- Debug Toggle Widget -->
+        <div class="flex flex-col items-center justify-center mt-1">
+            <div class="flex items-center space-x-1 mb-1">
+                <svg class="w-3 h-3 text-slate-500 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                <span class="text-[8px] md:text-[9px] font-bold text-slate-500 uppercase tracking-wider" data-i18n="header.debug">DEBUG</span>
+            </div>
+            <div class="relative inline-block align-middle select-none transition duration-200 ease-in w-[48px] opacity-80 hover:opacity-100">
+                <input type="checkbox" name="toggleDebug" id="toggleDebug" class="toggle-checkbox absolute block rounded-full bg-slate-200 border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
+                <label for="toggleDebug" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-800 cursor-pointer transition-colors duration-200 ease-in-out border border-slate-700"></label>
+            </div>
+        </div>
+
         <!-- Bluetooth Toggle Widget -->
         <div class="flex flex-col items-center justify-center mt-1">
             <div class="flex items-center space-x-1 mb-1">
@@ -56,7 +68,7 @@
     <!-- LEFT COLUMN : Visualization -->
     <div class="lg:col-span-7 flex flex-col h-full">
         <!-- The Visualizer -->
-        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-8 shadow-xl relative overflow-hidden flex flex-col justify-center flex-1 min-h-[380px]">
+        <div id="visualizerPanel" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-8 shadow-xl relative overflow-hidden flex flex-col justify-center flex-1 min-h-[380px]">
             <!-- Subtle Grid Background Pattern -->
             <div class="absolute inset-0 opacity-[0.02] bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:24px_24px]"></div>
             
@@ -151,6 +163,100 @@
                 <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1" data-i18n="visualizer.system_state">État système</span>
                 <div id="lblState" class="text-sm font-semibold text-slate-300" data-i18n="state.searching">Recherche de la borne...</div>
                 <div id="lblError" class="text-rose-500 text-xs mt-1 font-medium h-4"></div>
+            </div>
+        </div>
+
+        <!-- Live Logs & Command Console Panel (Replaces visualizer in Debug mode) -->
+        <div id="consolePanel" class="hidden console-panel">
+            <!-- Top Toolbar : Title, Filters, Search, Actions -->
+            <div class="console-toolbar">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <!-- Title & Status -->
+                    <div class="flex items-center space-x-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span class="text-xs font-bold text-slate-300 uppercase tracking-wider" data-i18n="console.title">Console Live</span>
+                        <span id="consoleLogCount" class="text-[10px] font-mono text-slate-500 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">0 logs</span>
+                    </div>
+
+                    <!-- Action buttons: Copy, Export, Pause Autoscroll, Clear -->
+                    <div class="flex items-center space-x-1">
+                        <button id="btnConsoleCopy" class="console-btn-tool console-btn-copy" title="Copier les logs affichés" data-i18n-title="console.copy_title">
+                            <svg id="iconCopy" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                            </svg>
+                            <svg id="iconCopyCheck" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="text-emerald-400 hidden">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                            </svg>
+                        </button>
+                        <button id="btnConsoleExport" class="console-btn-tool console-btn-export" title="Exporter le fichier de log en cours" data-i18n-title="console.export_title">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                            </svg>
+                        </button>
+                        <button id="btnConsolePause" class="console-btn-tool" title="Mettre en pause le défilement" data-i18n-title="console.pause_title">
+                            <svg id="iconPause" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                            <svg id="iconPlay" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="hidden">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </button>
+                        <button id="btnConsoleClear" class="console-btn-tool console-btn-clear" title="Effacer la console" data-i18n-title="console.clear_title">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filter Pills Row -->
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <!-- Origin Filters -->
+                    <div class="flex items-center space-x-1">
+                        <button data-log-type="ALL" class="console-pill active" data-i18n="console.all">TOUT</button>
+                        <button data-log-type="SERIAL" class="console-pill" data-i18n="console.serial">SÉRIE</button>
+                        <button data-log-type="API" class="console-pill" data-i18n="console.api">API</button>
+                        <button data-log-type="SYS" class="console-pill" data-i18n="console.sys">SYS</button>
+                    </div>
+
+                    <!-- Level Filters -->
+                    <div class="flex items-center space-x-1">
+                        <button data-log-level="ERROR" class="console-pill" data-i18n="console.error">ERROR</button>
+                        <button data-log-level="WARN" class="console-pill" data-i18n="console.warn">WARN</button>
+                        <button data-log-level="INFO" class="console-pill" data-i18n="console.info">INFO</button>
+                        <button data-log-level="DEBUG" class="console-pill active" data-i18n="console.debug">DEBUG</button>
+                    </div>
+
+                    <!-- Free Search -->
+                    <div>
+                        <input type="text" id="consoleSearchInput" placeholder="Filtrer..." data-i18n-placeholder="console.search_placeholder" class="console-search"/>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Terminal Log Output Area with visible scrollbar -->
+            <div id="consoleScrollArea" class="console-terminal select-text">
+                <div id="consoleLogList">
+                    <!-- Log entries inserted here -->
+                </div>
+            </div>
+
+            <!-- Bottom Prompt Zone -->
+            <div class="console-prompt-box">
+                <div class="console-prompt-row">
+                    <div class="console-input-wrap">
+                        <span class="console-input-prefix">&gt;</span>
+                        <input type="text" id="consoleCommandInput" placeholder="Commande raw (ex: State?, CC?, Side?...)" data-i18n-placeholder="console.prompt_placeholder" class="console-input"/>
+                    </div>
+                    <button id="btnConsoleSend" class="console-btn-send">
+                        <span data-i18n="console.send">Envoyer</span>
+                    </button>
+                </div>
+                <div class="flex justify-between items-center px-1">
+                    <span id="consoleCommandFeedback" class="text-[10px] font-mono text-slate-500"></span>
+                    <span class="text-[9px] text-slate-500 select-none" data-i18n="console.hint">Entrée pour envoyer • ↑↓ Historique</span>
+                </div>
             </div>
         </div>
     </div>
@@ -253,6 +359,7 @@
 <script src="/js/controls.js"></script>
 <script src="/js/visuals.js"></script>
 <script src="/js/api.js"></script>
+<script src="/js/console.js"></script>
 <script src="/js/main.js"></script>
 </body>
 </html>
