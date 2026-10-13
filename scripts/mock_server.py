@@ -78,6 +78,10 @@ add_mock_log("SERIAL_RX", "INFO", "SwVer:17.77")
 add_mock_log("SERIAL_TX", "INFO", "!GET_STATE")
 add_mock_log("SERIAL_RX", "INFO", "State:E")
 add_mock_log("API", "INFO", "🔍 System ready, telemetry streaming active")
+add_mock_log("SYS", "DEBUG", "UART baudrate initialized: 115200 (8N1)")
+add_mock_log("SERIAL", "DEBUG", "Task serial_poll started (interval: 100ms)")
+add_mock_log("SYS", "DEBUG", "Memory ringbuffer: 500 slots allocated")
+add_mock_log("SYS", "DEBUG", "Watchdog timer armed (timeout: 5000ms)")
 add_mock_log("SERIAL", "WARN", "⚠️ Retrying frame sync (mock warning)")
 add_mock_log("SYS", "ERROR", "❌ Simulated minor error check (mock error)")
 
@@ -163,8 +167,25 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                         self.wfile.flush()
                         last_sent_id = entry["id"]
 
-                # Periodically generate mock serial telemetry log every ~4s
                 counter += 1
+
+                # Periodically generate mock DEBUG log every 1s
+                if counter % 2 == 0:
+                    debug_messages = [
+                        ("SERIAL", "UART poll: rx_buf=0 bytes, tx_buf=0 bytes, status=READY"),
+                        ("SYS", "Watchdog keepalive ping ok (task_id=0x04)"),
+                        ("SYS", "Internal tick: loop_time=1002us heap_free=42816B"),
+                        ("SERIAL", "Frame sync active: crc_ok=1284, crc_err=0"),
+                        ("API", "SSE client heartbeat keepalive dispatched"),
+                    ]
+                    cat, msg = debug_messages[(counter // 2) % len(debug_messages)]
+                    entry = add_mock_log(cat, "DEBUG", msg)
+                    data = json.dumps(entry)
+                    self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                    self.wfile.flush()
+                    last_sent_id = entry["id"]
+
+                # Periodically generate mock serial telemetry log every ~4s
                 if counter % 8 == 0:
                     v = round(state["voltage"] + (0.3 if counter % 16 == 0 else -0.2), 1)
                     i = round(state["current"], 1)
