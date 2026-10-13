@@ -176,7 +176,7 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                     last_sent_id = entry["id"]
 
                 time.sleep(0.5)
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, ConnectionError):
             pass
 
     def do_POST(self):
