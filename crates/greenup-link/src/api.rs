@@ -36,6 +36,7 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/tic", get(get_custom_tic))
         .route("/api/logs", get(get_logs))
         .route("/api/logs/stream", get(stream_logs))
+        .route("/api/logs/export", get(export_logs))
         .route("/api/current/:amps", post(set_current))
         .route("/api/charge", post(set_charge_state))
         .route("/api/init", post(init_sequence))
@@ -131,6 +132,20 @@ async fn stream_logs() -> Sse<impl tokio_stream::Stream<Item = Result<Event, Inf
     });
 
     Sse::new(stream).keep_alive(KeepAlive::default())
+}
+
+/// GET /api/logs/export
+async fn export_logs() -> impl IntoResponse {
+    let (filename, content) = logger::get_current_log_content();
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("text/plain; charset=utf-8"),
+    );
+    if let Ok(val) = axum::http::HeaderValue::from_str(&format!("attachment; filename=\"{}\"", filename)) {
+        headers.insert(axum::http::header::CONTENT_DISPOSITION, val);
+    }
+    (headers, content)
 }
 
 /// GET /api/info

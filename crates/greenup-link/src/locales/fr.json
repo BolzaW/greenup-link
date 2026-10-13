@@ -11,12 +11,15 @@
     "api": "API",
     "sys": "SYS",
     "info": "INFO",
+    "warn": "WARN",
+    "error": "ERROR",
     "debug": "DEBUG",
     "search_placeholder": "Filtrer...",
     "prompt_placeholder": "Commande raw (ex: !GET_STATE, FM2:0, T2COK...)",
     "send": "Envoyer",
     "clear_title": "Effacer la console",
     "pause_title": "Mettre en pause le défilement",
+    "export_title": "Exporter le fichier de log en cours",
     "hint": "Entrée pour envoyer • ↑↓ Historique"
   },
   "visualizer": {

@@ -172,6 +172,7 @@ function getCategoryBadgeClass(cat) {
     if (cat === 'SERIAL_TX') return 'console-badge-tx';
     if (cat === 'API') return 'console-badge-api';
     if (cat === 'DEBUG' || cat === 'TRACE') return 'console-badge-dbg';
+    if (cat === 'WARN') return 'console-badge-warn';
     if (cat === 'ERROR') return 'console-badge-err';
     return 'console-badge-sys';
 }
@@ -246,6 +247,14 @@ function setupConsoleDomListeners() {
         searchInput.addEventListener('input', (e) => {
             currentSearchTerm = e.target.value.trim().toLowerCase();
             renderLogs();
+        });
+    }
+
+    // Export active log file button
+    const btnExport = document.getElementById('btnConsoleExport');
+    if (btnExport) {
+        btnExport.addEventListener('click', () => {
+            window.location.href = '/api/logs/export';
         });
     }
 
