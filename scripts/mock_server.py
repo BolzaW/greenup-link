@@ -274,8 +274,12 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             add_mock_log("API", "INFO", f"🔧 Raw command received: {cmd}")
             add_mock_log("SERIAL_TX", "INFO", cmd)
             # Simulated responses
-            if cmd == "!GET_STATE":
+            if cmd in ("!GET_STATE", "State?"):
                 add_mock_log("SERIAL_RX", "INFO", f"State:{state['greenup_state']}")
+            elif cmd == "CC?":
+                add_mock_log("SERIAL_RX", "INFO", "CC:32A")
+            elif cmd == "Side?":
+                add_mock_log("SERIAL_RX", "INFO", "Side:Left")
             elif cmd == "!GET_ALL":
                 add_mock_log("SERIAL_RX", "INFO", f"State:{state['greenup_state']} I:{state['current']} V:{state['voltage']}")
             elif cmd.startswith("FM1:"):

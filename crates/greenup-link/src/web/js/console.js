@@ -7,11 +7,18 @@ let maxLogEntries = 500;
 let isLogStreamPaused = false;
 let userScrolledUp = false;
 let currentTypeFilter = 'ALL';
-let currentLevelFilter = 'ALL';
+let currentLevelFilter = 'DEBUG';
 let currentSearchTerm = '';
 let commandHistory = [];
 let commandHistoryIndex = -1;
 let logEventSource = null;
+
+const LOG_LEVEL_SEVERITY = {
+    'DEBUG': 1,
+    'INFO': 2,
+    'WARN': 3,
+    'ERROR': 4
+};
 
 function initConsole() {
     setupConsoleDomListeners();
@@ -107,8 +114,10 @@ function matchesFilter(entry) {
         if (currentTypeFilter === 'API' && entry.category !== 'API') return false;
         if (currentTypeFilter === 'SYS' && entry.category !== 'SYS' && entry.category !== 'IHM') return false;
     }
-    if (currentLevelFilter !== 'ALL') {
-        if (entry.level !== currentLevelFilter) return false;
+    if (currentLevelFilter) {
+        const minSeverity = LOG_LEVEL_SEVERITY[currentLevelFilter] || 1;
+        const entrySeverity = LOG_LEVEL_SEVERITY[entry.level] || 2;
+        if (entrySeverity < minSeverity) return false;
     }
     if (currentSearchTerm) {
         const full = (entry.timestamp + " " + entry.category + " " + entry.message).toLowerCase();
