@@ -222,11 +222,10 @@
 
                     <!-- Level Filters -->
                     <div class="flex items-center space-x-1">
-                        <button data-log-level="ALL" class="console-pill active" data-i18n="console.all">TOUT</button>
                         <button data-log-level="ERROR" class="console-pill" data-i18n="console.error">ERROR</button>
                         <button data-log-level="WARN" class="console-pill" data-i18n="console.warn">WARN</button>
                         <button data-log-level="INFO" class="console-pill" data-i18n="console.info">INFO</button>
-                        <button data-log-level="DEBUG" class="console-pill" data-i18n="console.debug">DEBUG</button>
+                        <button data-log-level="DEBUG" class="console-pill active" data-i18n="console.debug">DEBUG</button>
                     </div>
 
                     <!-- Free Search -->
@@ -248,7 +247,7 @@
                 <div class="console-prompt-row">
                     <div class="console-input-wrap">
                         <span class="console-input-prefix">&gt;</span>
-                        <input type="text" id="consoleCommandInput" placeholder="Commande raw (ex: !GET_STATE, FM2:0, T2COK...)" data-i18n-placeholder="console.prompt_placeholder" class="console-input"/>
+                        <input type="text" id="consoleCommandInput" placeholder="Commande raw (ex: State?, CC?, Side?...)" data-i18n-placeholder="console.prompt_placeholder" class="console-input"/>
                     </div>
                     <button id="btnConsoleSend" class="console-btn-send">
                         <span data-i18n="console.send">Envoyer</span>
@@ -256,7 +255,7 @@
                 </div>
                 <div class="flex justify-between items-center px-1">
                     <span id="consoleCommandFeedback" class="text-[10px] font-mono text-slate-500"></span>
-                    <span class="text-[9px] text-slate-500 select-none" data-i18n="console.hint">Entrée pour envoyer • ↑↓ Historique</span>
+                    <span class="text-[9px] text-slate-500 select-none" data-i18n="console.hint">Ex: State?, CC?, Side? • Entrée pour envoyer • ↑↓ Historique</span>
                 </div>
             </div>
         </div>
