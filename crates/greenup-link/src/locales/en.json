@@ -1,7 +1,7 @@
 {
   "header": {
     "subtitle": "GUI",
-    "ble_module": "BLE Module",
+    "ble_module": "BLE",
     "debug": "Debug"
   },
   "console": {

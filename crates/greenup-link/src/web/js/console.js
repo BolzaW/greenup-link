@@ -288,8 +288,8 @@ function setupConsoleDomListeners() {
         btnPause.addEventListener('click', () => {
             isLogStreamPaused = !isLogStreamPaused;
             btnPause.classList.toggle('active', isLogStreamPaused);
-            const iconPause = document.getElementById('iconPause');
-            const iconPlay = document.getElementById('iconPlay');
+            const iconPause = document.getElementById('consoleIconPause');
+            const iconPlay = document.getElementById('consoleIconPlay');
             if (iconPause && iconPlay) {
                 iconPause.classList.toggle('hidden', isLogStreamPaused);
                 iconPlay.classList.toggle('hidden', !isLogStreamPaused);

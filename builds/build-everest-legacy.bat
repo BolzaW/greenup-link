@@ -1,6 +1,7 @@
 @echo off
+cd /d "%~dp0\.."
 echo ====================================================
-echo   Compilation EVerest (Zigbuild) pour Raspberry Pi
+echo   Compilation EVerest (Zigbuild Legacy) pour Raspberry Pi
 echo ====================================================
 echo.
 

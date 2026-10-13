@@ -1,7 +1,7 @@
 {
   "header": {
     "subtitle": "IHM",
-    "ble_module": "Module BLE",
+    "ble_module": "BLE",
     "debug": "Debug"
   },
   "console": {

@@ -32,7 +32,7 @@
 }
 
 .console-pill {
-    padding: 3px 8px;
+    padding: 3px 6px;
     font-size: 10px;
     font-weight: 700;
     border-radius: 4px;
@@ -42,6 +42,8 @@
     cursor: pointer;
     transition: all 0.15s ease;
     user-select: none;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 .console-pill:hover {
     color: #f1f5f9;
@@ -51,6 +53,14 @@
     background-color: rgba(14, 165, 233, 0.2);
     color: #38bdf8;
     border-color: rgba(14, 165, 233, 0.5);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 
 .console-btn-tool {
@@ -110,12 +120,23 @@
     font-size: 11px;
     color: #e2e8f0;
     outline: none;
-    width: 140px;
+    width: 100px;
     box-sizing: border-box;
-    transition: border-color 0.15s ease;
+    transition: all 0.15s ease;
+}
+@media (min-width: 640px) {
+    .console-search {
+        width: 130px;
+    }
 }
 .console-search:focus {
     border-color: #38bdf8;
+    width: 120px;
+}
+@media (min-width: 640px) {
+    .console-search:focus {
+        width: 150px;
+    }
 }
 .console-search::placeholder {
     color: #475569;

@@ -194,10 +194,10 @@
                             </svg>
                         </button>
                         <button id="btnConsolePause" class="console-btn-tool" title="Mettre en pause le défilement" data-i18n-title="console.pause_title">
-                            <svg id="iconPause" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg id="consoleIconPause" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
                             </svg>
-                            <svg id="iconPlay" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="hidden">
+                            <svg id="consoleIconPlay" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="hidden">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
                             </svg>
@@ -211,17 +211,19 @@
                 </div>
 
                 <!-- Filter Pills Row -->
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                    <!-- Origin Filters -->
-                    <div class="flex items-center space-x-1">
+                <div class="flex items-center justify-between gap-1 sm:gap-2 overflow-x-auto no-scrollbar py-0.5">
+                    <!-- Origin & Level Filters -->
+                    <div class="flex items-center gap-1 flex-shrink-0">
+                        <!-- Origin Filters -->
                         <button data-log-type="ALL" class="console-pill active" data-i18n="console.all">TOUT</button>
                         <button data-log-type="SERIAL" class="console-pill" data-i18n="console.serial">SÉRIE</button>
-                        <button data-log-type="API" class="console-pill" data-i18n="console.api">API</button>
-                        <button data-log-type="SYS" class="console-pill" data-i18n="console.sys">SYS</button>
-                    </div>
+                        <button data-log-type="API" class="console-pill hidden sm:inline-block" data-i18n="console.api">API</button>
+                        <button data-log-type="SYS" class="console-pill hidden sm:inline-block" data-i18n="console.sys">SYS</button>
 
-                    <!-- Level Filters -->
-                    <div class="flex items-center space-x-1">
+                        <!-- Subtle vertical separator -->
+                        <span class="w-[1px] h-3.5 bg-slate-800 mx-0.5 flex-shrink-0"></span>
+
+                        <!-- Level Filters -->
                         <button data-log-level="ERROR" class="console-pill" data-i18n="console.error">ERROR</button>
                         <button data-log-level="WARN" class="console-pill" data-i18n="console.warn">WARN</button>
                         <button data-log-level="INFO" class="console-pill" data-i18n="console.info">INFO</button>
@@ -229,7 +231,7 @@
                     </div>
 
                     <!-- Free Search -->
-                    <div>
+                    <div class="flex-shrink-0 ml-1">
                         <input type="text" id="consoleSearchInput" placeholder="Filtrer..." data-i18n-placeholder="console.search_placeholder" class="console-search"/>
                     </div>
                 </div>
