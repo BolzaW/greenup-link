@@ -87,8 +87,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
 ### 3. Get real-time Linky TIC telemetry
 
 > [!NOTE]
-> **Prerequisite:** This endpoint only provides telemetry if the ATmega power board is flashed with a **custom patched firmware** (such as the *Green'Up Linky TIC Firmware V01.17.78*). On stock official Legrand firmwares, this endpoint will always return `"active": false` because factory firmwares do not transmit TIC frames over the supervisor serial interface.
-***REMOVED***
+> **Prerequisite:** This endpoint only provides telemetry if the ATmega power board firmware supports extended TIC telemetry over the supervisor serial interface. On standard factory Legrand firmwares, this endpoint will return `"active": false` because factory firmwares do not transmit TIC frames over the supervisor serial interface.
 
 - **URL**: `/api/tic`
 - **Method**: `GET`
