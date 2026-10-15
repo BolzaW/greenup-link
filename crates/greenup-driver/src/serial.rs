@@ -122,12 +122,7 @@ pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Re
             // Empty the channel of old messages
             while let Ok(_) = internal_rx.try_recv() {}
 
-            let tx_category = if matches!(cmd, Command::GetMacAddress) && state.custom_tic_active.load(std::sync::atomic::Ordering::Relaxed) {
-                "DEBUG"
-            } else {
-                "SERIAL_TX"
-            };
-            logger::log(tx_category, encoded.trim());
+            logger::log("SERIAL_TX", encoded.trim());
             if let Err(e) = port.write_all(encoded.as_bytes()) {
                 logger::log("SERIAL", &format!("Serial write error: {}", e));
             }
@@ -206,9 +201,7 @@ pub fn update_charge_status(tel: &mut Telemetry) {
 static LAST_LOGGED_CCI: std::sync::Mutex<Option<f32>> = std::sync::Mutex::new(None);
 
 fn parse_incoming_line(line: &str, state: &SharedState) {
-    let rx_category = if line.starts_with("MacAdr:TIC:") {
-        "DEBUG"
-    } else if let Some(val_str) = line.strip_prefix("CCI:") {
+    let rx_category = if let Some(val_str) = line.strip_prefix("CCI:") {
         let first_val = val_str.split(';').next().unwrap_or(val_str).trim();
         if let Ok(current_val) = first_val.parse::<f32>() {
             let mut last = LAST_LOGGED_CCI.lock().unwrap();
@@ -440,38 +433,8 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
 
 
 pub fn handle_mac_address(val: &str, state: &SharedState) {
-    if val.starts_with("TIC:") {
-        logger::log("DEBUG", &format!("🔌 TIC custom frame received: {}", val));
-        
-        let parsed = crate::custom_tic::CustomTicTelemetry::parse(val);
-        if let Ok(mut tic) = state.custom_tic.lock() {
-            *tic = parsed;
-        }
-
-        // Trigger special 10s routine if not already started
-        if !state.custom_tic_active.swap(true, std::sync::atomic::Ordering::SeqCst) {
-            logger::log("SYS", "✨ Custom Linky TIC firmware detected (MacAdr:TIC)! Starting 10s periodic polling routine");
-            
-            let state_clone = state.clone();
-            state.tokio_handle.spawn(async move {
-                let mut interval = tokio::time::interval(Duration::from_secs(10));
-                // Discard first immediate tick
-                interval.tick().await;
-
-                loop {
-                    interval.tick().await;
-                    logger::log("DEBUG", "🔄 Polling MacAdr? for custom TIC telemetry (10s)");
-                    if state_clone.serial_tx.send(Command::GetMacAddress).await.is_err() {
-                        logger::log("SERIAL", "Custom TIC polling routine stopped: serial channel closed");
-                        break;
-                    }
-                }
-            });
-        }
-    } else {
-        logger::log("SERIAL", &format!("MAC address detected: {}", val));
-        if let Ok(mut info) = state.info.lock() {
-            info.mac_address = Some(val.to_string());
-        }
+    logger::log("SERIAL", &format!("MAC address detected: {}", val));
+    if let Ok(mut info) = state.info.lock() {
+        info.mac_address = Some(val.to_string());
     }
 }

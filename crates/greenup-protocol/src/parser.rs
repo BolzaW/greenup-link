@@ -152,8 +152,8 @@ mod tests {
             ProtocolEvent::MacAddress("000000000000".into())
         );
         assert_eq!(
-            parse_line("MacAdr:TIC:HISTORIQUE;IINST:18;ISOUSC:45;PTEC:HP"),
-            ProtocolEvent::MacAddress("TIC:HISTORIQUE;IINST:18;ISOUSC:45;PTEC:HP".into())
+            parse_line("MacAdr:001A7DDA7113"),
+            ProtocolEvent::MacAddress("001A7DDA7113".into())
         );
         assert_eq!(
             parse_line("Side:49"),

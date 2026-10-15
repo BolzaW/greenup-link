@@ -90,7 +90,7 @@ pub enum Command {
     GetReference,
     /// `WeekYearProduction?`
     GetWeekYearProduction,
-    /// `MacAdr?` – Bluetooth MAC address or Linky TIC custom telemetry frame.
+    /// `MacAdr?` – Bluetooth MAC address.
     GetMacAddress,
     /// `Side?` – Active side (dual-socket stations).
     GetSide,
