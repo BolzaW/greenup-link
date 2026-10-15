@@ -37,6 +37,7 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/logs", get(get_logs))
         .route("/api/logs/stream", get(stream_logs))
         .route("/api/logs/export", get(export_logs))
+        .route("/api/logs/level", get(get_log_level_handler).post(set_log_level_handler))
         .route("/api/current/:amps", post(set_current))
         .route("/api/charge", post(set_charge_state))
         .route("/api/init", post(init_sequence))
@@ -146,6 +147,33 @@ async fn export_logs() -> impl IntoResponse {
         headers.insert(axum::http::header::CONTENT_DISPOSITION, val);
     }
     (headers, content)
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub struct LogLevelPayload {
+    pub level: String,
+}
+
+/// GET /api/logs/level
+async fn get_log_level_handler() -> impl IntoResponse {
+    let current = logger::get_log_level();
+    Json(json!({ "level": current.as_str() }))
+}
+
+/// POST /api/logs/level
+async fn set_log_level_handler(Json(payload): Json<LogLevelPayload>) -> impl IntoResponse {
+    if let Some(level) = logger::LogLevel::from_str_loose(&payload.level) {
+        logger::set_log_level(level);
+        (
+            StatusCode::OK,
+            Json(json!({ "status": "success", "level": level.as_str() })),
+        )
+    } else {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": format!("Invalid log level: '{}'. Expected ERROR, WARN, INFO, DEBUG, or TRACE", payload.level) })),
+        )
+    }
 }
 
 /// GET /api/info

@@ -70,8 +70,9 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         } else {
             ProtocolEvent::Unknown(line.to_string())
         }
-    } else if line.starts_with("CCI:") {
-        if let Ok(val) = line.replace("CCI:", "").parse::<f32>() {
+    } else if let Some(val_str) = line.strip_prefix("CCI:") {
+        let first_val = val_str.split(';').next().unwrap_or(val_str).trim();
+        if let Ok(val) = first_val.parse::<f32>() {
             ProtocolEvent::Current(val)
         } else {
             ProtocolEvent::Unknown(line.to_string())
@@ -161,6 +162,14 @@ mod tests {
         assert_eq!(
             parse_line("DIP1:1"),
             ProtocolEvent::Dip1("1".into())
+        );
+        assert_eq!(
+            parse_line("CCI:24.48"),
+            ProtocolEvent::Current(24.48)
+        );
+        assert_eq!(
+            parse_line("CCI:24.42;0.00;0.00"),
+            ProtocolEvent::Current(24.42)
         );
     }
 }

@@ -39,6 +39,7 @@ Commands to query the real-time behavioral state and errors of the station.
 | `PP?` | `PP:` | Raw value measured on the Proximity Pilot pin. Used to detect the maximum current capacity of the connected Type 2 cable. |
 | `SB?` | `SB:` | Reads the current state of the front panel START/STOP button. |
 | `T2C?` | `T2C:` | Reads the current authorization state of the Type 2 socket. |
+| `CCI?` | `CCI:` | Requests the instantaneous current measured across the phases. Returns a triplet of currents in Amperes separated by semicolons (`CCI:L1;L2;L3`, e.g., `CCI:24.42;0.00;0.00` in single-phase, or `CCI:16.02;15.98;16.05` in three-phase). |
 
 ---
 

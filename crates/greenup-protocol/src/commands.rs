@@ -120,6 +120,8 @@ pub enum Command {
     GetTicCurrentLimit,
     /// `TICTM:1` / `TICTM:0` – Enables/disables TIC test mode.
     SetTicTestMode(bool),
+    /// `CCI?` – Requests instantaneous current across phases (returns `CCI:L1;L2;L3`).
+    GetInstantaneousCurrent,
 
     // --- 3. Charge Control ---
     /// `CC:XX` – Type 2 socket current limit (use [`Command::set_current_limit`] to validate).
@@ -225,6 +227,7 @@ impl Command {
             Command::GetSbState => "SB?".into(),
             Command::GetTicCurrentLimit => "CCTIC?".into(),
             Command::SetTicTestMode(on) => format!("TICTM:{}", *on as u8),
+            Command::GetInstantaneousCurrent => "CCI?".into(),
 
             Command::SetCurrentLimit(a) => format!("CCEl:{:02}", a),
             Command::SetSchukoCurrentLimit(a) => format!("CCS:{:02}", a),
@@ -286,6 +289,7 @@ impl Command {
             Command::GetTicCurrentLimit => Some("CCTIC:"),
             Command::SetTicTestMode(true) => Some("TICTM:1"),
             Command::SetTicTestMode(false) => Some("TICTM:0"),
+            Command::GetInstantaneousCurrent => Some("CCI:"),
 
             Command::SetCurrentLimit(_) => Some("CCEl:"),
             Command::SetSchukoCurrentLimit(_) => Some("CCS:"),
@@ -385,6 +389,7 @@ mod tests {
     fn encodes_simple_frames() {
         assert_eq!(Command::RaspberryPiModeOk.encode(), "RaspberryPiModeOK\r");
         assert_eq!(Command::GetState.encode(), "State?\r");
+        assert_eq!(Command::GetInstantaneousCurrent.encode(), "CCI?\r");
         assert_eq!(Command::Unlock.encode(), "Unlock\r");
     }
 

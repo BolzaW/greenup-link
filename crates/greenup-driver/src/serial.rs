@@ -203,9 +203,28 @@ pub fn update_charge_status(tel: &mut Telemetry) {
     tel.charge_authorized = is_t2c_authorized && (!is_blocked_by_fm2 || is_forced_by_d);
 }
 
+static LAST_LOGGED_CCI: std::sync::Mutex<Option<f32>> = std::sync::Mutex::new(None);
+
 fn parse_incoming_line(line: &str, state: &SharedState) {
     let rx_category = if line.starts_with("MacAdr:TIC:") {
         "DEBUG"
+    } else if let Some(val_str) = line.strip_prefix("CCI:") {
+        let first_val = val_str.split(';').next().unwrap_or(val_str).trim();
+        if let Ok(current_val) = first_val.parse::<f32>() {
+            let mut last = LAST_LOGGED_CCI.lock().unwrap();
+            let diff = match *last {
+                Some(prev) => (current_val - prev).abs(),
+                None => 1.0, // First measurement -> log in INFO
+            };
+            if diff >= 1.0 {
+                *last = Some(current_val);
+                "SERIAL_RX" // Logged as INFO
+            } else {
+                "DEBUG" // Variations < 1A logged as DEBUG
+            }
+        } else {
+            "DEBUG"
+        }
     } else {
         "SERIAL_RX"
     };
@@ -267,14 +286,38 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                 logger::log("SYS", "!!! CRITICAL ALERT: POWER OUTAGE DETECTED (State:V) - IMMINENT SHUTDOWN !!!");
             }
             if let Ok(mut tel) = state.telemetry.lock() {
-                if (state_val == "D" || state_val == "E") && (tel.greenup_state != "D" && tel.greenup_state != "E") {
-                    tel.energy = 0.0;
+                let was_charging = tel.greenup_state == "D" || tel.greenup_state == "E";
+                let is_charging = state_val == "D" || state_val == "E";
+
+                if is_charging && !was_charging {
+                    // Resuming or starting charge: restart power integration timer
                     tel.last_power_update = Some(std::time::Instant::now());
+                    tel.charge_complete = false;
+                    if let Ok(mut last_cci) = LAST_LOGGED_CCI.lock() {
+                        *last_cci = None;
+                    }
+                } else if was_charging && !is_charging {
+                    // Contactor opened: instantaneous current and power drop immediately to zero
+                    tel.current = 0.0;
+                    tel.power = 0.0;
+                    tel.last_power_update = None;
+                    if let Ok(mut last_cci) = LAST_LOGGED_CCI.lock() {
+                        *last_cci = None;
+                    }
+                    logger::log("SERIAL", &format!("🔌 Charge interrupted/ended (State {}): current & power set to 0", state_val));
                 }
-                tel.greenup_state = state_val.clone(); update_iec_state(&mut tel);
+
                 if state_val == "A" || state_val == "L" {
+                    // Vehicle unplugged or station idle: reset all session counters
+                    tel.current = 0.0;
+                    tel.power = 0.0;
+                    tel.energy = 0.0;
+                    tel.last_power_update = None;
                     tel.charge_complete = false;
                 }
+
+                tel.greenup_state = state_val.clone();
+                update_iec_state(&mut tel);
             }
         }
         ProtocolEvent::ErrorChange(e) => {
@@ -335,23 +378,31 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::Voltage(v) => {
             if let Ok(mut tel) = state.telemetry.lock() {
                 tel.voltage = v;
-                tel.power = tel.voltage * tel.current;
+                if tel.greenup_state == "D" || tel.greenup_state == "E" {
+                    tel.power = tel.voltage * tel.current;
+                } else {
+                    tel.power = 0.0;
+                }
             }
         }
         ProtocolEvent::Current(c) => {
             if let Ok(mut tel) = state.telemetry.lock() {
-                let previous_power = tel.power;
-                tel.current = c;
-                tel.power = tel.voltage * tel.current;
-                let now = std::time::Instant::now();
-                if let Some(last_time) = tel.last_power_update {
-                    let elapsed_hours = last_time.elapsed().as_secs_f32() / 3600.0;
-                    if tel.greenup_state == "D" || tel.greenup_state == "E" {
+                if tel.greenup_state == "D" || tel.greenup_state == "E" {
+                    let previous_power = tel.power;
+                    tel.current = c;
+                    tel.power = tel.voltage * tel.current;
+                    let now = std::time::Instant::now();
+                    if let Some(last_time) = tel.last_power_update {
+                        let elapsed_hours = last_time.elapsed().as_secs_f32() / 3600.0;
                         let energy_wh = ((previous_power + tel.power) / 2.0) * elapsed_hours;
                         tel.energy += energy_wh;
                     }
+                    tel.last_power_update = Some(now);
+                } else {
+                    tel.current = 0.0;
+                    tel.power = 0.0;
+                    tel.last_power_update = None;
                 }
-                tel.last_power_update = Some(now);
             }
         }
         ProtocolEvent::LimitAmps(limit) => {

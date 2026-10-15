@@ -23,3 +23,6 @@ release_pkg/
 # Python cache
 __pycache__/
 *.pyc
+
+#logs analyse
+logs/*
