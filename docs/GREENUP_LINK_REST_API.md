@@ -8,6 +8,11 @@ This API allows interfacing the Green'Up Link software with any standard home au
 | :--- | :--- | :--- |
 | `GET` | `/api/info` | Hardware info (Firmware, Serial, Capabilities) |
 | `GET` | `/api/telemetry` | Real-time telemetry + Legrand / IEC states |
+| `GET` | `/api/logs` | Recent in-memory logs (last 500 entries) |
+| `GET` | `/api/logs/stream` | Real-time Server-Sent Events (SSE) log stream |
+| `GET` | `/api/logs/export` | Download the current daily log file (`.log`) |
+| `GET` | `/api/logs/level` | Get currently active log level |
+| `POST` | `/api/logs/level` | Update active log level dynamically at runtime |
 | `POST` | `/api/charge` | Control charge state (`enable`, `disable`, `pause`, `resume`) |
 | `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`) |
 | `POST` | `/api/init` | Relaunch startup sequence |
@@ -171,4 +176,71 @@ This API allows interfacing the Green'Up Link software with any standard home au
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Command sent" }
+  ```
+
+---
+
+## 📋 Log Management Endpoints
+
+### 10. Get recent in-memory logs
+- **URL**: `/api/logs`
+- **Method**: `GET`
+- **Description**: Returns the ring buffer of the most recent 500 log entries recorded by the server since startup. Used by the Web UI console to populate the history on page load.
+- **Typical Response**:
+  ```json
+  [
+    {
+      "timestamp": "2026-10-16 00:15:20.123",
+      "category": "SERIAL_RX",
+      "message": "State:A"
+    },
+    {
+      "timestamp": "2026-10-16 00:15:21.050",
+      "category": "API",
+      "message": "🔍 GET request /api/telemetry"
+    }
+  ]
+  ```
+
+### 11. Stream real-time logs (SSE)
+- **URL**: `/api/logs/stream`
+- **Method**: `GET`
+- **Content-Type**: `text/event-stream`
+- **Description**: Server-Sent Events (SSE) stream broadcasting all newly generated log entries in real-time. Automatic keep-alive pings are transmitted to keep persistent connections alive.
+
+### 12. Download daily log file
+- **URL**: `/api/logs/export`
+- **Method**: `GET`
+- **Content-Type**: `text/plain; charset=utf-8`
+- **Content-Disposition**: `attachment; filename="greenup_YYYY-MM-DD.log"`
+- **Description**: Downloads the raw text content of the active daily log file on the server.
+
+### 13. Get active log level
+- **URL**: `/api/logs/level`
+- **Method**: `GET`
+- **Description**: Returns the currently active logging threshold filter (applied equally to stdout console and disk files).
+- **Typical Response**:
+  ```json
+  {
+    "level": "INFO"
+  }
+  ```
+
+### 14. Update active log level dynamically
+- **URL**: `/api/logs/level`
+- **Method**: `POST`
+- **Body (JSON)**:
+  ```json
+  {
+    "level": "DEBUG"
+  }
+  ```
+  *(Supported levels: `"ERROR"`, `"WARN"`, `"INFO"`, `"DEBUG"`, `"TRACE"`)*
+- **Description**: Dynamically updates the logging threshold filter at runtime without requiring a service or Raspberry Pi restart.
+- **Typical Response**:
+  ```json
+  {
+    "status": "success",
+    "level": "DEBUG"
+  }
   ```
