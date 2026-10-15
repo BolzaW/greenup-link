@@ -6,23 +6,44 @@ let logEntries = [];
 let maxLogEntries = 500;
 let isLogStreamPaused = false;
 let userScrolledUp = false;
-let currentTypeFilter = 'ALL';
-let currentLevelFilter = 'DEBUG';
+let currentLevelFilter = 'INFO';
 let currentSearchTerm = '';
 let commandHistory = [];
 let commandHistoryIndex = -1;
 let logEventSource = null;
 
 const LOG_LEVEL_SEVERITY = {
-    'DEBUG': 1,
-    'INFO': 2,
-    'WARN': 3,
-    'ERROR': 4
+    'TRACE': 1,
+    'DEBUG': 2,
+    'INFO': 3,
+    'WARN': 4,
+    'ERROR': 5
 };
+
+async function syncLogLevelFromServer() {
+    try {
+        const res = await fetch('/api/logs/level');
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.level) {
+                const sLevel = data.level.toUpperCase();
+                currentLevelFilter = sLevel;
+                const levelSelect = document.getElementById('consoleLevelSelect');
+                if (levelSelect) {
+                    levelSelect.value = sLevel;
+                }
+                renderLogs();
+            }
+        }
+    } catch (e) {
+        console.warn('Could not sync log level from server:', e);
+    }
+}
 
 function initConsole() {
     setupConsoleDomListeners();
     loadConsoleHistory();
+    syncLogLevelFromServer();
     const debugStored = localStorage.getItem('greenup_debug_mode');
     if (debugStored === 'true') {
         setDebugMode(true);
@@ -40,6 +61,7 @@ function setDebugMode(enabled) {
     if (enabled) {
         if (visualizerPanel) visualizerPanel.classList.add('hidden');
         if (consolePanel) consolePanel.classList.remove('hidden');
+        syncLogLevelFromServer();
         startLogStream();
     } else {
         if (consolePanel) consolePanel.classList.add('hidden');
@@ -109,14 +131,9 @@ function addLogEntry(entry) {
 }
 
 function matchesFilter(entry) {
-    if (currentTypeFilter !== 'ALL') {
-        if (currentTypeFilter === 'SERIAL' && !entry.category.startsWith('SERIAL')) return false;
-        if (currentTypeFilter === 'API' && entry.category !== 'API') return false;
-        if (currentTypeFilter === 'SYS' && entry.category !== 'SYS' && entry.category !== 'IHM') return false;
-    }
     if (currentLevelFilter) {
-        const minSeverity = LOG_LEVEL_SEVERITY[currentLevelFilter] || 1;
-        const entrySeverity = LOG_LEVEL_SEVERITY[entry.level] || 2;
+        const minSeverity = LOG_LEVEL_SEVERITY[currentLevelFilter] || 3;
+        const entrySeverity = LOG_LEVEL_SEVERITY[entry.level] || 3;
         if (entrySeverity < minSeverity) return false;
     }
     if (currentSearchTerm) {
@@ -228,21 +245,32 @@ function setupConsoleDomListeners() {
         });
     }
 
-    // Type/Source dropdown
-    const typeSelect = document.getElementById('consoleTypeSelect');
-    if (typeSelect) {
-        typeSelect.addEventListener('change', (e) => {
-            currentTypeFilter = e.target.value;
-            renderLogs();
-        });
-    }
-
-    // Level dropdown
+    // Level dropdown with hybrid server synchronization
     const levelSelect = document.getElementById('consoleLevelSelect');
     if (levelSelect) {
-        levelSelect.addEventListener('change', (e) => {
-            currentLevelFilter = e.target.value;
+        levelSelect.addEventListener('change', async (e) => {
+            const selectedLevel = e.target.value;
+            currentLevelFilter = selectedLevel;
             renderLogs();
+
+            // Synchronize with server log level:
+            // - If user selects TRACE, DEBUG, or INFO: update server level directly
+            // - If user selects WARN or ERROR: ensure server stays at least at INFO
+            //   (so disk files keep logging standard charging events)
+            let serverTargetLevel = selectedLevel;
+            if (selectedLevel === 'WARN' || selectedLevel === 'ERROR') {
+                serverTargetLevel = 'INFO';
+            }
+
+            try {
+                await fetch('/api/logs/level', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ level: serverTargetLevel })
+                });
+            } catch (err) {
+                console.warn('Failed to update server log level:', err);
+            }
         });
     }
 

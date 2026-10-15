@@ -10,6 +10,7 @@
     "type_serial": "Source : Série",
     "type_api": "Source : API",
     "type_sys": "Source : Système",
+    "level_trace": "Niveau : TRACE",
     "level_debug": "Niveau : DEBUG",
     "level_info": "Niveau : INFO",
     "level_warn": "Niveau : WARN",

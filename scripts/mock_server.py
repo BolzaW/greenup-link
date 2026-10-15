@@ -45,6 +45,7 @@ state = {
     "eliot_limit_amps": 16,
     "error_code": "0000",
     "bluetooth_enabled": True,
+    "log_level": "INFO",
 }
 
 mock_logs = []
@@ -121,14 +122,14 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 "link_version": "0.3.0-mock",
             }
             self.send_json(info)
-        elif url == "/api/tic":
-            self.send_json({"mode": "HISTORIQUE", "iinst": 2, "isousc": 30, "ptec": "HC"})
         elif url == "/api/logs":
             self.send_json(mock_logs)
         elif url == "/api/logs/stream":
             self.handle_sse_stream()
         elif url == "/api/logs/export":
             self.handle_logs_export()
+        elif url == "/api/logs/level":
+            self.send_json({"level": state.get("log_level", "INFO")})
         else:
             self.send_error(404, "Not Found")
 
@@ -269,6 +270,15 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             add_mock_log("SERIAL_TX", "INFO", "TICTM:1")
             add_mock_log("SERIAL_RX", "INFO", "TICTM:1:OK")
             self.send_json({"status": "success"})
+        elif url == "/api/logs/level":
+            try:
+                data = json.loads(body) if body else {}
+                new_level = data.get("level", "INFO").upper()
+                state["log_level"] = new_level
+                add_mock_log("API", "INFO", f"⚙️ Log level set to {new_level}")
+                self.send_json({"status": "success", "level": new_level})
+            except Exception as e:
+                self.send_error(400, str(e))
         elif url == "/api/command":
             cmd = body.strip()
             add_mock_log("API", "INFO", f"🔧 Raw command received: {cmd}")

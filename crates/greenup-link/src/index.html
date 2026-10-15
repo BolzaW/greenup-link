@@ -210,20 +210,13 @@
                     </div>
                 </div>
 
-                <!-- Console Filters Row (Dropdowns + Search) -->
+                <!-- Console Filters Row (Level Dropdown + Search) -->
                 <div class="flex items-center gap-2 py-0.5">
-                    <!-- Origin Selector -->
-                    <select id="consoleTypeSelect" class="console-select" aria-label="Filtrer par source">
-                        <option value="ALL" data-i18n="console.type_all">Source : Tout</option>
-                        <option value="SERIAL" data-i18n="console.type_serial">Source : Série</option>
-                        <option value="API" data-i18n="console.type_api">Source : API</option>
-                        <option value="SYS" data-i18n="console.type_sys">Source : Système</option>
-                    </select>
-
                     <!-- Level Selector -->
                     <select id="consoleLevelSelect" class="console-select" aria-label="Filtrer par niveau">
-                        <option value="DEBUG" selected data-i18n="console.level_debug">Niveau : DEBUG</option>
-                        <option value="INFO" data-i18n="console.level_info">Niveau : INFO</option>
+                        <option value="TRACE" data-i18n="console.level_trace">Niveau : TRACE</option>
+                        <option value="DEBUG" data-i18n="console.level_debug">Niveau : DEBUG</option>
+                        <option value="INFO" selected data-i18n="console.level_info">Niveau : INFO</option>
                         <option value="WARN" data-i18n="console.level_warn">Niveau : WARN</option>
                         <option value="ERROR" data-i18n="console.level_error">Niveau : ERROR</option>
                     </select>
