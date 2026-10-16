@@ -6,7 +6,7 @@
 
 ## 📖 Présentation du projet
 
-**Green'Up Link** est un logiciel léger, performant et indépendant écrit en Rust. Il peut s'installer directement sur le Kit de Communication officiel Legrand (référence 059056) pour remplacer le logiciel ("KitCom") fourni par le fabricant, ou sur un **Raspberry Pi standard** (Pi Zero 2 W, Pi 3, Pi 4...) équipé d'une image officielle Raspberry Pi OS 64-bit Lite et relié via un câble USB.
+**Green'Up Link** est un logiciel léger, performant et indépendant écrit en Rust. Il peut s'installer directement sur le Kit de Communication officiel Legrand (référence 059056) pour remplacer le logiciel ("KitCom") fourni par le fabricant, ou sur un **Raspberry Pi standard** (Pi Zero 2 W, Pi 3, Pi 4...) équipé d'une image officielle Raspberry Pi OS 64-bit Lite et relié via un câble USB (voir le [Guide du kit de communication alternatif DIY](docs/KIT_COMMUNICATION_DIY.md)).
 
 Il communique avec la carte de puissance de la borne via un câble USB interne et expose :
 - Une **interface Web locale** épurée et réactive avec visualiseur animé, contrôle de charge (7A à 32A), statut Linky TIC et console live intégrée (flux de logs temps réel SSE).
@@ -79,6 +79,8 @@ Pour le détail de l'environnement, consultez le [Guide d'environnement de compi
 
 ### 1. Initialisation du kit Legrand
 Suivez la **[documentation officielle Legrand](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** pour initialiser le Raspberry Pi sur votre réseau.
+
+*(Si vous ne possédez pas le kit officiel Legrand 059056, consultez le [Guide du kit de communication alternatif DIY](docs/KIT_COMMUNICATION_DIY.md) pour concevoir un montage matériel équivalent avec un Raspberry Pi standard).*
 
 ### 2. Accès SSH (Modification de la carte SD)
 
