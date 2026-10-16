@@ -28,8 +28,8 @@ It communicates with the charging station's power board via an internal USB cabl
 *(Experimental / PoC)*: A standalone `greenup-everest` module is included as an experimental proof of concept to interface with the open-source EVerest framework via MQTT (not the core focus of this project; see also [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
 
 > [!NOTE]
-> **Mobile App & Bluetooth Interface:**
-> Green'Up Link does **not** replace the official Legrand mobile application (EV Charge Light), which communicates directly with the wallbox over Bluetooth. If you use the mobile app and are unsure whether your station is equipped with the Communication Kit, you most likely do not have it: the IP Communication Kit (reference 059056) is an optional accessory sold separately.
+> **Mobile Apps & Bluetooth Interface:**
+> Green'Up Link does **not** replace the official Legrand mobile applications (**EV Charge Light** or the newer generation **EV Charge** introduced in early 2026), which communicate directly with the wallbox over Bluetooth. If you use one of these mobile apps and are unsure whether your station is equipped with the Communication Kit, you most likely do not have it: the IP Communication Kit (reference 059056) is an optional accessory sold separately.
 > 
 > Background reverse-engineering of the native Bluetooth protocol is actively underway, but this work is not yet mature enough for public use.
 
