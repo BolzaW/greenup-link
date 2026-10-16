@@ -37,6 +37,7 @@ Le projet est en évolution continue :
 - **Système d'exploitation** :
   - Image officielle Legrand historique : "Raspbian GNU/Linux 9 (stretch)" 32-bit (`armv7`, glibc 2.24). *(Attention : il n'existe pas de version 32-bit moderne ; la version 32-bit legacy est dédiée à cette image).*
   - Raspberry Pi OS moderne : 64-bit (`aarch64`, Bullseye / Bookworm) Lite ou Desktop.
+- **Modèles de bornes** : Consultez la [Matrice de compatibilité matériel](docs/COMPATIBLE_HARDWARE.md) pour la liste exhaustive des références Legrand et leur niveau de prise en charge (Total, Partiel ou Aucun).
 - **Firmware de la carte de puissance** :
   - `FirmwareBoardA-V01;18;10.hex` (Testé et validé)
   - `FirmwareBoardA-V01;17;27.hex` (Testé et validé)

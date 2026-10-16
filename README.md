@@ -37,6 +37,7 @@ This project is actively in development:
 - **Operating System**:
   - Legrand official legacy image: "Raspbian GNU/Linux 9 (stretch)" 32-bit (`armv7`, glibc 2.24). *(Note: modern 32-bit Debian/Raspberry Pi OS is not supported — only the 32-bit legacy Stretch build is provided).*
   - Modern Raspberry Pi OS: 64-bit (`aarch64`, Bullseye / Bookworm) Lite or Desktop.
+- **Station hardware models**: Refer to the comprehensive [Hardware Compatibility Matrix](docs/COMPATIBLE_HARDWARE.md) for the complete reference list and support status (Full, Partial, or None).
 - **Power board firmware**:
   - `FirmwareBoardA-V01;18;10.hex` (Tested and validated)
   - `FirmwareBoardA-V01;17;27.hex` (Tested and validated)
