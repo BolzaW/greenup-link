@@ -164,7 +164,7 @@ jobs:
       - name: Generate Checksums (SHA256)
         run: |
           cd release_assets
-          sha256sum * > SHA256SUMS.txt
+          sha256sum greenup-link* > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
       - name: Create GitHub Release

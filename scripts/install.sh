@@ -80,6 +80,12 @@ echo ""
 echo "[2/4] Installing Green'Up Link binary to $TARGET_DIR..."
 mkdir -p "$TARGET_DIR"
 
+# Stop active service if updating to prevent "Text file busy" error
+if systemctl is-active --quiet greenup-link.service 2>/dev/null; then
+    echo "  -> Stopping active greenup-link service before binary update..."
+    systemctl stop greenup-link.service 2>/dev/null || true
+fi
+
 if [ -f "$SCRIPT_DIR/greenup-link" ] && [ "$(realpath "$SCRIPT_DIR/greenup-link" 2>/dev/null || echo "$SCRIPT_DIR/greenup-link")" != "$TARGET_BIN" ]; then
     mv -f "$SCRIPT_DIR/greenup-link" "$TARGET_BIN"
     echo "  -> Moved $SCRIPT_DIR/greenup-link to $TARGET_BIN"
