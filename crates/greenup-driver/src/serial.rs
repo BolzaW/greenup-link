@@ -258,7 +258,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut info) = state.info.lock() { info.bluetooth_enabled = Some(enabled); }
         }
         ProtocolEvent::MacAddress(val) => {
-            handle_mac_address(&val, state);
+            if let Ok(mut info) = state.info.lock() { info.mac_address = Some(val); }
         }
         ProtocolEvent::Side(val) => {
             let side_num = match val.as_str() {
@@ -271,9 +271,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                 info.side = side_num;
             }
         }
-        ProtocolEvent::Dip1(val) => {
-            logger::log("SERIAL", &format!("ℹ️ DIP1 received = {}", val));
-        }
+        ProtocolEvent::Dip1(_) => {}
         ProtocolEvent::StateChange(state_val) => {
             if state_val == "V" {
                 logger::log("SYS", "!!! CRITICAL ALERT: POWER OUTAGE DETECTED (State:V) - IMMINENT SHUTDOWN !!!");
@@ -427,14 +425,5 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             logger::log("SERIAL", &format!("⚠️ Command not recognized by the charging station: {}", cmd));
         }
         ProtocolEvent::Unknown(_) => {}
-    }
-}
-
-
-
-pub fn handle_mac_address(val: &str, state: &SharedState) {
-    logger::log("SERIAL", &format!("MAC address detected: {}", val));
-    if let Ok(mut info) = state.info.lock() {
-        info.mac_address = Some(val.to_string());
     }
 }
