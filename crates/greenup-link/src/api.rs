@@ -49,6 +49,8 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
 
     Router::new()
         .route("/", get(serve_ui))
+        .route("/favicon.svg", get(serve_favicon))
+        .route("/favicon.ico", get(serve_favicon))
         .route("/locales/fr.json", get(serve_fr_json))
         .route("/locales/en.json", get(serve_en_json))
         .route("/css/style.css", get(serve_css))
@@ -72,6 +74,14 @@ pub struct BluetoothPayload {
 /// GET /
 async fn serve_ui() -> Html<&'static str> {
     Html(include_str!("index.html"))
+}
+
+/// GET /favicon.svg & /favicon.ico
+async fn serve_favicon() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
+        include_str!("web/favicon.svg"),
+    )
 }
 
 /// GET /locales/fr.json
