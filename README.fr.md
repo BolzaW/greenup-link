@@ -27,6 +27,12 @@ Il communique avec la carte de puissance de la borne via un câble USB interne e
 
 *(Expérimental / Démonstrateur)* : Un module `greenup-everest` autonome est également proposé à titre de démonstrateur expérimental pour interfacer la borne avec le framework open-source EVerest via MQTT (il ne constitue pas le cœur du projet ; voir également le projet [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
 
+> [!NOTE]
+> **Application mobile & Interface Bluetooth :**
+> Green'Up Link ne remplace **pas** l'application mobile officielle Legrand (EV Charge Light), qui communique directement avec la borne en Bluetooth. Si vous utilisez l'application mobile et ne savez pas si votre borne est équipée du kit de communication, c'est que vous ne le possédez très probablement pas : le kit de communication IP (référence 059056) est un accessoire vendu en option.
+> 
+> Un travail de rétro-ingénierie du protocole Bluetooth est en cours d'exploration en tâche de fond, mais il n'est pour l'instant pas suffisamment mûr pour être exploitable.
+
 ## 🤔 Pourquoi ce projet ?
 
 Le logiciel officiel fourni avec le kit est lourd, peu ergonomique et difficile à interfacer avec un système domotique tiers.
