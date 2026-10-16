@@ -140,12 +140,8 @@ ssh pi@<ip_borne>
 curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash
 ```
 > [!TIP]
-> Le script détecte automatiquement l'architecture de votre système (`armv7` 32-bit legacy ou `aarch64` 64-bit), interroge la dernière release GitHub, télécharge directement le binaire autonome correspondant et l'installe dans `/home/pi/greenup/`.
-
-Pour mettre à jour une installation existante vers la dernière release GitHub, relancez avec l'option `--update` :
-```bash
-curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash -s -- --update
-```
+> - Le script détecte automatiquement l'architecture de votre système (`armv7` 32-bit legacy ou `aarch64` 64-bit), interroge la dernière release GitHub, télécharge directement le binaire autonome adéquat et l'installe dans `/home/pi/greenup/`.
+> - **Pour mettre à jour :** Relancez simplement la même commande 1-liner à tout moment. Le script détectera l'installation existante, téléchargera la dernière release et redémarrera le service automatiquement.
 
 #### Option B : Installation manuelle / Hors-ligne (Archive ZIP Release)
 Si la borne n'a pas d'accès direct à Internet :

@@ -103,11 +103,16 @@ elif [ -f "$SCRIPT_DIR/greenup-link-aarch64" ]; then
 elif [ -f "./greenup-link-aarch64" ]; then
     mv -f "./greenup-link-aarch64" "$TARGET_BIN"
     echo "  -> Moved ./greenup-link-aarch64 to $TARGET_BIN"
-elif [ -f "$TARGET_BIN" ] && [ "$1" != "--update" ] && [ "$1" != "-u" ]; then
-    echo "  -> Using existing binary at $TARGET_BIN (pass --update to fetch latest from GitHub)"
+elif [ -f "$TARGET_BIN" ] && { [ "$1" = "--reconfigure" ] || [ "$1" = "--offline" ] || [ "$1" = "--no-download" ]; }; then
+    echo "  -> Keeping existing binary at $TARGET_BIN (--offline/--reconfigure mode)"
 else
-    echo "  -> 'greenup-link' binary not found locally."
-    echo "  -> Detecting architecture and downloading latest release from GitHub..."
+    if [ -f "$TARGET_BIN" ]; then
+        echo "  -> Existing installation detected at $TARGET_BIN."
+        echo "  -> Fetching and upgrading to the latest release from GitHub..."
+    else
+        echo "  -> 'greenup-link' binary not found locally."
+        echo "  -> Detecting architecture and downloading latest release from GitHub..."
+    fi
 
     RAW_ARCH=$(uname -m)
     echo "  -> Detected system architecture: $RAW_ARCH"

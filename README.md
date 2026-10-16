@@ -143,12 +143,8 @@ ssh pi@<station_ip>
 curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash
 ```
 > [!TIP]
-> The script automatically identifies the system architecture (`armv7` 32-bit legacy or `aarch64` 64-bit), queries the latest release on GitHub, downloads the matching standalone binary directly, and installs `greenup-link` into `/home/pi/greenup/`.
-
-To update an existing installation to the latest GitHub release, re-run with `--update`:
-```bash
-curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash -s -- --update
-```
+> - The script automatically identifies the system architecture (`armv7` 32-bit legacy or `aarch64` 64-bit), queries the latest release on GitHub, downloads the matching standalone binary directly, and installs `greenup-link` into `/home/pi/greenup/`.
+> - **To update:** Simply re-run the exact same 1-liner command at any time. The script detects your existing installation, downloads the latest release, and restarts the service automatically.
 
 #### Option B: Offline / Manual Installation (Using Release ZIP)
 If your charging station does not have direct internet access:
