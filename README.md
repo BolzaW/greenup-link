@@ -240,7 +240,7 @@ In both cases, the script automatically restores the original Legrand environmen
 
 Powering the Raspberry Pi can be achieved in two ways:
 - **Internally:** using a small waterproof DC-DC buck converter (12V/24V to 5V) plugged into the station's auxiliary Molex connector (just like the official kit).
-- **Externally (simplified alternative):** using a standard Raspberry Pi USB power supply (micro-USB or USB-C) routed into the enclosure through an available cable gland (assuming an AC mains wall outlet or extension cord is nearby).
+- **Externally (simplified alternative):** using a standard Raspberry Pi USB power supply (micro-USB or USB-C) routed into the enclosure through one of the waterproof cable entries / glands (*presse-étoupe*) located under the chassis (assuming an AC mains wall outlet or extension cord is nearby).
 
 See our step-by-step [DIY Communication Kit Guide](docs/KIT_COMMUNICATION_DIY.md) with parts list, wiring, and assembly instructions.
 </details>

@@ -53,7 +53,7 @@ To replicate Legrand's setup with off-the-shelf commercial components:
 #### Option 2: External Standard USB Power Supply (Simplified Alternative)
 As an easier alternative, you can use a standard official or commercial Raspberry Pi 5V power supply (5.1V / 2.5A or 3A with Micro-USB for Pi Zero 2 W / Pi 3B+, or USB-C for Pi 4). 
 
-The low-voltage power cord is simply routed into the charging station enclosure through an available bottom cable gland (*presse-étoupe*) to power the Raspberry Pi.
+The low-voltage power cord is simply routed into the charging station enclosure through one of the waterproof cable entries / glands (*presse-étoupe*) located under the chassis to power the Raspberry Pi.
 
 | Component | Specifications | Notes | Indicative Price |
 | :--- | :--- | :--- | :--- |
@@ -130,7 +130,7 @@ The low-voltage power cord is simply routed into the charging station enclosure 
                         v
   [ Standard Raspberry Pi USB Power Supply (5V 3A) ]
                         |
-                        | (Micro-USB / USB-C routed into enclosure via cable gland)
+                        | (Micro-USB / USB-C routed via bottom cable entry / gland)
                         v
               [ Raspberry Pi SBC ] <===== (USB Cable) =====> [ ATmega2560 Power Board ]
                (Green'Up Link)

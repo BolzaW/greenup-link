@@ -237,7 +237,7 @@ Dans les deux cas, le script réactive automatiquement l'environnement officiel 
 
 L'alimentation du Raspberry Pi peut se faire :
 - **En interne :** via un petit convertisseur DC/DC étanche (12V/24V vers 5V) branché sur le connecteur auxiliaire Molex de la borne (comme le kit constructeur).
-- **En externe (alternative simplifiée) :** à l'aide d'une alimentation secteur pour Raspberry Pi standard (micro-USB ou USB-C) dont le câble est introduit dans la borne par un presse-étoupe (suppose d'avoir une prise secteur 230V ou une rallonge à proximité).
+- **En externe (alternative simplifiée) :** à l'aide d'une alimentation secteur pour Raspberry Pi standard (micro-USB ou USB-C) dont le câble est introduit dans la borne par l'un des passe-câbles étanches (presse-étoupe) situés sous le châssis (suppose d'avoir une prise secteur 230V ou une rallonge à proximité).
 
 Consultez le [Guide du kit de communication alternatif DIY](docs/KIT_COMMUNICATION_DIY.md) pour la liste des composants, les prix et les instructions d'assemblage.
 </details>
