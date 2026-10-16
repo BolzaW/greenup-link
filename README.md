@@ -104,7 +104,22 @@ The embedded Raspberry Pi 3 uses a standard installation, but SSH is closed and 
 
 ### 4. Automated Installation
 
-1. **Transfer the release binary and installer** to the Raspberry Pi from your PC via SCP:
+#### Option A: Quick 1-Liner (Automatic architecture detection & download)
+If the Raspberry Pi has internet access, simply run the installation script directly:
+```bash
+ssh pi@<station_ip>
+curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash
+```
+> [!TIP]
+> The script automatically identifies the system architecture (`armv7` 32-bit legacy or `aarch64` 64-bit), queries the latest release on GitHub, downloads and extracts the matching binary into `/home/pi/greenup/`.
+
+To update an existing installation to the latest GitHub release, re-run with `--update`:
+```bash
+curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash -s -- --update
+```
+
+#### Option B: Offline / Manual Transfer (SCP)
+1. **Transfer the binary and installer** to the Raspberry Pi from your PC via SCP:
    ```bash
    # Using pre-compiled release files:
    scp greenup-link scripts/install.sh pi@<station_ip>:~/
@@ -118,8 +133,10 @@ The embedded Raspberry Pi 3 uses a standard installation, but SSH is closed and 
    sudo ./install.sh
    ```
 
+---
+
 The automated installer performs all required setup steps:
-- Moves `greenup-link` into `/home/pi/greenup/` with executable permissions.
+- Installs `greenup-link` into `/home/pi/greenup/` with executable permissions (auto-downloaded from GitHub or moved from local directory).
 - Stops and disables legacy Legrand services (Apache Tomcat 9 and Java daemon).
 - Neutralizes the Legrand init.d startup script (`/etc/init.d/CommunicationArduinoRasp`) with an `exit 0` safeguard (creating a `.old` backup).
 - Neutralizes Legrand's emergency self-deletion script (`DeletAll.sh`) with an `exit 0` safeguard and revokes execution rights (creating a `.old` backup).

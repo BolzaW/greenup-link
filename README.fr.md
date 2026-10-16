@@ -101,6 +101,21 @@ L'accès SSH étant désactivé par défaut sur l'image d'origine :
 
 ### 4. Installation automatisée de Green'Up Link
 
+#### Option A : Commande unique rapide (Détection d'architecture et téléchargement automatique)
+Si le Raspberry Pi dispose d'un accès à Internet, lancez directement le script d'installation :
+```bash
+ssh pi@<ip_borne>
+curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash
+```
+> [!TIP]
+> Le script détecte automatiquement l'architecture de votre système (`armv7` 32-bit legacy ou `aarch64` 64-bit), interroge la dernière release GitHub, télécharge et extrait le binaire adéquat directement dans `/home/pi/greenup/`.
+
+Pour mettre à jour une installation existante vers la dernière release GitHub, relancez avec l'option `--update` :
+```bash
+curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash -s -- --update
+```
+
+#### Option B : Installation hors-ligne / Transfert manuel (SCP)
 1. **Transférez le binaire et l'installateur** vers la borne depuis votre PC via SCP :
    ```bash
    # Depuis le dossier de vos binaires :
@@ -115,8 +130,10 @@ L'accès SSH étant désactivé par défaut sur l'image d'origine :
    sudo ./install.sh
    ```
 
+---
+
 Le script d'installation configure l'ensemble du système automatiquement :
-- Déplace `greenup-link` dans `/home/pi/greenup/` avec les permissions d'exécution appropriées.
+- Installe `greenup-link` dans `/home/pi/greenup/` avec les permissions d'exécution appropriées (téléchargé automatiquement depuis GitHub ou déplacé depuis le dossier local).
 - Arrête et désactive les services d'origine Legrand (serveur Apache Tomcat 9 et daemons Java).
 - Neutralise le script de démarrage Legrand (`/etc/init.d/CommunicationArduinoRasp`) avec un `exit 0` de sécurité (sauvegarde en `.old`).
 - Neutralise le script d'auto-destruction Legrand (`DeletAll.sh`) avec un `exit 0` de sécurité et retire les droits d'exécution (sauvegarde en `.old`).

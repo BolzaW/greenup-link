@@ -91,12 +91,135 @@ if [ -f "$SCRIPT_DIR/greenup-link" ] && [ "$(realpath "$SCRIPT_DIR/greenup-link"
 elif [ -f "./greenup-link" ] && [ "$(realpath ./greenup-link 2>/dev/null || echo "./greenup-link")" != "$TARGET_BIN" ]; then
     mv -f "./greenup-link" "$TARGET_BIN"
     echo "  -> Moved ./greenup-link to $TARGET_BIN"
-elif [ -f "$TARGET_BIN" ]; then
-    echo "  -> Binary already present at $TARGET_BIN"
+elif [ -f "$TARGET_BIN" ] && [ "$1" != "--update" ] && [ "$1" != "-u" ]; then
+    echo "  -> Using existing binary at $TARGET_BIN (pass --update to fetch latest from GitHub)"
 else
-    echo "❌ Error: 'greenup-link' binary not found!"
-    echo "   Please place the 'greenup-link' executable in the same directory as this script."
-    exit 1
+    echo "  -> 'greenup-link' binary not found locally."
+    echo "  -> Detecting architecture and downloading latest release from GitHub..."
+
+    RAW_ARCH=$(uname -m)
+    echo "  -> Detected system architecture: $RAW_ARCH"
+    case "$RAW_ARCH" in
+        aarch64|arm64)
+            TARGET_ARCH="aarch64"
+            ;;
+        armv7*|armv6*|armhf)
+            TARGET_ARCH="armv7"
+            ;;
+        *)
+            TARGET_ARCH="$RAW_ARCH"
+            ;;
+    esac
+    echo "  -> Target binary architecture: $TARGET_ARCH"
+
+    if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+        echo "❌ Error: Neither 'curl' nor 'wget' is available to download the binary."
+        echo "   Please install curl with: sudo apt-get install -y curl"
+        exit 1
+    fi
+
+    echo "  -> Querying GitHub Releases API (BolzaW/greenup-link)..."
+    API_URL="https://api.github.com/repos/BolzaW/greenup-link/releases/latest"
+    if command -v curl >/dev/null 2>&1; then
+        RELEASE_JSON=$(curl -sSL "$API_URL" || true)
+    else
+        RELEASE_JSON=$(wget -qO- "$API_URL" || true)
+    fi
+
+    if [ -z "$RELEASE_JSON" ]; then
+        echo "❌ Error: Failed to retrieve release information from GitHub."
+        echo "   Check network connectivity or provide the binary locally."
+        exit 1
+    fi
+
+    URLS=$(echo "$RELEASE_JSON" | grep '"browser_download_url":' | sed -E 's/.*"browser_download_url": "([^"]+)".*/\1/' || true)
+
+    DOWNLOAD_URL=""
+    if [ "$TARGET_ARCH" = "aarch64" ]; then
+        DOWNLOAD_URL=$(echo "$URLS" | grep -Ei 'aarch64|arm64' | head -n 1 || true)
+    elif [ "$TARGET_ARCH" = "armv7" ]; then
+        DOWNLOAD_URL=$(echo "$URLS" | grep -Ei 'armv7|legacy|armhf' | head -n 1 || true)
+        if [ -z "$DOWNLOAD_URL" ]; then
+            DOWNLOAD_URL=$(echo "$URLS" | grep -E '/greenup-link$' | head -n 1 || true)
+        fi
+    else
+        DOWNLOAD_URL=$(echo "$URLS" | grep -Ei "$TARGET_ARCH" | head -n 1 || true)
+    fi
+
+    if [ -z "$DOWNLOAD_URL" ]; then
+        NUM_URLS=$(echo "$URLS" | grep -c '^http' || true)
+        if [ "$NUM_URLS" -eq 1 ]; then
+            DOWNLOAD_URL=$(echo "$URLS" | head -n 1)
+        fi
+    fi
+
+    if [ -z "$DOWNLOAD_URL" ]; then
+        echo "❌ Error: Could not find a suitable asset for architecture '$TARGET_ARCH' in latest release."
+        echo "   Available release assets:"
+        echo "$URLS"
+        exit 1
+    fi
+
+    echo "  -> Downloading: $DOWNLOAD_URL"
+    TMP_FILE=$(mktemp /tmp/greenup-pkg-XXXXXX)
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -sSL "$DOWNLOAD_URL" -o "$TMP_FILE"
+    else
+        wget -qO "$TMP_FILE" "$DOWNLOAD_URL"
+    fi
+
+    if [ ! -s "$TMP_FILE" ]; then
+        echo "❌ Error: Download failed or resulted in an empty file."
+        rm -f "$TMP_FILE"
+        exit 1
+    fi
+
+    if [[ "$DOWNLOAD_URL" == *.zip ]]; then
+        echo "  -> Extracting binary from ZIP archive..."
+        EXTRACTED=false
+        if command -v unzip >/dev/null 2>&1; then
+            unzip -j -o -q "$TMP_FILE" "*greenup-link" -d "$TARGET_DIR" 2>/dev/null && EXTRACTED=true || true
+        fi
+
+        if [ "$EXTRACTED" = false ] && command -v python3 >/dev/null 2>&1; then
+            python3 -c "
+import zipfile, sys
+with zipfile.ZipFile('$TMP_FILE', 'r') as z:
+    for name in z.namelist():
+        if name == 'greenup-link' or name.endswith('/greenup-link'):
+            with open('$TARGET_BIN', 'wb') as f:
+                f.write(z.read(name))
+            sys.exit(0)
+sys.exit(1)
+" 2>/dev/null && EXTRACTED=true || true
+        fi
+
+        if [ "$EXTRACTED" = false ] && command -v python >/dev/null 2>&1; then
+            python -c "
+import zipfile, sys
+with zipfile.ZipFile('$TMP_FILE', 'r') as z:
+    for name in z.namelist():
+        if name == 'greenup-link' or name.endswith('/greenup-link'):
+            with open('$TARGET_BIN', 'wb') as f:
+                f.write(z.read(name))
+            sys.exit(0)
+sys.exit(1)
+" 2>/dev/null && EXTRACTED=true || true
+        fi
+
+        rm -f "$TMP_FILE"
+
+        if [ "$EXTRACTED" = false ] || [ ! -f "$TARGET_BIN" ]; then
+            echo "❌ Error: Failed to extract 'greenup-link' from downloaded zip archive."
+            echo "   Please install 'unzip' using: sudo apt-get install -y unzip"
+            exit 1
+        fi
+    else
+        mv -f "$TMP_FILE" "$TARGET_BIN"
+    fi
+
+    echo "  -> Installed binary to $TARGET_BIN"
 fi
 
 chmod +x "$TARGET_BIN"
