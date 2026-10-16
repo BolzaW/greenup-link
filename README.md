@@ -123,7 +123,18 @@ The embedded Raspberry Pi 3 uses a standard installation, but SSH is closed and 
    ```
 3. Disable password authentication in `/etc/ssh/sshd_config` (`PasswordAuthentication no`, `PermitRootLogin no`), then reload ssh: `sudo systemctl reload ssh`.
 
-### 4. Automated Installation
+### 4. Installation of Green'Up Link
+
+#### GitHub Releases & Supported Architectures
+Pre-compiled packages and standalone binaries are available on the [GitHub Releases page](https://github.com/BolzaW/greenup-link/releases):
+
+| Release Asset | Architecture / Target | Intended System | Package Contents |
+| :--- | :--- | :--- | :--- |
+| **`greenup-link-vX.Y.Z-armv7-legacy.zip`** | ARMv7 32-bit (`armv7-unknown-linux-gnueabihf.2.24`) | **Official Legrand kit** (Debian 9 Stretch, glibc 2.24) and 32-bit Raspberry Pi OS | `greenup-link`, `install.sh`, `README.md`, `README.fr.md` |
+| **`greenup-link-vX.Y.Z-aarch64.zip`** | AArch64 64-bit (`aarch64-unknown-linux-gnu`) | **Standard Raspberry Pi OS 64-bit Lite** (Pi Zero 2 W, Pi 3, Pi 4, Pi 5) | `greenup-link`, `install.sh`, `README.md`, `README.fr.md` |
+| **`greenup-link-armv7-legacy`** | ARMv7 32-bit | Standalone executable (glibc 2.24 compatible) | Single binary |
+| **`greenup-link-aarch64`** | AArch64 64-bit | Standalone executable | Single binary |
+| **`SHA256SUMS.txt`** | - | SHA256 checksums for integrity verification | Text file |
 
 #### Option A: Quick 1-Liner (Automatic architecture detection & download)
 If the Raspberry Pi has internet access, simply run the installation script directly:
@@ -132,27 +143,30 @@ ssh pi@<station_ip>
 curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash
 ```
 > [!TIP]
-> The script automatically identifies the system architecture (`armv7` 32-bit legacy or `aarch64` 64-bit), queries the latest release on GitHub, downloads and extracts the matching binary into `/home/pi/greenup/`.
+> The script automatically identifies the system architecture (`armv7` 32-bit legacy or `aarch64` 64-bit), queries the latest release on GitHub, downloads the matching release archive, and installs `greenup-link` into `/home/pi/greenup/`.
 
 To update an existing installation to the latest GitHub release, re-run with `--update`:
 ```bash
 curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash -s -- --update
 ```
 
-#### Option B: Offline / Manual Transfer (SCP)
-1. **Transfer the binary and installer** to the Raspberry Pi from your PC via SCP:
+#### Option B: Offline / Manual Installation (Using Release ZIP)
+If your charging station does not have direct internet access:
+1. **Download the appropriate ZIP archive** from the [GitHub Releases page](https://github.com/BolzaW/greenup-link/releases) on your PC:
+   - For official Legrand kit: `greenup-link-vX.Y.Z-armv7-legacy.zip`
+   - For modern 64-bit Raspberry Pi OS: `greenup-link-vX.Y.Z-aarch64.zip`
+2. **Transfer the archive to the Raspberry Pi** via SCP:
    ```bash
-   # Using pre-compiled release files:
-   scp greenup-link scripts/install.sh pi@<station_ip>:~/
+   scp greenup-link-v*.zip pi@<station_ip>:~/
    ```
-   *(Or if you compiled from source, use `target/armv7-unknown-linux-gnueabihf/release/greenup-link` or `target/aarch64-unknown-linux-gnu/release/greenup-link`).*
-
-2. **Connect via SSH and execute the installer**:
+3. **Connect via SSH, extract the archive, and run the installer**:
    ```bash
    ssh pi@<station_ip>
+   unzip greenup-link-v*.zip
    chmod +x install.sh
    sudo ./install.sh
    ```
+   *(Note: The archive already bundles `install.sh` and the pre-configured `greenup-link` binary. If `unzip` is not installed on the station, extract the archive on your PC and transfer the contents).*
 
 ---
 

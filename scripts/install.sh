@@ -91,6 +91,18 @@ if [ -f "$SCRIPT_DIR/greenup-link" ] && [ "$(realpath "$SCRIPT_DIR/greenup-link"
 elif [ -f "./greenup-link" ] && [ "$(realpath ./greenup-link 2>/dev/null || echo "./greenup-link")" != "$TARGET_BIN" ]; then
     mv -f "./greenup-link" "$TARGET_BIN"
     echo "  -> Moved ./greenup-link to $TARGET_BIN"
+elif [ -f "$SCRIPT_DIR/greenup-link-armv7-legacy" ]; then
+    mv -f "$SCRIPT_DIR/greenup-link-armv7-legacy" "$TARGET_BIN"
+    echo "  -> Moved $SCRIPT_DIR/greenup-link-armv7-legacy to $TARGET_BIN"
+elif [ -f "./greenup-link-armv7-legacy" ]; then
+    mv -f "./greenup-link-armv7-legacy" "$TARGET_BIN"
+    echo "  -> Moved ./greenup-link-armv7-legacy to $TARGET_BIN"
+elif [ -f "$SCRIPT_DIR/greenup-link-aarch64" ]; then
+    mv -f "$SCRIPT_DIR/greenup-link-aarch64" "$TARGET_BIN"
+    echo "  -> Moved $SCRIPT_DIR/greenup-link-aarch64 to $TARGET_BIN"
+elif [ -f "./greenup-link-aarch64" ]; then
+    mv -f "./greenup-link-aarch64" "$TARGET_BIN"
+    echo "  -> Moved ./greenup-link-aarch64 to $TARGET_BIN"
 elif [ -f "$TARGET_BIN" ] && [ "$1" != "--update" ] && [ "$1" != "-u" ]; then
     echo "  -> Using existing binary at $TARGET_BIN (pass --update to fetch latest from GitHub)"
 else

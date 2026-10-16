@@ -114,6 +114,7 @@ jobs:
           cp "$BIN_PATH" "$PKG_DIR/greenup-link"
           cp "scripts/install.sh" "$PKG_DIR/"
           cp "README.md" "$PKG_DIR/"
+          cp "README.fr.md" "$PKG_DIR/"
           
           # 2. Create ZIP archive
           ZIP_NAME="greenup-link-${{ env.VERSION }}-${{ matrix.artifact_suffix }}.zip"
@@ -123,11 +124,6 @@ jobs:
           mkdir -p dist
           mv "$ZIP_NAME" dist/
           cp "$BIN_PATH" "dist/greenup-link-${{ matrix.artifact_suffix }}"
-          
-          # Provide generic fallback "greenup-link" for legacy ARMv7 (backward compatibility)
-          if [ "${{ matrix.artifact_suffix }}" = "armv7-legacy" ]; then
-            cp "$BIN_PATH" "dist/greenup-link"
-          fi
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4

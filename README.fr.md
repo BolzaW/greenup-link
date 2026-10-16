@@ -120,7 +120,18 @@ L'accès SSH étant désactivé par défaut sur l'image d'origine :
    ```
 3. Désactivez l'authentification par mot de passe dans `/etc/ssh/sshd_config` (`PasswordAuthentication no`, `PermitRootLogin no`), puis rechargez le démon SSH : `sudo systemctl reload ssh`.
 
-### 4. Installation automatisée de Green'Up Link
+### 4. Installation de Green'Up Link
+
+#### Releases GitHub & Architectures supportées
+Des paquets pré-compilés et binaires autonomes sont disponibles sur la [page des Releases GitHub](https://github.com/BolzaW/greenup-link/releases) :
+
+| Fichier Release | Architecture / Cible | Système visé | Contenu |
+| :--- | :--- | :--- | :--- |
+| **`greenup-link-vX.Y.Z-armv7-legacy.zip`** | ARMv7 32-bit (`armv7-unknown-linux-gnueabihf.2.24`) | **Kit officiel Legrand** (Debian 9 Stretch, glibc 2.24) et Raspberry Pi OS 32-bit | `greenup-link`, `install.sh`, `README.md`, `README.fr.md` |
+| **`greenup-link-vX.Y.Z-aarch64.zip`** | AArch64 64-bit (`aarch64-unknown-linux-gnu`) | **Raspberry Pi OS 64-bit Lite officiel** (Pi Zero 2 W, Pi 3, Pi 4, Pi 5) | `greenup-link`, `install.sh`, `README.md`, `README.fr.md` |
+| **`greenup-link-armv7-legacy`** | ARMv7 32-bit | Binaire autonome direct (compatible glibc 2.24) | Binaire seul |
+| **`greenup-link-aarch64`** | AArch64 64-bit | Binaire autonome direct | Binaire seul |
+| **`SHA256SUMS.txt`** | - | Empreintes SHA256 pour vérification d'intégrité | Fichier texte |
 
 #### Option A : Commande unique rapide (Détection d'architecture et téléchargement automatique)
 Si le Raspberry Pi dispose d'un accès à Internet, lancez directement le script d'installation :
@@ -129,27 +140,30 @@ ssh pi@<ip_borne>
 curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash
 ```
 > [!TIP]
-> Le script détecte automatiquement l'architecture de votre système (`armv7` 32-bit legacy ou `aarch64` 64-bit), interroge la dernière release GitHub, télécharge et extrait le binaire adéquat directement dans `/home/pi/greenup/`.
+> Le script détecte automatiquement l'architecture de votre système (`armv7` 32-bit legacy ou `aarch64` 64-bit), interroge la dernière release GitHub, télécharge l'archive correspondante et installe le binaire dans `/home/pi/greenup/`.
 
 Pour mettre à jour une installation existante vers la dernière release GitHub, relancez avec l'option `--update` :
 ```bash
 curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash -s -- --update
 ```
 
-#### Option B : Installation hors-ligne / Transfert manuel (SCP)
-1. **Transférez le binaire et l'installateur** vers la borne depuis votre PC via SCP :
+#### Option B : Installation manuelle / Hors-ligne (Archive ZIP Release)
+Si la borne n'a pas d'accès direct à Internet :
+1. **Téléchargez l'archive ZIP appropriée** depuis la [page des Releases GitHub](https://github.com/BolzaW/greenup-link/releases) sur votre PC :
+   - Pour le kit officiel Legrand : `greenup-link-vX.Y.Z-armv7-legacy.zip`
+   - Pour Raspberry Pi OS 64-bit moderne : `greenup-link-vX.Y.Z-aarch64.zip`
+2. **Transférez l'archive vers la borne** via SCP :
    ```bash
-   # Depuis le dossier de vos binaires :
-   scp greenup-link scripts/install.sh pi@<ip_borne>:~/
+   scp greenup-link-v*.zip pi@<ip_borne>:~/
    ```
-   *(Ou depuis le dossier source : `scp target/armv7-unknown-linux-gnueabihf/release/greenup-link scripts/install.sh pi@<ip_borne>:~/`)*
-
-2. **Connectez-vous en SSH et lancez l'installateur** :
+3. **Connectez-vous en SSH, décompressez et lancez l'installateur** :
    ```bash
    ssh pi@<ip_borne>
+   unzip greenup-link-v*.zip
    chmod +x install.sh
    sudo ./install.sh
    ```
+   *(Note : L'archive contient déjà le script `install.sh` et le binaire `greenup-link` adapté. Si `unzip` n'est pas installé sur la borne, décompressez l'archive sur votre PC et transférez les fichiers extraits).*
 
 ---
 
