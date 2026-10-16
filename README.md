@@ -25,6 +25,7 @@ Moreover, the official Legrand software stack (running outdated versions of Apac
 ## ⚠️ Current Limitations
 
 This project is actively in development:
+- **Scope of the software**: Green'Up Link only replaces the communication kit (software layer running on the Raspberry Pi). The charging station retains all of its native intelligence, electrical protections, and autonomous operation via its internal ATmega2560 power board.
 - **Tested hardware**: I can only test and validate on my own hardware: reference **058001** (single Type 2 socket, 7.4 kW single-phase, without domestic socket).
 - **Type 2 compatibility**: All Green'up Premium stations should nominally work with their Type 2 socket.
 - **Domestic socket (Schuko) & Three-phase**: Not supported at this stage due to a lack of knowledge, captured serial communication logs, and test hardware to investigate these configurations.
