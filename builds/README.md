@@ -1,27 +1,29 @@
-# Scripts de Build & Release
+# Build & Release Scripts
 
-Ce répertoire regroupe l'ensemble des scripts de compilation et d'empaquetage pour Raspberry Pi.
+This directory centralizes all compilation and release packaging scripts for Raspberry Pi.
 
-Tous les scripts peuvent être exécutés directement par double-clic depuis Windows ou via le terminal : ils se repositionnent automatiquement à la racine du projet (`cd /d "%~dp0\.."`).
+All batch scripts can be executed directly from Windows (by double-clicking or from a terminal): they automatically change directory to the repository root (`cd /d "%~dp0\.."`).
 
----
-
-## 🚀 Cible AArch64 (Raspberry Pi OS 64-bit - Actuel)
-*Utilise le compilateur croisé classique `cargo build` avec `gcc-aarch64-linux-gnu` (sans zigbuild).*
-
-- **`build-link-aarch64.bat`** : Compile `greenup-link` en mode Debug vers `target/aarch64-unknown-linux-gnu/debug/greenup-link`.
-- **`build-everest-aarch64.bat`** : Compile `greenup-everest` en mode Debug vers `target/aarch64-unknown-linux-gnu/debug/greenup-everest`.
-- **`release-aarch64.bat`** : Compile `greenup-link` en mode Release (optimisé, allégé) et crée l'archive `greenup-link-vX.Y.Z-aarch64.zip`.
+**Requirement:** These batch scripts require **WSL (Ubuntu)** with the cross-compilation toolchains installed.
 
 ---
 
-## 🏛️ Cible Legacy (ARM 32-bit - Ancien OS Legrand)
-*Utilise `cargo-zigbuild` ciblant la glibc 2.24 pour compatibilité avec l'image Debian historique de la borne Legrand.*
+## 🚀 AArch64 Target (Modern Raspberry Pi OS 64-bit)
+*Uses the standard `cargo build` cross-compiler with `gcc-aarch64-linux-gnu`.*
 
-- **`build-link-legacy.bat`** : Compile `greenup-link` en mode Debug vers `target/armv7-unknown-linux-gnueabihf/debug/greenup-link`.
-- **`build-everest-legacy.bat`** : Compile `greenup-everest` en mode Debug vers `target/armv7-unknown-linux-gnueabihf/debug/greenup-everest`.
-- **`release-legacy.bat`** : Compile `greenup-link` en mode Release et crée l'archive `greenup-link-vX.Y.Z-armv7-legacy.zip`.
+- **`build-link-aarch64.bat`**: Compiles `greenup-link` in Debug mode to `target/aarch64-unknown-linux-gnu/debug/greenup-link`.
+- **`build-everest-aarch64.bat`**: Compiles `greenup-everest` in Debug mode to `target/aarch64-unknown-linux-gnu/debug/greenup-everest`.
+- **`release-aarch64.bat`**: Compiles `greenup-link` in Release mode (optimized, stripped) and packages `greenup-link-vX.Y.Z-aarch64.zip`.
 
 ---
 
-Pour plus de détails sur la configuration de l'environnement, consultez [`docs/ENV_COMPILATION_AARCH64.md`](../docs/ENV_COMPILATION_AARCH64.md).
+## 🏛️ Legacy ARMv7 Target (32-bit Legrand Factory OS)
+*Uses `cargo-zigbuild` targeting glibc 2.24 for binary compatibility with Legrand's historical Debian 9 Stretch image.*
+
+- **`build-link-legacy.bat`**: Compiles `greenup-link` in Debug mode to `target/armv7-unknown-linux-gnueabihf/debug/greenup-link`.
+- **`build-everest-legacy.bat`**: Compiles `greenup-everest` in Debug mode to `target/armv7-unknown-linux-gnueabihf/debug/greenup-everest`.
+- **`release-legacy.bat`**: Compiles `greenup-link` in Release mode and packages `greenup-link-vX.Y.Z-armv7-legacy.zip`.
+
+---
+
+For full instructions on configuring the WSL compilation environment, see [`docs/ENV_COMPILATION_AARCH64_ARM7.md`](../docs/ENV_COMPILATION_AARCH64_ARM7.md).

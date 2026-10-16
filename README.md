@@ -66,7 +66,7 @@ cargo build --release -p greenup-link --target aarch64-unknown-linux-gnu
 # For legacy 32-bit Legrand image (glibc 2.24 / Debian Stretch):
 cargo zigbuild --release -p greenup-link --target armv7-unknown-linux-gnueabihf.2.24
 ```
-For full environment setup details, see the [Compilation Environment Guide](docs/ENV_COMPILATION_AARCH64.md).
+For full environment setup details, see the [Compilation Environment Guide](docs/ENV_COMPILATION_AARCH64_ARM7.md).
 
 ---
 
