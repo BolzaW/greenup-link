@@ -6,7 +6,7 @@
 
 ## 📖 Project Overview
 
-**Green'Up Link** is a lightweight, high-performance, independent software written in Rust. It installs directly on the official Legrand Communication Kit (reference 059056) to replace the software ("KitCom") provided by the manufacturer. 
+**Green'Up Link** is a lightweight, high-performance, independent software written in Rust. It can be installed directly on the official Legrand Communication Kit (reference 059056) to replace the manufacturer's software ("KitCom"), or on a **standard Raspberry Pi** (Pi Zero 2 W, Pi 3, Pi 4, etc.) running an official Raspberry Pi OS 64-bit Lite image connected via a DIY serial interface. 
 
 It communicates with the charging station's power board via the internal serial link and exposes:
 - A clean, responsive **local Web GUI** with live visualizer, charging controls (7A–32A), Linky TIC status, and an integrated real-time debug console (SSE log streaming).
@@ -14,33 +14,35 @@ It communicates with the charging station's power board via the internal serial 
 - Complete **log management** with daily rolling files (`greenup_YYYY-MM-DD.log`), 7-day automatic retention, and hot-reloadable log levels (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
 - Full compatibility with **EVCC** for smart solar charging (see the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md)).
 
-It also provides an EVerest integration without API/UI via a direct MQTT bridge, allowing the station to be controlled as a standard EVerest hardware module. *(Note: For a cleaner, native EVerest module implementation that replaces EvseManager entirely, check out the excellent community project [evorada/everest-greenup](https://github.com/evorada/everest-greenup) by suda).*
+*(Experimental / PoC)*: A standalone `greenup-everest` module is included as an experimental proof of concept to interface with the open-source EVerest framework via MQTT (not the core focus of this project; see also [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
 
 ## 🤔 Why this project?
 
-The software provided with the official Communication Kit is bloated. It is buggy, unresponsive, and very difficult to use for standard home automation. 
+The software provided with the official Communication Kit is bloated, buggy, unresponsive, and very difficult to integrate with modern home automation systems.
 
-Moreover, it relies on a Raspberry Pi 3 running an obsolete operating system (Raspbian 9 "Stretch"), which is highly vulnerable from a security standpoint. This project allows you to take back full control of your hardware in a much healthier and more responsive way.
+Moreover, the official Legrand software stack (running outdated versions of Apache Tomcat 9, an unmaintained Java runtime, and obsolete system components on Raspbian 9 "Stretch") contains **multiple known CVEs and critical vulnerabilities**. Exposing this official stack directly to the internet (or even on an untrusted local network) poses severe security risks. Green'Up Link eliminates this legacy stack entirely in favor of a minimal, memory-safe Rust binary with no external runtime dependencies, giving you back full control over your charging station.
 
 ## ⚠️ Current Limitations
 
-This project is actively in development. Features will be added progressively. For now:
-- Only manages **direct charging**.
-- Only manages the **058001 / 059001** charging station reference (1 Type 2 side, no Shuko domestic socket, 7kW). *This is the model I own and on which I could test.*
-- **DOES NOT MANAGE** the RFID badge reader.
-- **DOES NOT MANAGE** schedules (time programming).
-- **DOES NOT MANAGE** Modbus communication.
-- **DOES NOT MANAGE** the OCPP protocol.
+This project is actively in development:
+- **Tested hardware**: I can only test and validate on my own hardware: reference **058001** (single Type 2 socket, 7.4 kW single-phase, without domestic socket).
+- **Type 2 compatibility**: All Green'up Premium stations should nominally work with their Type 2 socket.
+- **Domestic socket (Schuko) & Three-phase**: Not supported at this stage due to a lack of knowledge, captured serial communication logs, and test hardware to investigate these configurations.
+- **Direct charging only**: No support for schedules / onboard time programming (use Home Assistant or EVCC to schedule charges instead).
+- **Does NOT manage**: RFID badge reader, Modbus communication, or OCPP protocol.
 
 ## ✅ Compatibility
 
 - **Operating System**:
-  - Legrand official image "Raspbian GNU/Linux 9 (stretch)" (32-bit ARMv7).
-  - Modern Raspberry Pi OS (32-bit `armv7` and 64-bit `aarch64`).
+  - Legrand official legacy image: "Raspbian GNU/Linux 9 (stretch)" 32-bit (`armv7`, glibc 2.24). *(Note: modern 32-bit Debian/Raspberry Pi OS is not supported — only the 32-bit legacy Stretch build is provided).*
+  - Modern Raspberry Pi OS: 64-bit (`aarch64`, Bullseye / Bookworm) Lite or Desktop.
 - **Power board firmware**:
   - `FirmwareBoardA-V01;18;10.hex` (Tested and validated)
+  - `FirmwareBoardA-V01;17;27.hex` (Tested and validated)
   - `FirmwareBoardA-V01;18;04.hex` (Theoretically compatible)
-  - `FirmwareBoardA-V01;17;27.hex` (Theoretically compatible)
+
+> [!NOTE]
+> **Regarding Legrand system images:** It is possible that newer Legrand factory image revisions exist whose exact specifications are not currently known. Legrand does not provide OS migration mechanisms between major image releases — only the application software stack and a few Debian packages are updated via Legrand's update mechanism. As a result, certain Legrand image versions might have glibc or kernel differences incompatible with the current prebuilt legacy binary. If you encounter such an image, please open an issue with your system details (`uname -a`, `ldd --version`), and a dedicated compilation toolchain can be created.
 
 ---
 
@@ -48,7 +50,7 @@ This project is actively in development. Features will be added progressively. F
 
 The project is structured as a Cargo workspace and supports cross-compilation for both legacy 32-bit ARM (Debian Stretch) and modern 64-bit ARM (Raspberry Pi OS 64-bit).
 
-Ready-to-use compilation scripts are available in the [`builds/`](builds/) directory:
+Ready-to-use compilation scripts are available in the [`builds/`](builds/) directory. **Note:** These batch scripts are designed to be run from Windows using **WSL (Ubuntu)** with the cross-compilation toolchains installed.
 
 | Script | Target Architecture | Build Type | Output Binary / Package |
 | :--- | :--- | :--- | :--- |
@@ -63,7 +65,7 @@ cargo build --release -p greenup-link --target aarch64-unknown-linux-gnu
 # For legacy 32-bit Legrand image (glibc 2.24 / Debian Stretch):
 cargo zigbuild --release -p greenup-link --target armv7-unknown-linux-gnueabihf.2.24
 ```
-For full environment setup details, see the [64-bit Compilation Guide](docs/ENV_COMPILATION_AARCH64.md).
+For full environment setup details, see the [Compilation Environment Guide](docs/ENV_COMPILATION_AARCH64.md).
 
 ---
 
@@ -77,6 +79,10 @@ For full environment setup details, see the [64-bit Compilation Guide](docs/ENV_
 Follow the **[official Legrand documentation](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** to initialize the Raspberry Pi on your local network.
    
 ### 2. Get SSH access (SD card modification)
+
+> [!NOTE]
+> **Work in progress:** Tools and automated procedures are currently being developed to enable SSH access directly over the network without requiring physical disassembly or SD card removal.
+
 The embedded Raspberry Pi 3 uses a standard installation, but SSH is closed and the default password was changed by Legrand:
 
 1. Turn off power and retrieve the microSD card from the Raspberry Pi.
@@ -167,20 +173,26 @@ The automated installer performs all required setup steps:
 - **REST API**: Refer to the complete [REST API Documentation](docs/GREENUP_LINK_REST_API.md) to integrate with Home Assistant, Jeedom, Node-RED, etc.
 - **Interactive CLI**: Use `scripts/cli-greenup-link.ps1` from PowerShell on Windows to test endpoints or send raw serial commands.
 - **EVCC Integration**: Refer to the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md) for smart solar diversion charging.
-- **EVerest Module**: Refer to the [EVerest Integration Documentation](crates/greenup-everest/README.md) for native MQTT integration.
 
 ---
 
 ## 🚀 Future Features
 
 The roadmap includes (with no guaranteed timeline):
-- MQTT integration for Home Automation
-- Compatibility with recent Raspberry Pi OS releases
-- Custom ATmega firmware with more capabilities
-- OCPP communication mode support
-- Extending compatibility to other station models in the range:
-  - Schuko (domestic socket) compatibility
-  - Three-phase equipment support
-  - Dual charge points wallbox support
+- **Native MQTT integration** with **Home Assistant Auto-Discovery** (automatic entity creation for sensors, switches, and charging current control).
+- **Charging session history**: Recording charging sessions in CSV format, with session visualization and CSV export directly from the Web GUI.
+- Custom ATmega firmware with enhanced telemetry and features.
+- Support for the OCPP communication protocol.
+- Extending compatibility to other station models in the range (domestic Schuko socket, three-phase equipment, dual charge points).
 
-*Note: Feel free to use GitHub "Issues" to suggest or request specific features you might need!*
+---
+
+## 🤝 Call for Testers & Contributions
+
+I am actively seeking testers who own different hardware configurations of the Legrand Green'up Premium range (e.g. wallboxes equipped with a domestic Schuko socket, three-phase models, dual charge points, or different PCB / firmware revisions).
+
+The goal is to collect serial communication logs to understand how these variants behave and extend Green'Up Link to support the entire range.
+
+If you have one of these models and would like to help test or share logs, please feel free to:
+- Open a **[GitHub Issue](https://github.com/BolzaW/greenup-link/issues)**
+- Or reach out directly by email: **[bolzaw.dev@gmail.com](mailto:bolzaw.dev@gmail.com)**

@@ -6,7 +6,7 @@
 
 ## 📖 Présentation du projet
 
-**Green'Up Link** est un logiciel léger, performant et indépendant écrit en Rust. Il s'installe directement sur le Kit de Communication officiel Legrand (référence 059056) pour remplacer le logiciel ("KitCom") fourni par le fabricant.
+**Green'Up Link** est un logiciel léger, performant et indépendant écrit en Rust. Il peut s'installer directement sur le Kit de Communication officiel Legrand (référence 059056) pour remplacer le logiciel ("KitCom") fourni par le fabricant, ou sur un **Raspberry Pi standard** (Pi Zero 2 W, Pi 3, Pi 4...) équipé d'une image officielle Raspberry Pi OS 64-bit Lite et relié via une interface série DIY.
 
 Il communique avec la carte de puissance de la borne via la liaison série interne et expose :
 - Une **interface Web locale** épurée et réactive avec visualiseur animé, contrôle de charge (7A à 32A), statut Linky TIC et console live intégrée (flux de logs temps réel SSE).
@@ -14,33 +14,35 @@ Il communique avec la carte de puissance de la borne via la liaison série inter
 - Une **gestion complète des logs** avec fichiers journaliers tournants (`greenup_YYYY-MM-DD.log`), rétention automatique de 7 jours et modification à chaud des niveaux (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
 - Une compatibilité totale avec **EVCC** pour la charge solaire dynamique (voir le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md)).
 
-Il intègre également un pont MQTT direct avec le framework open-source EVerest, permettant de piloter la borne comme un module matériel EVerest standard. *(Note : Pour une implémentation native EVerest complète remplaçant EvseManager, consultez l'excellent projet communautaire [evorada/everest-greenup](https://github.com/evorada/everest-greenup) par suda).*
+*(Expérimental / Démonstrateur)* : Un module `greenup-everest` autonome est également proposé à titre de démonstrateur expérimental pour interfacer la borne avec le framework open-source EVerest via MQTT (il ne constitue pas le cœur du projet ; voir également le projet [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
 
 ## 🤔 Pourquoi ce projet ?
 
 Le logiciel officiel fourni avec le kit est lourd, peu ergonomique et difficile à interfacer avec un système domotique tiers.
 
-De plus, il repose sur un Raspberry Pi 3 tournant sous un système d'exploitation obsolète (Raspbian 9 "Stretch"). Ce projet permet de reprendre le contrôle de votre matériel de manière saine, sécurisée et pérenne.
+De plus, la pile logicielle d'origine Legrand (exécutant des versions obsolètes d'Apache Tomcat 9, un runtime Java ancien et des composants non maintenus sur Raspbian 9 "Stretch") comporte de **multiples vulnérabilités et CVE critiques**. Exposer le logiciel d'origine directement à Internet (ou même sur un réseau local non cloisonné) est extrêmement dangereux. Green'Up Link remplace complètement cette pile vulnérable par un unique binaire Rust autonome, sécurisé, sans runtime lourd, vous redonnant la pleine maîtrise de votre matériel.
 
 ## ⚠️ Limitations actuelles
 
 Le projet est en évolution continue :
-- Gère uniquement la **charge directe**.
-- Testé et validé sur la référence **058001 / 059001** (1 prise Type 2, pas de prise domestique, 7kW).
-- **NE GÈRE PAS** le lecteur de badges RFID.
-- **NE GÈRE PAS** les plages horaires (programmation horaire).
-- **NE GÈRE PAS** la communication Modbus.
-- **NE GÈRE PAS** le protocole OCPP.
+- **Matériel testé** : Je ne peux tester et valider le logiciel que sur mon propre matériel : référence **058001** (1 prise Type 2, 7.4 kW monophasé, sans prise domestique).
+- **Compatibilité Type 2** : Toutes les bornes de la gamme Green'up Premium devraient fonctionner de manière nominale sur leur prise Type 2.
+- **Prise domestique (Schuko) et Triphasé** : Non prises en charge pour l'instant (manque de connaissances, de logs de communication série et de matériel de test pour investiguer ces configurations).
+- **Charge directe uniquement** : Pas de gestion de plages horaires intégrées (confiez la programmation horaire à Home Assistant ou EVCC).
+- **Ne gère pas** : Lecteur de badges RFID, communication Modbus, protocole OCPP.
 
 ## ✅ Compatibilité
 
 - **Système d'exploitation** :
-  - Image officielle Legrand "Raspbian GNU/Linux 9 (stretch)" (32-bit ARMv7).
-  - Raspberry Pi OS moderne (32-bit `armv7` et 64-bit `aarch64`).
+  - Image officielle Legrand historique : "Raspbian GNU/Linux 9 (stretch)" 32-bit (`armv7`, glibc 2.24). *(Attention : il n'existe pas de version 32-bit moderne ; la version 32-bit legacy est dédiée à cette image).*
+  - Raspberry Pi OS moderne : 64-bit (`aarch64`, Bullseye / Bookworm) Lite ou Desktop.
 - **Firmware de la carte de puissance** :
   - `FirmwareBoardA-V01;18;10.hex` (Testé et validé)
+  - `FirmwareBoardA-V01;17;27.hex` (Testé et validé)
   - `FirmwareBoardA-V01;18;04.hex` (Théoriquement compatible)
-  - `FirmwareBoardA-V01;17;27.hex` (Théoriquement compatible)
+
+> [!NOTE]
+> **À propos des images système Legrand :** Il est possible qu'il existe d'autres versions d'images d'usine Legrand plus récentes dont les spécifications exactes ne sont pas connues. Legrand ne prévoyant aucun mécanisme de migration d'OS (seule la suite applicative et quelques paquets Debian sont mis à jour via le mécanisme de mise à jour Legrand), certaines versions d'images pourraient présenter des incompatibilités avec le binaire fourni. Le cas échéant, ouvrez un ticket avec les informations de votre système (`uname -a`, `ldd --version`) : une nouvelle chaîne de compilation adaptée pourra être mise en place.
 
 ---
 
@@ -48,7 +50,7 @@ Le projet est en évolution continue :
 
 Le projet est structuré sous forme de Cargo workspace et supporte la compilation croisée pour ARM 32-bit (Debian Stretch historique) et ARM 64-bit moderne.
 
-Des scripts prêts à l'emploi sont disponibles dans le dossier [`builds/`](builds/) :
+Des scripts prêts à l'emploi sont disponibles dans le dossier [`builds/`](builds/). **Remarque :** Ces scripts batch sont conçus pour être exécutés sous Windows via **WSL (Ubuntu)** avec les chaînes de compilation croisée configurées.
 
 | Script | Architecture cible | Type de build | Binaire / Archive produite |
 | :--- | :--- | :--- | :--- |
@@ -63,7 +65,7 @@ cargo build --release -p greenup-link --target aarch64-unknown-linux-gnu
 # Pour l'image Legrand 32-bit historique (glibc 2.24 / Debian Stretch) :
 cargo zigbuild --release -p greenup-link --target armv7-unknown-linux-gnueabihf.2.24
 ```
-Pour le détail de l'environnement, consultez le [Guide de compilation 64-bit](docs/ENV_COMPILATION_AARCH64.md).
+Pour le détail de l'environnement, consultez le [Guide d'environnement de compilation](docs/ENV_COMPILATION_AARCH64.md).
 
 ---
 
@@ -77,6 +79,10 @@ Pour le détail de l'environnement, consultez le [Guide de compilation 64-bit](d
 Suivez la **[documentation officielle Legrand](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** pour initialiser le Raspberry Pi sur votre réseau.
 
 ### 2. Accès SSH (Modification de la carte SD)
+
+> [!NOTE]
+> **Travaux en cours :** Des outils et procédures automatisées sont actuellement à l'étude pour permettre l'activation du SSH directement à distance via le réseau, sans nécessiter de démontage physique de la borne ni d'extraction de la carte SD.
+
 L'accès SSH étant désactivé par défaut sur l'image d'origine :
 
 1. Coupez le disjoncteur et retirez la carte microSD du Raspberry Pi.
@@ -164,14 +170,26 @@ Le script d'installation configure l'ensemble du système automatiquement :
 - **API REST** : Consultez la [Documentation de l'API REST](docs/GREENUP_LINK_REST_API.md) pour l'intégration avec Home Assistant, Jeedom, Node-RED, etc.
 - **Client CLI interactif** : Utilisez `scripts/cli-greenup-link.ps1` sous PowerShell Windows pour piloter ou tester la borne.
 - **Intégration EVCC** : Consultez le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md) pour la charge solaire dynamique.
-- **Module EVerest** : Consultez la [Documentation EVerest](crates/greenup-everest/README.md) pour l'intégration native MQTT.
 
 ---
 
 ## 🚀 Fonctionnalités futures
 
-- Intégration MQTT directe pour la domotique
-- Compatibilité avec les versions récentes de Raspberry Pi OS
-- Firmware custom ATmega avec télémétrie étendue
-- Prise en charge du protocole OCPP
-- Extension aux autres variantes de la gamme (prise domestique Schuko, triphasé, double point de charge)
+Les fonctionnalités envisagées (sans calendrier contractuel) :
+- **Intégration MQTT native** avec **Home Assistant Auto-Discovery** (création automatique des entités : capteurs de télémétrie, interrupteurs et curseur de consigne de charge).
+- **Historique des sessions de charge** : Sauvegarde des sessions au format CSV, avec visualisation de l'historique et export CSV directement depuis l'interface Web.
+- Firmware custom ATmega avec télémétrie et capacités étendues.
+- Prise en charge du protocole OCPP.
+- Extension aux autres variantes de la gamme (prise domestique Schuko, bornes triphasées, bornes à double point de charge).
+
+---
+
+## 🤝 Appel à testeurs & Contributions
+
+Je recherche activement des testeurs disposant de configurations matérielles différentes de la gamme Legrand Green'up Premium (par exemple des bornes équipées d'une prise domestique Schuko, des modèles triphasés, des modèles à double point de charge ou avec d'autres révisions de cartes électroniques / firmwares).
+
+L'objectif est de collecter des logs de communication série pour comprendre le fonctionnement de ces variantes et étendre le support de Green'Up Link à l'ensemble de la gamme.
+
+Si vous disposez d'un de ces modèles et souhaitez participer aux tests ou partager vos retours :
+- Ouvrez un ticket sur **[GitHub Issues](https://github.com/BolzaW/greenup-link/issues)**
+- Ou contactez-moi directement par email : **[bolzaw.dev@gmail.com](mailto:bolzaw.dev@gmail.com)**
