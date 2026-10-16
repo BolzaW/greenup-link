@@ -23,7 +23,7 @@ function Get-CurrentCargoVersion {
     if ($cargoToml -match '(?m)^version\s*=\s*"([^"]+)"') {
         return $Matches[1]
     }
-    throw "Impossible de lire la version dans Cargo.toml"
+    throw "Unable to read version from Cargo.toml"
 }
 
 function Set-ProjectVersion([string]$NewVersion) {
@@ -48,27 +48,27 @@ function Set-ProjectVersion([string]$NewVersion) {
     }
 }
 
-Write-Header "Green'Up Link - Assistant de Release GitHub"
+Write-Header "Green'Up Link - GitHub Release Assistant"
 
 # Check current branch and working tree status
 $CurrentBranch = (git rev-parse --abbrev-ref HEAD).Trim()
 $CurrentVersion = Get-CurrentCargoVersion
 $DefaultReleaseVersion = $CurrentVersion -replace '-dev.*$', ''
 
-Write-Host "Branche actuelle : " -NoNewline
+Write-Host "Current branch : " -NoNewline
 Write-Host $CurrentBranch -ForegroundColor Yellow
-Write-Host "Version actuelle : " -NoNewline
+Write-Host "Current version: " -NoNewline
 Write-Host $CurrentVersion -ForegroundColor Yellow
 Write-Host ""
 
 $DirtyFiles = git status --porcelain
 if ($DirtyFiles) {
-    Write-Host "⚠️  Attention : Le dépôt contient des modifications non commitées :" -ForegroundColor Yellow
+    Write-Host "⚠️  Warning: Working tree contains uncommitted changes:" -ForegroundColor Yellow
     git status --short
     Write-Host ""
-    $ContinueDirty = Read-Host "Voulez-vous continuer malgré tout ? [o/N]"
-    if ($ContinueDirty -notmatch '^[oOyY]$') {
-        Write-Host "Abandon. Veuillez commiter ou remiser (stash) vos modifications d'abord." -ForegroundColor Red
+    $ContinueDirty = Read-Host "Do you want to continue anyway? [y/N]"
+    if ($ContinueDirty -notmatch '^[yY]$') {
+        Write-Host "Aborted. Please commit or stash your changes first." -ForegroundColor Red
         exit 1
     }
     Write-Host ""
@@ -77,7 +77,7 @@ if ($DirtyFiles) {
 # ------------------------------------------------------------------------------
 # 1) Ask which version to release
 # ------------------------------------------------------------------------------
-$InputVersion = Read-Host "1) Quelle version souhaitez-vous releaser ? (Entrée pour '$DefaultReleaseVersion')"
+$InputVersion = Read-Host "1) Which version do you want to release? (Press Enter for '$DefaultReleaseVersion')"
 if ([string]::IsNullOrWhiteSpace($InputVersion)) {
     $ReleaseVersion = $DefaultReleaseVersion
 } else {
@@ -86,7 +86,7 @@ if ([string]::IsNullOrWhiteSpace($InputVersion)) {
 }
 
 if ($ReleaseVersion -notmatch '^(\d+)\.(\d+)\.(\d+)$') {
-    Write-Host "❌ Erreur : Format de version invalide '$ReleaseVersion'. Attendu : X.Y.Z (ex: 0.3.0)" -ForegroundColor Red
+    Write-Host "❌ Error: Invalid version format '$ReleaseVersion'. Expected: X.Y.Z (e.g. 0.3.0)" -ForegroundColor Red
     exit 1
 }
 
@@ -98,14 +98,14 @@ $Patch = [int]$Matches[3]
 # 2) Confirm tag name
 # ------------------------------------------------------------------------------
 $DefaultTag = "v$ReleaseVersion"
-$ConfirmTag = Read-Host "2) Confirmez-vous le nom du tag '$DefaultTag' ? ([O/n] ou tapez un autre nom de tag)"
+$ConfirmTag = Read-Host "2) Confirm tag name '$DefaultTag'? ([Y/n] or enter a custom tag)"
 
-if ([string]::IsNullOrWhiteSpace($ConfirmTag) -or $ConfirmTag -match '^[oOyY]$') {
+if ([string]::IsNullOrWhiteSpace($ConfirmTag) -or $ConfirmTag -match '^[yY]$') {
     $TagName = $DefaultTag
 } elseif ($ConfirmTag -match '^[nN]$') {
-    $CustomTag = Read-Host "   Entrez le nom du tag souhaité (ex: v$ReleaseVersion)"
+    $CustomTag = Read-Host "   Enter desired tag name (e.g. v$ReleaseVersion)"
     if ([string]::IsNullOrWhiteSpace($CustomTag)) {
-        Write-Host "❌ Abandon : Aucun nom de tag fourni." -ForegroundColor Red
+        Write-Host "❌ Aborted: No tag name provided." -ForegroundColor Red
         exit 1
     }
     $TagName = $CustomTag.Trim()
@@ -116,8 +116,8 @@ if ([string]::IsNullOrWhiteSpace($ConfirmTag) -or $ConfirmTag -match '^[oOyY]$')
 # Check if tag already exists locally
 $ExistingTag = git tag -l $TagName
 if ($ExistingTag) {
-    Write-Host "❌ Erreur : Le tag '$TagName' existe déjà localement !" -ForegroundColor Red
-    Write-Host "   Supprimez-le avec 'git tag -d $TagName' si vous souhaitez le recréer." -ForegroundColor Yellow
+    Write-Host "❌ Error: Tag '$TagName' already exists locally!" -ForegroundColor Red
+    Write-Host "   Delete it with 'git tag -d $TagName' if you want to recreate it." -ForegroundColor Yellow
     exit 1
 }
 
@@ -125,7 +125,7 @@ if ($ExistingTag) {
 # 3 & 4) Update project version to release version & create Git tag
 # ------------------------------------------------------------------------------
 Write-Host ""
-Write-Host "3) Mise à jour de la version du projet vers '$ReleaseVersion'..." -ForegroundColor Cyan
+Write-Host "3) Updating project version to '$ReleaseVersion'..." -ForegroundColor Cyan
 Set-ProjectVersion -NewVersion $ReleaseVersion
 
 $ReleaseCommitCreated = $false
@@ -134,22 +134,22 @@ if ($VersionDiff) {
     git add Cargo.toml Cargo.lock
     git commit -m "chore(release): prepare $TagName"
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "❌ Erreur lors du commit de la version de release." -ForegroundColor Red
+        Write-Host "❌ Error while committing release version." -ForegroundColor Red
         exit 1
     }
     $ReleaseCommitCreated = $true
-    Write-Host "   -> Commit de release créé (version $ReleaseVersion)." -ForegroundColor Green
+    Write-Host "   -> Release commit created (version $ReleaseVersion)." -ForegroundColor Green
 } else {
-    Write-Host "   -> Cargo.toml est déjà en version $ReleaseVersion (aucun commit nécessaire)." -ForegroundColor Green
+    Write-Host "   -> Cargo.toml is already at version $ReleaseVersion (no commit needed)." -ForegroundColor Green
 }
 
-Write-Host "4) Pose du tag Git '$TagName'..." -ForegroundColor Cyan
+Write-Host "4) Creating Git tag '$TagName'..." -ForegroundColor Cyan
 git tag -a $TagName -m "Release $TagName"
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Erreur lors de la création du tag '$TagName'." -ForegroundColor Red
+    Write-Host "❌ Error while creating tag '$TagName'." -ForegroundColor Red
     exit 1
 }
-Write-Host "   -> Tag '$TagName' posé localement sur $(git rev-parse --short HEAD)." -ForegroundColor Green
+Write-Host "   -> Tag '$TagName' created locally on $(git rev-parse --short HEAD)." -ForegroundColor Green
 
 # Compute next development version (increment 2nd digit / minor + -dev)
 $NextMinor = $Minor + 1
@@ -160,24 +160,24 @@ $NextDevVersion = "$Major.$NextMinor.0-dev"
 # ------------------------------------------------------------------------------
 Write-Host ""
 Write-Host "----------------------------------------------------------" -ForegroundColor DarkGray
-Write-Host "  Récapitulatif avant publication sur GitHub :" -ForegroundColor White
-Write-Host "  • Version de la release : $ReleaseVersion" -ForegroundColor Green
-Write-Host "  • Tag Git               : $TagName" -ForegroundColor Green
-Write-Host "  • Branche               : $CurrentBranch" -ForegroundColor Yellow
-Write-Host "  • Version suivante dev  : $NextDevVersion" -ForegroundColor Cyan
+Write-Host "  Summary before publishing to GitHub:" -ForegroundColor White
+Write-Host "  • Release version     : $ReleaseVersion" -ForegroundColor Green
+Write-Host "  • Git tag             : $TagName" -ForegroundColor Green
+Write-Host "  • Branch              : $CurrentBranch" -ForegroundColor Yellow
+Write-Host "  • Next dev version    : $NextDevVersion" -ForegroundColor Cyan
 Write-Host "----------------------------------------------------------" -ForegroundColor DarkGray
 Write-Host ""
 
-$ConfirmPush = Read-Host "5) Confirmez-vous la création de la release sur GitHub (push du commit et du tag '$TagName') ? [o/N]"
-if ($ConfirmPush -notmatch '^[oOyY]$') {
+$ConfirmPush = Read-Host "5) Confirm GitHub release publication (push commit and tag '$TagName')? [y/N]"
+if ($ConfirmPush -notmatch '^[yY]$') {
     Write-Host ""
-    Write-Host "⏪ Annulation demandée : nettoyage du tag local..." -ForegroundColor Yellow
+    Write-Host "⏪ Cancellation requested: cleaning up local tag..." -ForegroundColor Yellow
     git tag -d $TagName | Out-Null
     if ($ReleaseCommitCreated) {
         git reset --hard HEAD~1 | Out-Null
-        Write-Host "   -> Commit de release annulé (retour à $CurrentVersion)." -ForegroundColor Yellow
+        Write-Host "   -> Release commit reverted (back to $CurrentVersion)." -ForegroundColor Yellow
     }
-    Write-Host "Abandonné proprement. Aucune modification n'a été poussée sur GitHub." -ForegroundColor Red
+    Write-Host "Aborted cleanly. No changes were pushed to GitHub." -ForegroundColor Red
     exit 0
 }
 
@@ -185,48 +185,48 @@ if ($ConfirmPush -notmatch '^[oOyY]$') {
 # 6) Push release version and tag to GitHub
 # ------------------------------------------------------------------------------
 Write-Host ""
-Write-Host "6) Push de la branche '$CurrentBranch' et du tag '$TagName' vers GitHub..." -ForegroundColor Cyan
+Write-Host "6) Pushing branch '$CurrentBranch' and tag '$TagName' to GitHub..." -ForegroundColor Cyan
 git push origin $CurrentBranch
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Erreur lors du push de la branche '$CurrentBranch'." -ForegroundColor Red
+    Write-Host "❌ Error while pushing branch '$CurrentBranch'." -ForegroundColor Red
     exit 1
 }
 
 git push origin $TagName
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Erreur lors du push du tag '$TagName'." -ForegroundColor Red
+    Write-Host "❌ Error while pushing tag '$TagName'." -ForegroundColor Red
     exit 1
 }
-Write-Host "   -> Tag '$TagName' poussé ! Le workflow GitHub Actions est lancé." -ForegroundColor Green
+Write-Host "   -> Tag '$TagName' pushed! GitHub Actions workflow has been triggered." -ForegroundColor Green
 
 # ------------------------------------------------------------------------------
 # 7) Increment minor version (2nd digit) with -dev suffix and commit
 # ------------------------------------------------------------------------------
 Write-Host ""
-Write-Host "7) Passage du projet à la prochaine version de développement : '$NextDevVersion'..." -ForegroundColor Cyan
+Write-Host "7) Bumping project to next development version: '$NextDevVersion'..." -ForegroundColor Cyan
 Set-ProjectVersion -NewVersion $NextDevVersion
 
 git add Cargo.toml Cargo.lock
 git commit -m "chore: bump version to $NextDevVersion"
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Erreur lors du commit de la version '$NextDevVersion'." -ForegroundColor Red
+    Write-Host "❌ Error while committing version '$NextDevVersion'." -ForegroundColor Red
     exit 1
 }
-Write-Host "   -> Commit créé pour '$NextDevVersion'." -ForegroundColor Green
+Write-Host "   -> Commit created for '$NextDevVersion'." -ForegroundColor Green
 
 # ------------------------------------------------------------------------------
 # 8) Push new -dev version to GitHub
 # ------------------------------------------------------------------------------
 Write-Host ""
-Write-Host "8) Push de la nouvelle version '$NextDevVersion' sur GitHub..." -ForegroundColor Cyan
+Write-Host "8) Pushing new version '$NextDevVersion' to GitHub..." -ForegroundColor Cyan
 git push origin $CurrentBranch
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "❌ Erreur lors du push de la version '$NextDevVersion'." -ForegroundColor Red
+    Write-Host "❌ Error while pushing version '$NextDevVersion'." -ForegroundColor Red
     exit 1
 }
 
-Write-Header "🎉 Opération terminée avec succès !"
-Write-Host "  • Release publiée   : $TagName (v$ReleaseVersion)" -ForegroundColor Green
-Write-Host "  • Branche $CurrentBranch     : $NextDevVersion" -ForegroundColor Cyan
-Write-Host "  • Suivi du build CI : https://github.com/BolzaW/greenup-link/actions" -ForegroundColor Yellow
+Write-Header "🎉 Operation completed successfully!"
+Write-Host "  • Published release : $TagName (v$ReleaseVersion)" -ForegroundColor Green
+Write-Host "  • Branch $CurrentBranch       : $NextDevVersion" -ForegroundColor Cyan
+Write-Host "  • CI build tracking : https://github.com/BolzaW/greenup-link/actions" -ForegroundColor Yellow
 Write-Host ""
