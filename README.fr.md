@@ -91,8 +91,10 @@ Pour le détail de l'environnement, consultez le [Guide d'environnement de compi
 ## ⚙️ Installation sur la borne (Raspberry Pi)
 
 > **AVERTISSEMENT :** Faites une sauvegarde complète de la carte SD d'origine Legrand avant toute manipulation.
-
+>
 > ⚠️ **Important :** Toute intervention physique sur la borne doit obligatoirement se faire **hors tension (disjoncteur coupé)**.
+
+💡 **Accès rapide (Kit DIY / OS déjà configuré) :** Les chapitres **1 à 3** ci-dessous sont dédiés au **kit de communication officiel Legrand (059056)**. Si vous avez déjà un **Raspberry Pi avec accès SSH** connecté en USB dans la borne ([kit DIY](docs/KIT_COMMUNICATION_DIY.md) ou autre OS standard), vous pouvez aller directement au chapitre **[4. Installation de Green'Up Link](#4-installation-de-greenup-link)**.
 
 ### 1. Initialisation du kit Legrand
 Suivez la **[documentation officielle Legrand](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** pour initialiser le Raspberry Pi sur votre réseau.

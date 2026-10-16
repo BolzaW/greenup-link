@@ -91,8 +91,10 @@ For full environment setup details, see the [Compilation Environment Guide](docs
 ## ⚙️ Installation on the charging station (Raspberry Pi)
 
 > **WARNING:** Always backup your official Legrand SD card image before making any changes so that you can revert if needed.
-
+>
 > ⚠️ **Important:** Physical manipulation of the Raspberry Pi inside the wallbox MUST be performed with the **mains power completely turned off**.
+
+💡 **Quick Jump (DIY Kit / Pre-configured OS):** Steps **1 to 3** below are dedicated to the **official Legrand Communication Kit (059056)**. If you already have a **Raspberry Pi with SSH access** connected via USB inside the charging station ([DIY kit](docs/KIT_COMMUNICATION_DIY.md) or standard OS), you can skip directly to **[4. Installation of Green'Up Link](#4-installation-of-greenup-link)**.
 
 ### 1. Legrand kit initialization
 Follow the **[official Legrand documentation](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** to initialize the Raspberry Pi on your local network.
