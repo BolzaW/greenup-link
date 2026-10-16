@@ -98,6 +98,8 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
 
         if url == "/":
             self.serve_file(BASE_DIR / "index.html", "text/html; charset=utf-8")
+        elif url in ("/favicon.svg", "/favicon.ico"):
+            self.serve_file(BASE_DIR / "web" / "favicon.svg", "image/svg+xml")
         elif url == "/css/style.css":
             self.serve_file(BASE_DIR / "web" / "css" / "style.css", "text/css; charset=utf-8")
         elif url.startswith("/js/"):
@@ -106,6 +108,8 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         elif url.startswith("/locales/"):
             filename = url[len("/locales/"):]
             self.serve_file(BASE_DIR / "locales" / filename, "application/json; charset=utf-8")
+        elif url == "/api/auth/status":
+            self.send_json({"auth_required": False, "authenticated": True})
         elif url == "/api/telemetry":
             if state["iec_state"] == "C" and not state["charge_paused"]:
                 state["power"] = state["voltage"] * state["current"]
