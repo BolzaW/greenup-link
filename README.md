@@ -226,6 +226,64 @@ In both cases, the script automatically restores the original Legrand environmen
 - Restores all neutralized `DeletAll.sh` scripts from backup and restores execution permissions.
 - Re-enables and starts Apache Tomcat 9 and Java daemons.
 
+> [!IMPORTANT]
+> **Worst-Case Scenario Safeguard:** While the rollback script faithfully restores your system configuration, making a complete raw disk image backup of your original microSD card (using tools like *Win32DiskImager*, *Raspberry Pi Imager*, or `dd`) before any modification is strongly recommended to protect against worst-case scenarios (such as filesystem corruption or flash memory failure).
+
+---
+
+## ❓ Frequently Asked Questions (FAQ)
+
+<details>
+<summary><strong>1. Do I strictly need the official Legrand Communication Kit (059056)?</strong></summary>
+
+**No.** If your station does not have the official kit, you can easily build your own using a standard Raspberry Pi (Pi Zero 2 W, Pi 3, Pi 4, etc.) running official 64-bit Raspberry Pi OS Lite, connected to the motherboard via an internal USB cable.
+
+See our step-by-step [DIY Communication Kit Guide](docs/KIT_COMMUNICATION_DIY.md) with parts list, wiring, and assembly instructions.
+</details>
+
+<details>
+<summary><strong>2. Does Green'Up Link replace the Legrand mobile apps (EV Charge / EV Charge Light)?</strong></summary>
+
+**No.** Legrand's mobile apps communicate directly with the charging station's power board over Bluetooth Low Energy (BLE). Green'Up Link replaces the IP network kit (Ethernet/Wi-Fi). If you currently control your station solely with the mobile app and do not have an IP kit, you will need a communication board (official or DIY) to run Green'Up Link. Background reverse-engineering of the native Bluetooth protocol is currently in progress.
+</details>
+
+<details>
+<summary><strong>3. Is there any risk to the electrical safety of my station or vehicle?</strong></summary>
+
+**No on the high-voltage/power side.** Green'Up Link only replaces the communication layer running on the Raspberry Pi. The station retains 100% of its native electrical safety features, physical protections, differential tripping, and autonomous control through its internal ATmega2560 microcontroller. Green'Up Link only transmits logical setpoint instructions (7A–32A) and reads telemetry over USB serial.
+</details>
+
+<details>
+<summary><strong>4. Can I revert to the factory Legrand software?</strong></summary>
+
+**Yes.** An automated rollback script is provided:
+```bash
+sudo /home/pi/greenup/uninstall.sh
+```
+It restores the original Legrand startup scripts, un-neutralizes emergency scripts, re-enables Apache Tomcat 9 and Java daemons, and gives you the option to keep or delete Green'Up Link files.
+
+*Safeguard tip:* In addition to the script, taking a full raw image backup of your microSD card before starting is strongly advised to guard against worst-case scenarios.
+</details>
+
+<details>
+<summary><strong>5. Is my three-phase or domestic Schuko socket station supported?</strong></summary>
+
+**Nominally on Type 2 only.** The Type 2 socket operates normally across all Green'up Premium stations. However, charging on the domestic Schuko socket and three-phase mode are not yet supported due to a lack of test hardware and serial logs. If you own one of these models, please consider helping test and capture logs (see [Call for Testers](#-call-for-testers--contributions)).
+</details>
+
+<details>
+<summary><strong>6. How do I integrate Green'Up Link into Home Assistant or EVCC?</strong></summary>
+
+- **EVCC:** Follow the dedicated [EVCC Integration Guide](docs/EVCC_INTEGRATION.md) for dynamic solar diversion charging.
+- **Home Assistant:** You can integrate immediately using the [REST API](docs/GREENUP_LINK_REST_API.md) (REST sensor and command switches). Native MQTT with Home Assistant Auto-Discovery is also on the roadmap.
+</details>
+
+<details>
+<summary><strong>7. Why replace the official Legrand software?</strong></summary>
+
+The factory software running on Debian 9 Stretch contains obsolete packages (Apache Tomcat 9, legacy Java runtime) with multiple known critical CVEs. It is also slow, unmaintained, and closed to modern home automation. Green'Up Link provides a lightweight, secure, and modern alternative written in Rust with zero external dependencies.
+</details>
+
 ---
 
 ## 🚀 Future Features

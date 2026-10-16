@@ -223,6 +223,64 @@ Dans les deux cas, le script réactive automatiquement l'environnement officiel 
 - Restaure les scripts d'urgence `DeletAll.sh` neutralisés et rétablit leurs droits d'exécution.
 - Réactive et redémarre le serveur Apache Tomcat 9 et le daemon Java Legrand.
 
+> [!IMPORTANT]
+> **Sécurité face au pire des scénarios :** Bien que le script de rollback restaure fidèlement la configuration d'origine, il est fortement recommandé de réaliser une image brute complète (clone bit-à-bit) de votre carte microSD d'origine (via *Win32DiskImager*, *Raspberry Pi Imager*, *balenaEtcher* ou `dd`) avant toute modification matérielle ou logicielle pour parer à toute éventualité (carte SD corrompue ou défaillance matérielle).
+
+---
+
+## ❓ Foire Aux Questions (FAQ)
+
+<details>
+<summary><strong>1. Ai-je obligatoirement besoin du kit de communication officiel Legrand (059056) ?</strong></summary>
+
+**Non.** Si votre borne n'en est pas équipée, vous pouvez concevoir votre propre kit à moindre coût à l'aide d'un Raspberry Pi standard (Pi Zero 2 W, Pi 3, Pi 4...) sous Raspberry Pi OS 64-bit Lite officiel, relié à la carte de puissance par un simple câble USB.
+
+Consultez le [Guide du kit de communication alternatif DIY](docs/KIT_COMMUNICATION_DIY.md) pour la liste des composants, les prix et les instructions d'assemblage.
+</details>
+
+<details>
+<summary><strong>2. Green'Up Link remplace-t-il les applications mobiles Legrand (EV Charge / EV Charge Light) ?</strong></summary>
+
+**Non.** Les applications mobiles Legrand communiquent directement en Bluetooth avec la carte de puissance de la borne. Green'Up Link remplace la couche réseau IP (Ethernet / Wi-Fi). Si vous pilotez actuellement votre borne uniquement depuis votre smartphone en Bluetooth, vous n'avez très probablement pas de kit IP installé : il vous faudra une carte Raspberry Pi (officielle ou DIY) pour utiliser Green'Up Link. La rétro-ingénierie du protocole Bluetooth natif est en cours d'exploration en tâche de fond.
+</details>
+
+<details>
+<summary><strong>3. Y a-t-il un risque pour la sécurité électrique de ma borne ou de mon véhicule ?</strong></summary>
+
+**Non sur la partie puissance.** Green'Up Link ne remplace que la couche logicielle de communication sur le Raspberry Pi. La borne conserve l'intégralité de ses sécurités électriques matérielles, ses relais de puissance différentiels, sa surveillance de terre et son fonctionnement autonome grâce à sa carte de puissance ATmega2560 native. Green'Up Link ne fait qu'envoyer des consignes d'intensité (7A à 32A) et lire la télémétrie en liaison série USB.
+</details>
+
+<details>
+<summary><strong>4. Puis-je revenir en arrière sur le logiciel officiel Legrand ?</strong></summary>
+
+**Oui.** Un script de rollback automatisé est fourni :
+```bash
+sudo /home/pi/greenup/uninstall.sh
+```
+Il restaure les scripts de démarrage Legrand, retire les neutralisations des scripts d'urgence, réactive Apache Tomcat 9 et les daemons Java, et vous permet de choisir entre conserver ou supprimer les fichiers Green'Up Link.
+
+*Recommandation :* En complément du script, réaliser une sauvegarde complète (image clone) de la carte microSD d'origine avant toute manipulation est vivement conseillé pour parer au pire des scénarios.
+</details>
+
+<details>
+<summary><strong>5. Ma borne est en triphasé ou dispose d'une prise domestique Schuko, est-elle supportée ?</strong></summary>
+
+**En théorie pour la prise Type 2 uniquement.** La prise Type 2 fonctionne de façon nominale sur toutes les bornes de la gamme Green'up Premium. En revanche, la charge sur la prise domestique Schuko et le triphasé ne sont pas encore pris en charge par manque de connaissances et de logs matériels. Si vous possédez l'un de ces modèles, n'hésitez pas à participer aux tests pour capturer des logs (voir [Appel à testeurs](#-appel-à-testeurs--contributions)).
+</details>
+
+<details>
+<summary><strong>6. Comment intégrer Green'Up Link dans Home Assistant ou EVCC ?</strong></summary>
+
+- **EVCC :** Suivez le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md) pour la charge dynamique sur surplus solaire.
+- **Home Assistant :** Vous pouvez intégrer la borne dès aujourd'hui via l'[API REST](docs/GREENUP_LINK_REST_API.md) (capteurs REST et switchs de commande). Une intégration native MQTT avec découverte automatique (Auto-Discovery) Home Assistant est également prévue sur la feuille de route.
+</details>
+
+<details>
+<summary><strong>7. Pourquoi remplacer le logiciel officiel Legrand ?</strong></summary>
+
+La pile logicielle constructeur sous Debian 9 Stretch comporte des composants obsolètes (Apache Tomcat 9, ancien runtime Java) présentant de multiples CVE critiques connues. Elle est également lente et fermée aux systèmes domotiques modernes. Green'Up Link propose une alternative légère, moderne, ultra-réactive et sécurisée écrite en Rust sans dépendance externe.
+</details>
+
 ---
 
 ## 🚀 Fonctionnalités futures
