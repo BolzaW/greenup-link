@@ -49,8 +49,9 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
 
     Router::new()
         .route("/", get(serve_ui))
-        .route("/favicon.svg", get(serve_favicon))
-        .route("/favicon.ico", get(serve_favicon))
+        .route("/favicon.svg", get(serve_favicon_svg))
+        .route("/favicon.png", get(serve_favicon_png))
+        .route("/favicon.ico", get(serve_favicon_ico))
         .route("/locales/fr.json", get(serve_fr_json))
         .route("/locales/en.json", get(serve_en_json))
         .route("/css/style.css", get(serve_css))
@@ -76,11 +77,27 @@ async fn serve_ui() -> Html<&'static str> {
     Html(include_str!("index.html"))
 }
 
-/// GET /favicon.svg & /favicon.ico
-async fn serve_favicon() -> impl IntoResponse {
+/// GET /favicon.svg
+async fn serve_favicon_svg() -> impl IntoResponse {
     (
         [(axum::http::header::CONTENT_TYPE, "image/svg+xml")],
         include_str!("web/favicon.svg"),
+    )
+}
+
+/// GET /favicon.png
+async fn serve_favicon_png() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "image/png")],
+        include_bytes!("web/favicon.png"),
+    )
+}
+
+/// GET /favicon.ico
+async fn serve_favicon_ico() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "image/x-icon")],
+        include_bytes!("web/favicon.ico"),
     )
 }
 

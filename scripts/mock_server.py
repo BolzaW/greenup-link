@@ -98,8 +98,12 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
 
         if url == "/":
             self.serve_file(BASE_DIR / "index.html", "text/html; charset=utf-8")
-        elif url in ("/favicon.svg", "/favicon.ico"):
+        elif url == "/favicon.svg":
             self.serve_file(BASE_DIR / "web" / "favicon.svg", "image/svg+xml")
+        elif url == "/favicon.png":
+            self.serve_file(BASE_DIR / "web" / "favicon.png", "image/png")
+        elif url == "/favicon.ico":
+            self.serve_file(BASE_DIR / "web" / "favicon.ico", "image/x-icon")
         elif url == "/css/style.css":
             self.serve_file(BASE_DIR / "web" / "css" / "style.css", "text/css; charset=utf-8")
         elif url.startswith("/js/"):
@@ -315,6 +319,7 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.end_headers()
         self.wfile.write(data)
 
