@@ -165,7 +165,7 @@ Si la borne n'a pas d'accès direct à Internet :
 
 Le script d'installation configure l'ensemble du système automatiquement :
 - **Détection d'environnement** : Détecte automatiquement s'il tourne sur l'image d'usine Legrand ou sur un Raspberry Pi OS standard/propre (kit DIY, carte SD réinstallée).
-- **Neutralisation de la stack Legrand (si présente)** : Arrête Apache Tomcat 9 / daemon Java, neutralise `/etc/init.d/CommunicationArduinoRasp` (avec sauvegarde `.old`), et neutralise `/home/pi/Dekstop/DeletAll.sh` (avec sauvegarde `.old`). Sur un OS propre ou standard, cette étape est automatiquement ignorée.
+- **Neutralisation de la stack Legrand (si présente)** : Arrête Apache Tomcat 9 / daemon Java, neutralise `/etc/init.d/CommunicationArduinoRasp` (avec sauvegarde `.old`), et neutralise `/home/pi/Desktop/DeletAll.sh` (avec sauvegarde `.old`). Sur un OS propre ou standard, cette étape est automatiquement ignorée.
 - **Installation du binaire** : Installe `greenup-link` dans `/home/pi/greenup/` avec les permissions d'exécution appropriées (téléchargé depuis GitHub ou copié localement).
 - **Mise en place de l'outil de rollback** : Installe `uninstall.sh` dans `/home/pi/greenup/uninstall.sh` pour un retour arrière facile à tout moment.
 - **Service Systemd** : Crée, active et démarre immédiatement le service `/etc/systemd/system/greenup-link.service`.

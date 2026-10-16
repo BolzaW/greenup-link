@@ -21,7 +21,7 @@ SERVICE_FILE="/etc/systemd/system/greenup-link.service"
 
 # Detect whether this system has an official Legrand software stack
 IS_LEGRAND_STACK=false
-if [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -f "/home/pi/Dekstop/DeletAll.sh.old" ] || [ -f "/home/pi/Dekstop/DeletAll.sh" ] || [ -d "/var/lib/tomcat9" ]; then
+if [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -f "/home/pi/Desktop/DeletAll.sh.old" ] || [ -f "/home/pi/Desktop/DeletAll.sh" ] || [ -d "/var/lib/tomcat9" ]; then
     IS_LEGRAND_STACK=true
 fi
 
@@ -108,15 +108,13 @@ if [ "$IS_LEGRAND_STACK" = true ]; then
         echo "  -> Notice: $INIT_SCRIPT.old backup not found; leaving existing $INIT_SCRIPT."
     fi
 
-    # Restore emergency DeletAll.sh script (deterministic Legrand paths)
-    DELETE_SCRIPTS=("/home/pi/Dekstop/DeletAll.sh" "/home/pi/Desktop/DeletAll.sh")
-    for SCRIPT in "${DELETE_SCRIPTS[@]}"; do
-        if [ -f "$SCRIPT.old" ]; then
-            mv -f "$SCRIPT.old" "$SCRIPT"
-            chmod +x "$SCRIPT"
-            echo "  -> Restored $SCRIPT from backup."
-        fi
-    done
+    # Restore emergency DeletAll.sh script
+    DELETE_SCRIPT="/home/pi/Desktop/DeletAll.sh"
+    if [ -f "$DELETE_SCRIPT.old" ]; then
+        mv -f "$DELETE_SCRIPT.old" "$DELETE_SCRIPT"
+        chmod +x "$DELETE_SCRIPT"
+        echo "  -> Restored $DELETE_SCRIPT from backup."
+    fi
 
     # Re-enable and restart Legrand services
     if systemctl list-unit-files tomcat9.service 2>/dev/null | grep -q tomcat9; then

@@ -24,7 +24,7 @@ TARGET_BIN="$TARGET_DIR/greenup-link"
 echo ""
 echo "[1/4] Checking system environment..."
 IS_LEGRAND_STACK=false
-if [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -f "/home/pi/Dekstop/DeletAll.sh" ] || [ -d "/var/lib/tomcat9" ]; then
+if [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -f "/home/pi/Desktop/DeletAll.sh" ] || [ -d "/var/lib/tomcat9" ]; then
     IS_LEGRAND_STACK=true
 fi
 
@@ -56,23 +56,21 @@ EOF
         echo "  -> Neutralized $INIT_SCRIPT with 'exit 0'"
     fi
 
-    # C. Neutralize emergency DeletAll.sh script (deterministic Legrand paths)
-    DELETE_SCRIPTS=("/home/pi/Dekstop/DeletAll.sh" "/home/pi/Desktop/DeletAll.sh")
-    for DELETE_SCRIPT in "${DELETE_SCRIPTS[@]}"; do
-        if [ -f "$DELETE_SCRIPT" ]; then
-            if [ ! -f "$DELETE_SCRIPT.old" ]; then
-                cp -p "$DELETE_SCRIPT" "$DELETE_SCRIPT.old"
-                echo "  -> Backup created: $DELETE_SCRIPT.old"
-            fi
-            cat << 'EOF' > "$DELETE_SCRIPT"
+    # C. Neutralize emergency DeletAll.sh script
+    DELETE_SCRIPT="/home/pi/Desktop/DeletAll.sh"
+    if [ -f "$DELETE_SCRIPT" ]; then
+        if [ ! -f "$DELETE_SCRIPT.old" ]; then
+            cp -p "$DELETE_SCRIPT" "$DELETE_SCRIPT.old"
+            echo "  -> Backup created: $DELETE_SCRIPT.old"
+        fi
+        cat << 'EOF' > "$DELETE_SCRIPT"
 #!/bin/bash
 # Neutralized by GreenUp Link installer
 exit 0
 EOF
-            chmod -x "$DELETE_SCRIPT"
-            echo "  -> Neutralized: $DELETE_SCRIPT (chmod -x applied)"
-        fi
-    done
+        chmod -x "$DELETE_SCRIPT"
+        echo "  -> Neutralized: $DELETE_SCRIPT (chmod -x applied)"
+    fi
 else
     echo "  -> Standard/clean OS detected (no Legrand stack found, skipping legacy neutralization)."
 fi

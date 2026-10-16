@@ -168,7 +168,7 @@ If your charging station does not have direct internet access:
 
 The automated installer performs all required setup steps:
 - **Environment detection**: Automatically detects whether it is running on an official Legrand factory image or a clean/standard Raspberry Pi OS (e.g. DIY kit or reflashed SD card).
-- **Legrand stack neutralization (if present)**: Stops legacy Apache Tomcat 9 and Java daemon, neutralizes `/etc/init.d/CommunicationArduinoRasp` (with `.old` backup), and neutralizes `/home/pi/Dekstop/DeletAll.sh` (with `.old` backup). On a standard/clean OS, this step is automatically bypassed.
+- **Legrand stack neutralization (if present)**: Stops legacy Apache Tomcat 9 and Java daemon, neutralizes `/etc/init.d/CommunicationArduinoRasp` (with `.old` backup), and neutralizes `/home/pi/Desktop/DeletAll.sh` (with `.old` backup). On a standard/clean OS, this step is automatically bypassed.
 - **Binary installation**: Installs `greenup-link` into `/home/pi/greenup/` with executable permissions (auto-downloaded from GitHub or copied from local directory).
 - **Uninstaller installation**: Deploys `uninstall.sh` into `/home/pi/greenup/uninstall.sh` for quick local rollback.
 - **Systemd service configuration**: Generates, enables, and immediately starts `/etc/systemd/system/greenup-link.service`.
