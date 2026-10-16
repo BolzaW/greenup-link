@@ -37,12 +37,7 @@ echo [2/3] Creation de l'archive (greenup-link-v%VERSION%-aarch64.zip)...
 if exist "release_pkg" rmdir /S /Q "release_pkg"
 mkdir "release_pkg"
 copy "%BINARY_PATH%" "release_pkg\greenup-link" >nul
-if exist "scripts\start_legrand.sh" (
-    mkdir "release_pkg\scripts" 2>nul
-    copy "scripts\start_legrand.sh" "release_pkg\scripts\" >nul
-    copy "scripts\stop_legrand.sh" "release_pkg\scripts\" >nul
-)
-if exist "cli-greenup-link.ps1" copy "cli-greenup-link.ps1" "release_pkg\" >nul
+if exist "scripts\install.sh" copy "scripts\install.sh" "release_pkg\" >nul
 if exist "README.md" copy "README.md" "release_pkg\" >nul
 
 set ZIP_FILE=greenup-link-v%VERSION%-aarch64.zip
