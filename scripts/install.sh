@@ -144,36 +144,33 @@ else
         exit 1
     fi
 
+    # Extract asset URLs from release JSON
     URLS=$(echo "$RELEASE_JSON" | grep '"browser_download_url":' | sed -E 's/.*"browser_download_url": "([^"]+)".*/\1/' || true)
+
+    # Filter out archive files (.zip, .tar, .gz) and checksums (.txt) to target standalone binaries directly
+    BIN_URLS=$(echo "$URLS" | grep -vE '\.(zip|tar|gz|tgz|txt|md)$' || true)
 
     DOWNLOAD_URL=""
     if [ "$TARGET_ARCH" = "aarch64" ]; then
-        DOWNLOAD_URL=$(echo "$URLS" | grep -Ei 'aarch64|arm64' | head -n 1 || true)
+        DOWNLOAD_URL=$(echo "$BIN_URLS" | grep -Ei 'greenup-link-aarch64|greenup-link-arm64' | head -n 1 || true)
     elif [ "$TARGET_ARCH" = "armv7" ]; then
-        DOWNLOAD_URL=$(echo "$URLS" | grep -Ei 'armv7|legacy|armhf' | head -n 1 || true)
-        if [ -z "$DOWNLOAD_URL" ]; then
-            DOWNLOAD_URL=$(echo "$URLS" | grep -E '/greenup-link$' | head -n 1 || true)
-        fi
-    else
-        DOWNLOAD_URL=$(echo "$URLS" | grep -Ei "$TARGET_ARCH" | head -n 1 || true)
+        DOWNLOAD_URL=$(echo "$BIN_URLS" | grep -Ei 'greenup-link-armv7-legacy|greenup-link-armv7|greenup-link-legacy' | head -n 1 || true)
+    fi
+
+    # Fallback to any matching binary URL if specific pattern not found
+    if [ -z "$DOWNLOAD_URL" ]; then
+        DOWNLOAD_URL=$(echo "$BIN_URLS" | grep -Ei "$TARGET_ARCH" | head -n 1 || true)
     fi
 
     if [ -z "$DOWNLOAD_URL" ]; then
-        NUM_URLS=$(echo "$URLS" | grep -c '^http' || true)
-        if [ "$NUM_URLS" -eq 1 ]; then
-            DOWNLOAD_URL=$(echo "$URLS" | head -n 1)
-        fi
-    fi
-
-    if [ -z "$DOWNLOAD_URL" ]; then
-        echo "❌ Error: Could not find a suitable asset for architecture '$TARGET_ARCH' in latest release."
+        echo "❌ Error: Could not find standalone binary for architecture '$TARGET_ARCH' in latest release."
         echo "   Available release assets:"
         echo "$URLS"
         exit 1
     fi
 
-    echo "  -> Downloading: $DOWNLOAD_URL"
-    TMP_FILE=$(mktemp /tmp/greenup-pkg-XXXXXX)
+    echo "  -> Downloading binary: $DOWNLOAD_URL"
+    TMP_FILE=$(mktemp /tmp/greenup-bin-XXXXXX)
 
     if command -v curl >/dev/null 2>&1; then
         curl -sSL "$DOWNLOAD_URL" -o "$TMP_FILE"
@@ -187,50 +184,7 @@ else
         exit 1
     fi
 
-    if [[ "$DOWNLOAD_URL" == *.zip ]]; then
-        echo "  -> Extracting binary from ZIP archive..."
-        EXTRACTED=false
-        if command -v unzip >/dev/null 2>&1; then
-            unzip -j -o -q "$TMP_FILE" "*greenup-link" -d "$TARGET_DIR" 2>/dev/null && EXTRACTED=true || true
-        fi
-
-        if [ "$EXTRACTED" = false ] && command -v python3 >/dev/null 2>&1; then
-            python3 -c "
-import zipfile, sys
-with zipfile.ZipFile('$TMP_FILE', 'r') as z:
-    for name in z.namelist():
-        if name == 'greenup-link' or name.endswith('/greenup-link'):
-            with open('$TARGET_BIN', 'wb') as f:
-                f.write(z.read(name))
-            sys.exit(0)
-sys.exit(1)
-" 2>/dev/null && EXTRACTED=true || true
-        fi
-
-        if [ "$EXTRACTED" = false ] && command -v python >/dev/null 2>&1; then
-            python -c "
-import zipfile, sys
-with zipfile.ZipFile('$TMP_FILE', 'r') as z:
-    for name in z.namelist():
-        if name == 'greenup-link' or name.endswith('/greenup-link'):
-            with open('$TARGET_BIN', 'wb') as f:
-                f.write(z.read(name))
-            sys.exit(0)
-sys.exit(1)
-" 2>/dev/null && EXTRACTED=true || true
-        fi
-
-        rm -f "$TMP_FILE"
-
-        if [ "$EXTRACTED" = false ] || [ ! -f "$TARGET_BIN" ]; then
-            echo "❌ Error: Failed to extract 'greenup-link' from downloaded zip archive."
-            echo "   Please install 'unzip' using: sudo apt-get install -y unzip"
-            exit 1
-        fi
-    else
-        mv -f "$TMP_FILE" "$TARGET_BIN"
-    fi
-
+    mv -f "$TMP_FILE" "$TARGET_BIN"
     echo "  -> Installed binary to $TARGET_BIN"
 fi
 

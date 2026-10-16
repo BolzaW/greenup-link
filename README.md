@@ -143,7 +143,7 @@ ssh pi@<station_ip>
 curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash
 ```
 > [!TIP]
-> The script automatically identifies the system architecture (`armv7` 32-bit legacy or `aarch64` 64-bit), queries the latest release on GitHub, downloads the matching release archive, and installs `greenup-link` into `/home/pi/greenup/`.
+> The script automatically identifies the system architecture (`armv7` 32-bit legacy or `aarch64` 64-bit), queries the latest release on GitHub, downloads the matching standalone binary directly, and installs `greenup-link` into `/home/pi/greenup/`.
 
 To update an existing installation to the latest GitHub release, re-run with `--update`:
 ```bash
