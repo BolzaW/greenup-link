@@ -2,7 +2,18 @@
 
 [🇬🇧 Read in English](README.md)
 
-> **Avertissement :** Green'Up Link est un projet communautaire indépendant et n'est ni affilié, ni sponsorisé, ni validé par Legrand. "Green'Up" et "Legrand" sont des marques déposées de leurs propriétaires respectifs.
+> [!CAUTION]
+> ### ⚡ Avertissement de Sécurité Électrique & Décharge Totale de Responsabilité
+> 
+> **Danger Haute Tension (230V / 400V) :**
+> Des tensions électriques mortelles sont présentes à l'intérieur de la borne de recharge. **Toute intervention physique, ouverture du boîtier, manipulation du matériel ou câblage doit IMPÉRATIVEMENT et STRICTEMENT s'effectuer HORS TENSION, avec l'alimentation électrique générale coupée au disjoncteur du tableau principal.** Vérifiez systématiquement l'absence réelle de tension avant d'ouvrir la borne. Si vous n'êtes pas un professionnel qualifié pour les interventions électriques IRVE, ne tentez pas d'ouvrir la borne.
+> 
+> **Exclusion et décharge intégrale de responsabilité (Logiciel fourni "EN L'ÉTAT") :**
+> - **Green'Up Link** est un projet communautaire open-source fourni **« EN L'ÉTAT »**, sans aucune garantie d'aucune sorte, expresse ou implicite (y compris, sans s'y limiter, les garanties d'adéquation à un usage particulier, de sécurité ou de bon fonctionnement).
+> - L'auteur, les développeurs et les contributeurs déclinent formellement **toute responsabilité en cas d'accident corporel (électrisation, électrocution, blessure grave, décès), d'incendie, de départ de feu, de court-circuit, de dégradation matérielle (de la borne, du véhicule, de la batterie de traction ou du tableau électrique), de perte de garantie constructeur ou de tout dommage direct ou indirect** consécutif à l'installation, à l'utilisation, à la modification ou à l'incapacité d'utiliser ce logiciel ou sa documentation.
+> - **L'utilisateur final assume l'entière, totale et exclusive responsabilité de l'utilisation de ce logiciel et de toute manipulation effectuée sur son matériel.**
+> 
+> **Marques déposées :** Green'Up Link est un projet communautaire indépendant et n'est ni affilié, ni sponsorisé, ni approuvé par Legrand. "Green'Up" et "Legrand" sont des marques déposées de leurs propriétaires respectifs.
 
 ## 📖 Présentation du projet
 

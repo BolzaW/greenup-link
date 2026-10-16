@@ -2,7 +2,18 @@
 
 [🇫🇷 Lire en Français](README.fr.md)
 
-> **Disclaimer :** Green'Up Link is an independent, community-developed project and is not affiliated with, sponsored or endorsed by Legrand. "Green'Up" and "Legrand" are trademarks of their respective owners.
+> [!CAUTION]
+> ### ⚡ Critical Electrical Safety Warning & Disclaimer of Liability
+> 
+> **Mains Voltage Danger (230V / 400V):**
+> Fatal electrical currents are present inside the charging station. **All physical interventions, opening of the station enclosure, hardware wiring, or modifications MUST strictly be performed with the main electrical supply completely turned OFF (mains circuit breaker switched off).** Always test and verify the complete absence of voltage before opening the unit. If you are not a qualified electrician, do not open the station.
+> 
+> **Disclaimer of Liability & "AS IS" Software:**
+> - **Green'Up Link** is an independent community project provided on an **"AS IS" BASIS**, without warranties or conditions of any kind, whether express, implied, or statutory (including fitness for a particular purpose, safety, or reliability).
+> - The author, developers, and contributors shall **under no circumstances be held liable** for any direct, indirect, incidental, special, exemplary, or consequential damages whatsoever (including, but not limited to, electrical shock, electrocution, personal injury, death, fire, electrical panel damage, vehicle or battery degradation, property damage, loss of manufacturer warranty, or data loss) resulting from the use, installation, modification, or inability to use this software, hardware, or documentation.
+> - **The end user assumes total and sole responsibility for using this software and modifying any hardware.**
+> 
+> **Trademark Notice:** Green'Up Link is an independent, community-developed project and is not affiliated with, sponsored, or endorsed by Legrand. "Green'Up" and "Legrand" are registered trademarks of their respective owners.
 
 ## 📖 Project Overview
 
