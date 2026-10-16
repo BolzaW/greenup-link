@@ -6,9 +6,9 @@
 
 ## 📖 Project Overview
 
-**Green'Up Link** is a lightweight, high-performance, independent software written in Rust. It can be installed directly on the official Legrand Communication Kit (reference 059056) to replace the manufacturer's software ("KitCom"), or on a **standard Raspberry Pi** (Pi Zero 2 W, Pi 3, Pi 4, etc.) running an official Raspberry Pi OS 64-bit Lite image connected via a DIY serial interface. 
+**Green'Up Link** is a lightweight, high-performance, independent software written in Rust. It can be installed directly on the official Legrand Communication Kit (reference 059056) to replace the manufacturer's software ("KitCom"), or on a **standard Raspberry Pi** (Pi Zero 2 W, Pi 3, Pi 4, etc.) running an official Raspberry Pi OS 64-bit Lite image connected via a USB cable. 
 
-It communicates with the charging station's power board via the internal serial link and exposes:
+It communicates with the charging station's power board via an internal USB cable and exposes:
 - A clean, responsive **local Web GUI** with live visualizer, charging controls (7A–32A), Linky TIC status, and an integrated real-time debug console (SSE log streaming).
 - A comprehensive and documented **REST API**, perfect for home automation integration (Home Assistant, Jeedom, Node-RED, etc.).
 - Complete **log management** with daily rolling files (`greenup_YYYY-MM-DD.log`), 7-day automatic retention, and hot-reloadable log levels (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).

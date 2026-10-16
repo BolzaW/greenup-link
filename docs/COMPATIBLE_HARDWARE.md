@@ -14,11 +14,11 @@ This document provides an exhaustive compatibility reference for the Legrand Gre
 
 > [!WARNING]
 > **Theoretical compatibility vs real-world validation:**
-> In theory, all Legrand Green'up Premium stations share the same internal ATmega2560 microcontroller family and common ASCII serial protocol. Therefore, even three-phase stations or models with domestic sockets *might* technically respond to basic commands.
+> In theory, all Legrand Green'up Premium stations share the same internal ATmega2560 microcontroller family and common ASCII communication protocol over USB. Therefore, even three-phase stations or models with domestic sockets *might* technically respond to basic commands.
 > 
 > However, **I have only been able to physically test and validate Green'Up Link on my own hardware (model 0 580 01)**. I am genuinely not sure how three-phase power regulation, phase balancing, or domestic Schuko contactors behave in practice, and there are currently no telemetry mappings or validation for them.
 > 
-> If you own one of these models and would like to help test or capture serial communication logs, please see the [Call for Testers](../README.md#call-for-testers--contributions) section!
+> If you own one of these models and would like to help test or capture communication logs, please see the [Call for Testers](../README.md#call-for-testers--contributions) section!
 
 ---
 
@@ -58,5 +58,5 @@ This document provides an exhaustive compatibility reference for the Legrand Gre
 
 | Name | Legrand Reference | Role | Compatibility |
 | :--- | :--- | :--- | :--- |
-| **Official Legrand IP Communication Kit** | **0 590 56** | Embedded Raspberry Pi 3 with RS-232 interface | 🟢 **Supported** (Original hardware replaced by Green'Up Link) |
-| **DIY Communication Kit** | — | Raspberry Pi Zero 2 W / 3 / 4 with DIY serial converter | 🟢 **Supported** (See [KIT_COMMUNICATION_DIY.md](KIT_COMMUNICATION_DIY.md)) |
+| **Official Legrand IP Communication Kit** | **0 590 56** | Embedded Raspberry Pi 3 connected via internal USB cable | 🟢 **Supported** (Original hardware replaced by Green'Up Link) |
+| **DIY Communication Kit** | — | Standard Raspberry Pi (Zero 2 W / 3 / 4) connected via USB cable | 🟢 **Supported** (See [KIT_COMMUNICATION_DIY.md](KIT_COMMUNICATION_DIY.md)) |
