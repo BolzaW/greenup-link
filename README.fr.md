@@ -164,12 +164,11 @@ Si la borne n'a pas d'accès direct à Internet :
 ---
 
 Le script d'installation configure l'ensemble du système automatiquement :
-- Installe `greenup-link` dans `/home/pi/greenup/` avec les permissions d'exécution appropriées (téléchargé automatiquement depuis GitHub ou déplacé depuis le dossier local).
-- Arrête et désactive les services d'origine Legrand (serveur Apache Tomcat 9 et daemons Java).
-- Neutralise le script de démarrage Legrand (`/etc/init.d/CommunicationArduinoRasp`) avec un `exit 0` de sécurité (sauvegarde en `.old`).
-- Neutralise le script d'auto-destruction Legrand (`DeletAll.sh`) avec un `exit 0` de sécurité et retire les droits d'exécution (sauvegarde en `.old`).
-- Crée et active le service Systemd `/etc/systemd/system/greenup-link.service`.
-- Démarre immédiatement le service `greenup-link`.
+- **Détection d'environnement** : Détecte automatiquement s'il tourne sur l'image d'usine Legrand ou sur un Raspberry Pi OS standard/propre (kit DIY, carte SD réinstallée).
+- **Neutralisation de la stack Legrand (si présente)** : Arrête Apache Tomcat 9 / daemon Java, neutralise `/etc/init.d/CommunicationArduinoRasp` (avec sauvegarde `.old`), et neutralise `/home/pi/Dekstop/DeletAll.sh` (avec sauvegarde `.old`). Sur un OS propre ou standard, cette étape est automatiquement ignorée.
+- **Installation du binaire** : Installe `greenup-link` dans `/home/pi/greenup/` avec les permissions d'exécution appropriées (téléchargé depuis GitHub ou copié localement).
+- **Mise en place de l'outil de rollback** : Installe `uninstall.sh` dans `/home/pi/greenup/uninstall.sh` pour un retour arrière facile à tout moment.
+- **Service Systemd** : Crée, active et démarre immédiatement le service `/etc/systemd/system/greenup-link.service`.
 
 ### 5. Gestion du service
 

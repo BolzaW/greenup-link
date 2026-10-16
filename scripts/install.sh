@@ -20,69 +20,66 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_DIR="/home/pi/greenup"
 TARGET_BIN="$TARGET_DIR/greenup-link"
 
-# 2. Stop and kill legacy Legrand services
+# 2. Environment check: Detect official Legrand software stack
 echo ""
-echo "[1/5] Stopping legacy Legrand services (Tomcat9 & Java daemon)..."
-systemctl stop tomcat9 2>/dev/null || true
-systemctl disable tomcat9 2>/dev/null || true
-pkill -9 -f java 2>/dev/null || true
-pkill -9 -f tomcat 2>/dev/null || true
-echo "  -> Legacy Java and Tomcat processes stopped."
+echo "[1/4] Checking system environment..."
+IS_LEGRAND_STACK=false
+if [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -f "/home/pi/Dekstop/DeletAll.sh" ] || [ -d "/var/lib/tomcat9" ]; then
+    IS_LEGRAND_STACK=true
+fi
 
-# 3. Disable Legrand init.d startup script
-echo ""
-echo "[2/5] Disabling Legrand init.d startup script..."
-INIT_SCRIPT="/etc/init.d/CommunicationArduinoRasp"
-if [ -f "$INIT_SCRIPT" ]; then
-    if [ ! -f "$INIT_SCRIPT.old" ]; then
-        cp -p "$INIT_SCRIPT" "$INIT_SCRIPT.old"
-        echo "  -> Backup created: $INIT_SCRIPT.old"
-    fi
-    cat << 'EOF' > "$INIT_SCRIPT"
+if [ "$IS_LEGRAND_STACK" = true ]; then
+    echo "  -> Official Legrand software stack detected."
+
+    # A. Stop and disable legacy Legrand services (Tomcat9 & Java daemon)
+    echo "  -> Stopping legacy Legrand services (Tomcat9 & Java daemon)..."
+    systemctl stop tomcat9 2>/dev/null || true
+    systemctl disable tomcat9 2>/dev/null || true
+    pkill -9 -f java 2>/dev/null || true
+    pkill -9 -f tomcat 2>/dev/null || true
+    echo "  -> Legacy Java and Tomcat processes stopped."
+
+    # B. Disable Legrand init.d startup script
+    INIT_SCRIPT="/etc/init.d/CommunicationArduinoRasp"
+    if [ -f "$INIT_SCRIPT" ]; then
+        if [ ! -f "$INIT_SCRIPT.old" ]; then
+            cp -p "$INIT_SCRIPT" "$INIT_SCRIPT.old"
+            echo "  -> Backup created: $INIT_SCRIPT.old"
+        fi
+        cat << 'EOF' > "$INIT_SCRIPT"
 #!/bin/bash
 # Disabled by GreenUp Link installer
 exit 0
 EOF
-    chmod +x "$INIT_SCRIPT"
-    update-rc.d -f CommunicationArduinoRasp remove 2>/dev/null || true
-    echo "  -> Neutralized $INIT_SCRIPT with 'exit 0'"
-else
-    echo "  -> Notice: $INIT_SCRIPT not found (skipping)"
-fi
+        chmod +x "$INIT_SCRIPT"
+        update-rc.d -f CommunicationArduinoRasp remove 2>/dev/null || true
+        echo "  -> Neutralized $INIT_SCRIPT with 'exit 0'"
+    fi
 
-# 4. Neutralize emergency DeletAll.sh script
-echo ""
-echo "[3/5] Neutralizing emergency DeletAll.sh script..."
-CANDIDATE_SCRIPTS=(
-    "/home/pi/Desktop/DeletAll.sh"
-    "/home/pi/Desktop/deleteAll.sh"
-    "/home/pi/DeletAll.sh"
-    "/home/pi/deleteAll.sh"
-)
-FOUND_DELETE_SCRIPT=false
-for SCRIPT in "${CANDIDATE_SCRIPTS[@]}"; do
-    if [ -f "$SCRIPT" ]; then
-        FOUND_DELETE_SCRIPT=true
-        if [ ! -f "$SCRIPT.old" ]; then
-            cp -p "$SCRIPT" "$SCRIPT.old"
-            echo "  -> Backup created: $SCRIPT.old"
-        fi
-        cat << 'EOF' > "$SCRIPT"
+    # C. Neutralize emergency DeletAll.sh script (deterministic Legrand paths)
+    DELETE_SCRIPTS=("/home/pi/Dekstop/DeletAll.sh" "/home/pi/Desktop/DeletAll.sh")
+    for DELETE_SCRIPT in "${DELETE_SCRIPTS[@]}"; do
+        if [ -f "$DELETE_SCRIPT" ]; then
+            if [ ! -f "$DELETE_SCRIPT.old" ]; then
+                cp -p "$DELETE_SCRIPT" "$DELETE_SCRIPT.old"
+                echo "  -> Backup created: $DELETE_SCRIPT.old"
+            fi
+            cat << 'EOF' > "$DELETE_SCRIPT"
 #!/bin/bash
 # Neutralized by GreenUp Link installer
 exit 0
 EOF
-        chmod -x "$SCRIPT"
-        echo "  -> Neutralized: $SCRIPT (chmod -x applied)"
-    fi
-done
-if [ "$FOUND_DELETE_SCRIPT" = false ]; then
-    echo "  -> Notice: No DeletAll.sh script found (skipping)"
+            chmod -x "$DELETE_SCRIPT"
+            echo "  -> Neutralized: $DELETE_SCRIPT (chmod -x applied)"
+        fi
+    done
+else
+    echo "  -> Standard/clean OS detected (no Legrand stack found, skipping legacy neutralization)."
 fi
 
-# 5. Install Green'Up Link binary
+# 3. Install Green'Up Link binary
 echo ""
-echo "[4/5] Installing Green'Up Link binary to $TARGET_DIR..."
+echo "[2/4] Installing Green'Up Link binary to $TARGET_DIR..."
 mkdir -p "$TARGET_DIR"
 
 if [ -f "$SCRIPT_DIR/greenup-link" ] && [ "$(realpath "$SCRIPT_DIR/greenup-link" 2>/dev/null || echo "$SCRIPT_DIR/greenup-link")" != "$TARGET_BIN" ]; then
@@ -195,7 +192,9 @@ fi
 
 chmod +x "$TARGET_BIN"
 
-# Install uninstaller into target directory
+# 4. Install uninstaller into target directory
+echo ""
+echo "[3/4] Installing rollback/uninstall script to $UNINSTALL_TARGET..."
 UNINSTALL_TARGET="$TARGET_DIR/uninstall.sh"
 if [ -f "$SCRIPT_DIR/uninstall.sh" ]; then
     cp -p "$SCRIPT_DIR/uninstall.sh" "$UNINSTALL_TARGET"
@@ -219,9 +218,9 @@ fi
 
 chown -R pi:pi "$TARGET_DIR" 2>/dev/null || true
 
-# 6. Configure and start Systemd service
+# 5. Configure and start Systemd service
 echo ""
-echo "[5/5] Configuring and starting Systemd service..."
+echo "[4/4] Configuring and starting Systemd service..."
 SERVICE_FILE="/etc/systemd/system/greenup-link.service"
 
 cat << 'EOF' > "$SERVICE_FILE"

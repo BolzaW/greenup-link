@@ -19,6 +19,12 @@ fi
 TARGET_DIR="/home/pi/greenup"
 SERVICE_FILE="/etc/systemd/system/greenup-link.service"
 
+# Detect whether this system has an official Legrand software stack
+IS_LEGRAND_STACK=false
+if [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -f "/home/pi/Dekstop/DeletAll.sh.old" ] || [ -f "/home/pi/Dekstop/DeletAll.sh" ] || [ -d "/var/lib/tomcat9" ]; then
+    IS_LEGRAND_STACK=true
+fi
+
 # Parse CLI flags or ask user interactively
 PURGE_FILES=false
 INTERACTIVE=true
@@ -74,7 +80,7 @@ fi
 
 # 1. Stop and disable Green'Up Link service
 echo ""
-echo "[1/4] Stopping and removing Green'Up Link systemd service..."
+echo "[1/3] Stopping and removing Green'Up Link systemd service..."
 if [ -f "$SERVICE_FILE" ] || systemctl is-active --quiet greenup-link.service 2>/dev/null; then
     systemctl stop greenup-link.service 2>/dev/null || true
     systemctl disable greenup-link.service 2>/dev/null || true
@@ -86,53 +92,50 @@ else
 fi
 pkill -9 -f greenup-link 2>/dev/null || true
 
-# 2. Restore Legrand init.d startup script
+# 2. Restore Legrand software stack if present
 echo ""
-echo "[2/4] Restoring original Legrand init.d script..."
-INIT_SCRIPT="/etc/init.d/CommunicationArduinoRasp"
-if [ -f "$INIT_SCRIPT.old" ]; then
-    mv -f "$INIT_SCRIPT.old" "$INIT_SCRIPT"
-    chmod +x "$INIT_SCRIPT"
-    update-rc.d CommunicationArduinoRasp defaults 2>/dev/null || true
-    echo "  -> Restored $INIT_SCRIPT from backup and re-registered service."
-elif [ -f "$INIT_SCRIPT" ]; then
-    echo "  -> Notice: $INIT_SCRIPT.old backup not found; leaving existing $INIT_SCRIPT."
-else
-    echo "  -> Notice: No Legrand init script found (standard Raspberry Pi OS)."
-fi
-
-# 3. Restore emergency DeletAll.sh script
-echo ""
-echo "[3/4] Restoring original Legrand emergency scripts..."
-CANDIDATE_SCRIPTS=(
-    "/home/pi/Desktop/DeletAll.sh"
-    "/home/pi/Desktop/deleteAll.sh"
-    "/home/pi/DeletAll.sh"
-    "/home/pi/deleteAll.sh"
-)
-for SCRIPT in "${CANDIDATE_SCRIPTS[@]}"; do
-    if [ -f "$SCRIPT.old" ]; then
-        mv -f "$SCRIPT.old" "$SCRIPT"
-        chmod +x "$SCRIPT"
-        echo "  -> Restored $SCRIPT from backup."
+if [ "$IS_LEGRAND_STACK" = true ]; then
+    echo "[2/3] Restoring original Legrand software stack..."
+    
+    # Restore Legrand init.d startup script
+    INIT_SCRIPT="/etc/init.d/CommunicationArduinoRasp"
+    if [ -f "$INIT_SCRIPT.old" ]; then
+        mv -f "$INIT_SCRIPT.old" "$INIT_SCRIPT"
+        chmod +x "$INIT_SCRIPT"
+        update-rc.d CommunicationArduinoRasp defaults 2>/dev/null || true
+        echo "  -> Restored $INIT_SCRIPT from backup and re-registered service."
+    elif [ -f "$INIT_SCRIPT" ]; then
+        echo "  -> Notice: $INIT_SCRIPT.old backup not found; leaving existing $INIT_SCRIPT."
     fi
-done
 
-# Re-enable and restart Legrand services if present
-if systemctl list-unit-files tomcat9.service 2>/dev/null | grep -q tomcat9; then
-    echo "  -> Re-enabling and starting Tomcat 9..."
-    systemctl enable tomcat9 2>/dev/null || true
-    systemctl start tomcat9 2>/dev/null || true
+    # Restore emergency DeletAll.sh script (deterministic Legrand paths)
+    DELETE_SCRIPTS=("/home/pi/Dekstop/DeletAll.sh" "/home/pi/Desktop/DeletAll.sh")
+    for SCRIPT in "${DELETE_SCRIPTS[@]}"; do
+        if [ -f "$SCRIPT.old" ]; then
+            mv -f "$SCRIPT.old" "$SCRIPT"
+            chmod +x "$SCRIPT"
+            echo "  -> Restored $SCRIPT from backup."
+        fi
+    done
+
+    # Re-enable and restart Legrand services
+    if systemctl list-unit-files tomcat9.service 2>/dev/null | grep -q tomcat9; then
+        echo "  -> Re-enabling and starting Tomcat 9..."
+        systemctl enable tomcat9 2>/dev/null || true
+        systemctl start tomcat9 2>/dev/null || true
+    fi
+
+    if [ -x "$INIT_SCRIPT" ]; then
+        echo "  -> Starting Legrand CommunicationArduinoRasp service..."
+        "$INIT_SCRIPT" start 2>/dev/null || true
+    fi
+else
+    echo "[2/3] Standard OS detected (no Legrand factory stack to restore, skipping)."
 fi
 
-if [ -x "$INIT_SCRIPT" ]; then
-    echo "  -> Starting Legrand CommunicationArduinoRasp service..."
-    "$INIT_SCRIPT" start 2>/dev/null || true
-fi
-
-# 4. Handle Green'Up Link files
+# 3. Handle Green'Up Link files
 echo ""
-echo "[4/4] Handling Green'Up Link application files..."
+echo "[3/3] Handling Green'Up Link application files..."
 if [ "$PURGE_FILES" = true ]; then
     echo "  -> Purging $TARGET_DIR (binaries, logs, configs)..."
     rm -rf "$TARGET_DIR"
@@ -151,5 +154,9 @@ if [ "$PURGE_FILES" = true ]; then
 else
     echo "   - Application files are preserved in $TARGET_DIR."
 fi
-echo "   - Original Legrand stack (Tomcat, Java, init.d) has been restored."
+if [ "$IS_LEGRAND_STACK" = true ]; then
+    echo "   - Original Legrand stack (Tomcat, Java, init.d) has been restored."
+else
+    echo "   - Standard OS: clean system, no Legrand stack needed restoration."
+fi
 echo "================================================="
