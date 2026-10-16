@@ -1,102 +1,107 @@
-# Kit de Communication Alternatif "DIY" pour Borne Legrand Green'up Premium
+# DIY Alternative Communication Kit for Legrand Green'up Premium
 
-Ce document liste l'ensemble du matériel, des références et des préconisations pour fabriquer un **kit de communication alternatif économique** compatible avec la borne Legrand Green'up Premium, en remplacement du kit officiel Legrand (réf. **059056**, vendu ~600 €).
+This document provides a conceptual hardware Bill of Materials (BOM), specifications, and connection schematics to build an **economical DIY alternative communication kit** for the Legrand Green'up Premium charging station, as a direct replacement for the official Legrand kit (reference **059056**, typically sold for ~500 € to 700 €).
 
-Ce kit est conçu pour faire tourner le firmware léger **Green'Up Link** (écrit en Rust), offrant une interface moderne, une API locale et une intégration directe avec EVCC et Home Assistant.
+This kit is designed to run the lightweight **Green'Up Link** daemon (written in Rust), offering a modern web interface, local REST API, and native integration with Home Assistant and EVCC.
 
 ---
 
-## 1. Nomenclature Matérielle (BOM)
+> [!CAUTION]
+> ### ⚡ Mains Electrical Safety Warning
+> Any physical intervention inside the EV charging station must **strictly be performed with the main electrical circuit breaker switched OFF (completely de-energized)**. Fatal electrical shock hazards (**230V single-phase / 400V three-phase**) are present inside the enclosure. Always verify the complete absence of voltage with a verified multimeter before removing the station's front cover.
 
-### A. Le Calculateur (Single Board Computer)
+> [!WARNING]
+> ### 🧪 Experimental Project & Proof of Concept Notice
+> This DIY communication kit is **experimental**. In practice, **it has never been fully assembled and tested as a complete end-to-end package in real-world conditions**. No 3D-printable mounting bracket model currently exists.
+> 
+> This document represents a theoretical engineering roadmap and reference guide that is intended to evolve over time through community testing, feedback, and contributions.
 
-Deux options selon que votre borne est couverte en Wi-Fi ou reliée par câble Ethernet RJ45 :
+---
 
-| Composant | Référence / Modèle | Rôle | Avantages | Prix indicatif |
+## 1. Hardware Bill of Materials (BOM)
+
+### A. Single Board Computer (SBC)
+
+Two options are available depending on whether your charging station is within Wi-Fi range or wired with an Ethernet cable:
+
+| Component | Reference / Model | Role | Characteristics & Notes | Indicative Retail Price (2026) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Option 1 (Recommandée - Wi-Fi)** | **Raspberry Pi Zero 2 W** | Fait tourner l'OS Linux et Green'Up Link. | Ultra compact, chauffe très peu (< 2W), faible coût, Wi-Fi 2.4 GHz intégré. | ~18 € - 22 € |
-| **Option 2 (Filaire RJ45)** | **Raspberry Pi 3 Model B+** ou **Pi 4 (1 ou 2 Go)** | Alternative si la borne est raccordée par un câble réseau Ethernet physique. | Port Ethernet Gigabit intégré, ports USB-A standards. | ~35 € - 45 € |
+| **Option 1 (Recommended - Wi-Fi)** | **Raspberry Pi Zero 2 W** | Runs Linux and the Green'Up Link service. | Ultra-compact, Quad-core 64-bit ARM Cortex-A53, 512 MB RAM, 2.4 GHz Wi-Fi. Generates very little heat (< 2W), making it ideal for the enclosed station. | ~**20 € – 25 €** *(carte seule, e.g. Kubii)* |
+| **Option 2 (Full-size Form Factor)** | **Raspberry Pi 3 Model B+** *(or Pi 4)* | Alternative SBC option. | **This is the original physical form factor chosen by Legrand** for their factory communication kit (which uses a Raspberry Pi 3B). Having an integrated RJ45 Ethernet port is simply an added bonus if a network cable is present. | ~**45 € – 55 €** *(carte seule, e.g. Kubii)* |
 
 > [!TIP]
-> Avec **Green'Up Link en Rust**, la consommation mémoire est inférieure à 50 Mo de RAM. Les 512 Mo du **Pi Zero 2 W** sont donc largement suffisants et idéaux pour éviter toute surchauffe estivale dans le boîtier fermé de la borne.
+> **Memory & Thermal footprint:** With **Green'Up Link written in Rust**, memory consumption is below 35 MB of RAM and CPU usage is under 1%. The 512 MB RAM of the **Pi Zero 2 W** is more than sufficient and produces minimal heat inside the sealed wallbox during summer months.
 
 ---
 
-### B. Module d'Alimentation DC-DC (Solution du commerce)
+### B. DC-DC Power Supply Module
 
-Le kit officiel utilise la tension continue fournie par l'alimentation industrielle interne de la borne (bloc métallique Mean Well délivrant généralement **12V DC**, parfois 24V DC selon les révisions).
+The official Legrand kit taps directly into the DC voltage provided by the station's internal Mean Well power supply (which delivers **12V DC**, or 24V DC depending on the hardware revision).
 
-Pour remplacer le petit PCB propriétaire Legrand par un module standard du commerce :
+To replace Legrand's proprietary power supply daughterboard with an off-the-shelf commercial unit:
 
-| Réf / Type | Caractéristiques requises | Mots-clés de recherche (Amazon / AliExpress / RS) | Prix indicatif |
+| Component | Specifications | Search Keywords (Amazon / AliExpress / RS) | Indicative Price |
 | :--- | :--- | :--- | :--- |
-| **Convertisseur Buck étanche 12V/24V vers 5V 3A (15W)** | - Entrée : 8V - 32V DC<br>- Sortie : 5.0V / 3A (15W)<br>- Format : Boîtier plastique résiné noir (étanche IP67)<br>- Connecteur de sortie : Câble **Micro-USB mâle** (pour Pi Zero 2W ou Pi 3B+) ou **USB-C mâle** (pour Pi 4) | *Convertisseur abaisseur 12V 5V 3A Micro USB étanche* / *DC-DC Step Down Converter 12V to 5V 3A Micro USB* | ~6 € - 9 € |
+| **Waterproof Buck Converter 12V/24V to 5V 3A (15W)** | - Input: 8V – 32V DC<br>- Output: 5.0V / 3A (15W)<br>- Format: Sealed black resin case (IP67 waterproof)<br>- Output connector: **Micro-USB male** (for Pi Zero 2 W or Pi 3B+) or **USB-C male** (for Pi 4) | *12V to 5V 3A Micro USB buck converter* / *DC-DC Step Down Waterproof 12V 5V 3A* | ~**8 € – 12 €** |
 
-*Exemples de modèles courants : CPT Step-Down Converter, DROK Waterproof DC-DC Buck Converter 12V to 5V Micro-USB.*
+*Common proven models: CPT Step-Down Converter, DROK Waterproof DC-DC Buck Converter 12V to 5V Micro-USB.*
 
 ---
 
-### C. Connectique & Faisceau Plug-and-Play
+### C. Connectors & Cabling
 
-Pour brancher l'alimentation du kit sur le connecteur d'origine de la borne **sans couper ni dénuder le faisceau d'origine Legrand** :
+To connect the kit to the wallbox power rail **without cutting or modifying Legrand's factory wiring harness**:
 
-| Composant | Spécification | Rôle | Prix indicatif |
+| Component | Specification | Role | Indicative Price |
 | :--- | :--- | :--- | :--- |
-| **Connecteur d'alimentation borne** | Connecteur type **Molex Mini-Fit Jr.** (ou Micro-Fit selon série) **4 broches (2x2)** | S'enfiche directement dans la fiche d'alimentation auxiliaire de la borne. | ~2 € - 3 € |
-| **Câble USB pour liaison série** | - Pour Pi Zero 2 W : Adaptateur **Micro-USB mâle vers USB-A femelle (câble OTG)** + câble USB court.<br>- Pour Pi 3B+/4 : Câble standard court **USB-A mâle** vers la prise de la carte de puissance. | Relie le port USB du Pi au contrôleur de puissance (ATmega2560). | ~3 € |
-| **Carte Micro-SD** | **SanDisk High Endurance** ou **Kingston Endurance** (16 Go ou 32 Go) | Support de l'OS. Les cartes "Endurance" résistent aux écarts de température extrêmes d'une borne extérieure. | ~8 € - 10 € |
+| **Wallbox Auxiliary Power Connector** | Connector type **Molex Mini-Fit Jr.** (4-pin, 2x2 arrangement) | Plugs directly into the station's auxiliary power output connector. | ~**3 € – 4 €** |
+| **USB Cable for Controller Link** | - For Pi Zero 2 W: **Micro-USB male to USB-A female OTG adapter** + short USB cable.<br>- For Pi 3B+ / 4: Short standard **USB-A to USB cable** connecting to the power board. | Connects the Raspberry Pi to the ATmega2560 power controller board. | ~**3 € – 5 €** |
+| **High Endurance MicroSD Card** | **Kingston High Endurance** (32 GB, `SDCE/32GB`) or **Kingston Industrial** (`SDCIT2/32GB`) / **SanDisk MAX Endurance** | System storage. High/Industrial endurance cards are built to withstand continuous writes and extreme operating temperatures (-25°C to +85°C) in outdoor wallboxes. | ~**45 € – 50 €** *(Standard consumer card: ~10 €)* |
 
 ---
 
-### D. Support Mécanique (Châssis)
+### D. Mechanical Mounting & Fasteners
 
-| Composant | Réalisation | Remarques | Coût |
+| Component | Status & Specifications | Notes | Indicative Cost |
 | :--- | :--- | :--- | :--- |
-| **Platine de montage 3D** | Fichier STL à imprimer en **PETG** ou **ABS/ASA** | Remplace la tôle métallique d'origine. Se fixe sur les entretoises existantes de la borne et accueille le Pi + le boîtier DC-DC. *(Ne pas utiliser de PLA qui ramollit à 55°C en plein été)*. | ~1 € - 2 € |
-| **Visserie** | 4 vis M2.5 (pour fixer le Pi) + vis de fixation châssis | Fixation mécanique propre. | ~1 € |
+| **3D Mounting Bracket** | ⚠️ **None currently exists!** | No 3D model (STL/STEP) has been designed or validated yet. A custom bracket remains to be modeled by the community. When designed, it must be printed in **PETG** or **ABS/ASA** (never use PLA, which softens and deforms above 50°C in outdoor enclosures). | ~**2 € – 3 €** *(filament)* |
+| **Chassis Fasteners** | **4x M4 screws** (e.g. M4x7 or M4x8) | Per official Legrand installation notice **LE09802AA**, the wallbox internal mounting bosses use **M4 screws** to secure the communication plate. | ~**1 €** |
+| **SBC Fasteners** | **4x M2.5 screws and standoffs** | Standard Raspberry Pi mounting hole hardware to secure the board to the bracket. | ~**1 €** |
 
 ---
 
-## 2. Récapitulatif Budgétaire
+## 2. Indicative Budget Summary
 
-| Poste | Solution Officielle Legrand | Solution DIY Alternative (Pi Zero 2 W) |
-| :--- | :--- | :--- |
-| Carte électronique / Calculateur | Raspberry Pi 3B+ propriétaire | Raspberry Pi Zero 2 W (~20 €) |
-| Alimentation 5V | PCB propriétaire spécifique | Régulateur DC-DC 12V->5V 3A étanche (~8 €) |
-| Connectique & Câbles | Fournis | Connecteur Molex + câbles USB (~5 €) |
-| Carte SD | 16 Go standard | 32 Go High Endurance (~8 €) |
-| Châssis de fixation | Tôle acier pliée | Platine imprimée 3D PETG (~2 €) |
-| **TOTAL** | **~500 € à 700 €** | **~43 €** |
+| Item | Official Legrand Kit (Ref 059056) | DIY Alternative Kit (Pi Zero 2 W) | DIY Alternative Kit (Pi 3B+) |
+| :--- | :--- | :--- | :--- |
+| **SBC / Processor** | Proprietary Raspberry Pi 3B | Raspberry Pi Zero 2 W (~22 €) | Raspberry Pi 3 Model B+ (~46 €) |
+| **5V Power Supply** | Proprietary Legrand PCB | Waterproof DC-DC Converter 12V->5V 3A (~10 €) | Waterproof DC-DC Converter 12V->5V 3A (~10 €) |
+| **Cabling & Connectors** | Included in kit | Molex Mini-Fit Jr. + USB cables (~7 €) | Molex Mini-Fit Jr. + USB cable (~5 €) |
+| **MicroSD Card** | 16 GB standard card | 32 GB High Endurance Kingston (~45 €)<br>*(or standard card ~10 €)* | 32 GB High Endurance Kingston (~45 €)<br>*(or standard card ~10 €)* |
+| **Mounting Plate & Screws** | Stamped metal bracket + screws | Custom 3D bracket + M4 / M2.5 screws (~4 €) | Custom 3D bracket + M4 / M2.5 screws (~4 €) |
+| **TOTAL** | **~500 € to 700 €** | **~88 €** *(~53 € with consumer SD)* | **~110 €** *(~75 € with consumer SD)* |
 
 ---
 
-## 3. Schéma de Raccordement Synoptique
+## 3. Synoptic Wiring Diagram
 
 ```text
-[ Alimentation Borne 12V/24V ]
-           |
-           | (Faisceau d'origine)
-           v
-[ Prise Molex 4 broches (2x2) ]
-     |                  |
-     | (+12V DC)        | (GND / Masse)
-     +--------+   +-----+
-              |   |
-              v   v
-[ Module Buck DC-DC 12V -> 5V 3A ]
-              |
-              | (Sortie 5V régulée - Micro-USB)
-              v
-[ Raspberry Pi Zero 2 W ] <===== (Port USB OTG / Câble série) =====> [ Carte de puissance Legrand ]
-    (Green'Up Link)                                                         (ATmega2560)
-           |
-           +-- Wi-Fi local --> [ Réseau Domotique / Box / EVCC ]
+[ Internal Station Power Supply (12V DC / 24V DC) ]
+                        |
+                        | (Factory Legrand harness)
+                        v
+          [ Molex 4-pin (2x2) Connector ]
+              |                     |
+              | (+12V / +24V DC)    | (GND / Return)
+              +----------+   +------+
+                         |   |
+                         v   v
+        [ Waterproof DC-DC Buck Converter (12V->5V 3A) ]
+                         |
+                         | (Regulated 5.0V output via Micro-USB / USB-C)
+                         v
+              [ Raspberry Pi SBC ] <===== (USB Cable) =====> [ ATmega2560 Power Board ]
+               (Green'Up Link)
+                      |
+                      +-- Local Wi-Fi / Ethernet --> [ Home Automation / EVCC ]
 ```
-
----
-
-## 4. Précautions & Montage
-
-1. ⚠️ **Sécurité électrique (230V)** : Toute intervention à l'intérieur de la borne doit se faire **disjoncteur général coupé** au tableau électrique.
-2. **Polarité d'alimentation** : Vérifier au multimètre la tension (12V ou 24V) et la polarité (+ et -) sur le connecteur blanc avant d'y brancher le module DC-DC.
-3. **Étanchéité** : Veiller à ce que le joint du capot de la borne soit parfaitement repositionné au remontage pour éviter toute infiltration d'humidité.
