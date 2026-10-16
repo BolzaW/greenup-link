@@ -213,10 +213,10 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                 *last = Some(current_val);
                 "SERIAL_RX" // Logged as INFO
             } else {
-                "DEBUG" // Variations < 1A logged as DEBUG
+                "TRACE" // Variations < 1A logged as TRACE
             }
         } else {
-            "DEBUG"
+            "TRACE"
         }
     } else {
         "SERIAL_RX"
