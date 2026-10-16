@@ -97,7 +97,7 @@ For full environment setup details, see the [Compilation Environment Guide](docs
 ### 1. Legrand kit initialization
 Follow the **[official Legrand documentation](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** to initialize the Raspberry Pi on your local network.
 
-*(If you do not own the official Legrand kit, see the [DIY Communication Kit Guide](docs/KIT_COMMUNICATION_DIY.md) to build an alternative communication hardware setup with a standard Raspberry Pi).*
+*(If you do not own the official Legrand kit, see the [DIY Communication Kit Guide](docs/KIT_COMMUNICATION_DIY.md) to build an alternative communication hardware setup with a standard Raspberry Pi — powered either internally via a DC-DC converter or simply using a standard external power supply).*
    
 ### 2. Get SSH access (SD card modification)
 
@@ -237,6 +237,10 @@ In both cases, the script automatically restores the original Legrand environmen
 <summary><strong>1. Do I strictly need the official Legrand Communication Kit (059056)?</strong></summary>
 
 **No.** If your station does not have the official kit, you can easily build your own using a standard Raspberry Pi (Pi Zero 2 W, Pi 3, Pi 4, etc.) running official 64-bit Raspberry Pi OS Lite, connected to the motherboard via an internal USB cable.
+
+Powering the Raspberry Pi can be achieved in two ways:
+- **Internally:** using a small waterproof DC-DC buck converter (12V/24V to 5V) plugged into the station's auxiliary Molex connector (just like the official kit).
+- **Externally (simplified alternative):** using a standard Raspberry Pi USB power supply (micro-USB or USB-C) routed into the enclosure through an available cable gland (assuming an AC mains wall outlet or extension cord is nearby).
 
 See our step-by-step [DIY Communication Kit Guide](docs/KIT_COMMUNICATION_DIY.md) with parts list, wiring, and assembly instructions.
 </details>

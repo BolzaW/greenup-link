@@ -97,7 +97,7 @@ Pour le détail de l'environnement, consultez le [Guide d'environnement de compi
 ### 1. Initialisation du kit Legrand
 Suivez la **[documentation officielle Legrand](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** pour initialiser le Raspberry Pi sur votre réseau.
 
-*(Si vous ne possédez pas le kit officiel Legrand 059056, consultez le [Guide du kit de communication alternatif DIY](docs/KIT_COMMUNICATION_DIY.md) pour concevoir un montage matériel équivalent avec un Raspberry Pi standard).*
+*(Si vous ne possédez pas le kit officiel Legrand 059056, consultez le [Guide du kit de communication alternatif DIY](docs/KIT_COMMUNICATION_DIY.md) pour concevoir un montage matériel équivalent avec un Raspberry Pi standard — alimenté en interne via convertisseur DC/DC ou simplement via une alimentation externe standard).*
 
 ### 2. Accès SSH (Modification de la carte SD)
 
@@ -234,6 +234,10 @@ Dans les deux cas, le script réactive automatiquement l'environnement officiel 
 <summary><strong>1. Ai-je obligatoirement besoin du kit de communication officiel Legrand (059056) ?</strong></summary>
 
 **Non.** Si votre borne n'en est pas équipée, vous pouvez concevoir votre propre kit à moindre coût à l'aide d'un Raspberry Pi standard (Pi Zero 2 W, Pi 3, Pi 4...) sous Raspberry Pi OS 64-bit Lite officiel, relié à la carte de puissance par un simple câble USB.
+
+L'alimentation du Raspberry Pi peut se faire :
+- **En interne :** via un petit convertisseur DC/DC étanche (12V/24V vers 5V) branché sur le connecteur auxiliaire Molex de la borne (comme le kit constructeur).
+- **En externe (alternative simplifiée) :** à l'aide d'une alimentation secteur pour Raspberry Pi standard (micro-USB ou USB-C) dont le câble est introduit dans la borne par un presse-étoupe (suppose d'avoir une prise secteur 230V ou une rallonge à proximité).
 
 Consultez le [Guide du kit de communication alternatif DIY](docs/KIT_COMMUNICATION_DIY.md) pour la liste des composants, les prix et les instructions d'assemblage.
 </details>

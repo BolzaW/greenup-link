@@ -34,27 +34,41 @@ Two options are available depending on whether your charging station is within W
 
 ---
 
-### B. DC-DC Power Supply Module
+### B. Power Supply Options (Internal vs. External)
 
+Two methods can be used to power the Raspberry Pi:
+
+#### Option 1: Internal DC-DC Converter (Factory-Style & Fully Integrated)
 The official Legrand kit taps directly into the DC voltage provided by the station's internal Mean Well power supply (which delivers **12V DC**, or 24V DC depending on the hardware revision).
 
-To replace Legrand's proprietary power supply daughterboard with an off-the-shelf commercial unit:
+To replicate Legrand's setup with off-the-shelf commercial components:
 
 | Component | Specifications | Search Keywords (Amazon / AliExpress / RS) | Indicative Price |
 | :--- | :--- | :--- | :--- |
 | **Waterproof Buck Converter 12V/24V to 5V 3A (15W)** | - Input: 8V – 32V DC<br>- Output: 5.0V / 3A (15W)<br>- Format: Sealed black resin case (IP67 waterproof)<br>- Output connector: **Micro-USB male** (for Pi Zero 2 W or Pi 3B+) or **USB-C male** (for Pi 4) | *12V to 5V 3A Micro USB buck converter* / *DC-DC Step Down Waterproof 12V 5V 3A* | ~**8 € – 12 €** |
 
-*Common proven models: CPT Step-Down Converter, DROK Waterproof DC-DC Buck Converter 12V to 5V Micro-USB.*
+*Advantages:* Completely self-contained inside the wallbox enclosure; no external cable or power outlet required.  
+*Requirements:* Requires a 4-pin Molex connector (see Section C below) to tap into the station's internal auxiliary harness.
+
+#### Option 2: External Standard USB Power Supply (Simplified Alternative)
+As an easier alternative, you can use a standard official or commercial Raspberry Pi 5V power supply (5.1V / 2.5A or 3A with Micro-USB for Pi Zero 2 W / Pi 3B+, or USB-C for Pi 4). 
+
+The low-voltage power cord is simply routed into the charging station enclosure through an available bottom cable gland (*presse-étoupe*) to power the Raspberry Pi.
+
+| Component | Specifications | Notes | Indicative Price |
+| :--- | :--- | :--- | :--- |
+| **Standard Raspberry Pi Power Supply (5V 2.5A/3A)** | Official Raspberry Pi PSU (or high-quality equivalent) with Micro-USB or USB-C male output | Replaces both the internal DC-DC converter and the Molex connector. | ~**8 € – 12 €** |
+
+*Advantages:* Extremely simple setup with zero soldering or crimping required; no need to tap into the internal station wiring.  
+*Requirements:* Requires an external 230V AC mains wall outlet nearby or an electrical extension cord.
 
 ---
 
 ### C. Connectors & Cabling
 
-To connect the kit to the wallbox power rail **without cutting or modifying Legrand's factory wiring harness**:
-
 | Component | Specification | Role | Indicative Price |
 | :--- | :--- | :--- | :--- |
-| **Wallbox Auxiliary Power Connector** | Connector type **Molex Mini-Fit Jr.** (4-pin, 2x2 arrangement) | Plugs directly into the station's auxiliary power output connector. | ~**3 € – 4 €** |
+| **Wallbox Auxiliary Power Connector** *(Option 1 only)* | Connector type **Molex Mini-Fit Jr.** (4-pin, 2x2 arrangement) | Plugs directly into the station's internal auxiliary power output. *(Not needed if using Option 2 External PSU)*. | ~**3 € – 4 €** |
 | **USB Cable for Controller Link** | - For Pi Zero 2 W: **Micro-USB male to USB-A female OTG adapter** + short USB cable.<br>- For Pi 3B+ / 4: Short standard **USB-A to USB cable** connecting to the power board. | Connects the Raspberry Pi to the ATmega2560 power controller board. | ~**3 € – 5 €** |
 | **High Endurance MicroSD Card** | **Kingston High Endurance** (32 GB, `SDCE/32GB`) or **Kingston Industrial** (`SDCIT2/32GB`) / **SanDisk MAX Endurance** | System storage. High/Industrial endurance cards are built to withstand continuous writes and extreme operating temperatures (-25°C to +85°C) in outdoor wallboxes. | ~**45 € – 50 €** *(Standard consumer card: ~10 €)* |
 
@@ -75,15 +89,17 @@ To connect the kit to the wallbox power rail **without cutting or modifying Legr
 | Item | Official Legrand Kit (Ref 059056) | DIY Alternative Kit (Pi Zero 2 W) | DIY Alternative Kit (Pi 3B+) |
 | :--- | :--- | :--- | :--- |
 | **SBC / Processor** | Proprietary Raspberry Pi 3B | Raspberry Pi Zero 2 W (~22 €) | Raspberry Pi 3 Model B+ (~46 €) |
-| **5V Power Supply** | Proprietary Legrand PCB | Waterproof DC-DC Converter 12V->5V 3A (~10 €) | Waterproof DC-DC Converter 12V->5V 3A (~10 €) |
-| **Cabling & Connectors** | Included in kit | Molex Mini-Fit Jr. + USB cables (~7 €) | Molex Mini-Fit Jr. + USB cable (~5 €) |
+| **5V Power Supply** | Proprietary Legrand PCB | Waterproof DC-DC Converter (~10 €)<br>*or Standard External PSU (~10 €)* | Waterproof DC-DC Converter (~10 €)<br>*or Standard External PSU (~10 €)* |
+| **Cabling & Connectors** | Included in kit | Molex connector + USB cables (~7 €)<br>*(or USB cable only ~3 € if external PSU)* | Molex connector + USB cable (~5 €)<br>*(or USB cable only ~3 € if external PSU)* |
 | **MicroSD Card** | 16 GB standard card | 32 GB High Endurance Kingston (~45 €)<br>*(or standard card ~10 €)* | 32 GB High Endurance Kingston (~45 €)<br>*(or standard card ~10 €)* |
 | **Mounting Plate & Screws** | Stamped metal bracket + screws | Custom 3D bracket + M4 / M2.5 screws (~4 €) | Custom 3D bracket + M4 / M2.5 screws (~4 €) |
-| **TOTAL** | **~500 € to 700 €** | **~88 €** *(~53 € with consumer SD)* | **~110 €** *(~75 € with consumer SD)* |
+| **TOTAL** | **~500 € to 700 €** | **~84 € – 88 €** *(~49 € – 53 € with consumer SD)* | **~106 € – 110 €** *(~71 € – 75 € with consumer SD)* |
 
 ---
 
-## 3. Synoptic Wiring Diagram
+## 3. Synoptic Wiring Diagrams
+
+### Setup A: Internal Power Tap (Fully Integrated)
 
 ```text
 [ Internal Station Power Supply (12V DC / 24V DC) ]
@@ -100,6 +116,22 @@ To connect the kit to the wallbox power rail **without cutting or modifying Legr
                          |
                          | (Regulated 5.0V output via Micro-USB / USB-C)
                          v
+              [ Raspberry Pi SBC ] <===== (USB Cable) =====> [ ATmega2560 Power Board ]
+               (Green'Up Link)
+                      |
+                      +-- Local Wi-Fi / Ethernet --> [ Home Automation / EVCC ]
+```
+
+### Setup B: External Power Supply (Simplified Alternative)
+
+```text
+[ 230V AC Mains Wall Outlet / Extension Cord ]
+                        |
+                        v
+  [ Standard Raspberry Pi USB Power Supply (5V 3A) ]
+                        |
+                        | (Micro-USB / USB-C routed into enclosure via cable gland)
+                        v
               [ Raspberry Pi SBC ] <===== (USB Cable) =====> [ ATmega2560 Power Board ]
                (Green'Up Link)
                       |
