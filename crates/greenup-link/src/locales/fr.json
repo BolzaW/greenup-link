@@ -4,6 +4,14 @@
     "ble_module": "BLE",
     "debug": "Debug"
   },
+  "auth": {
+    "title": "Authentification requise",
+    "description": "Cette borne est protégée par une clé d'accès. Veuillez saisir l'API Token configuré dans greenup.toml.",
+    "placeholder": "Clé API / Token...",
+    "submit": "Déverrouiller",
+    "invalid": "Clé API invalide. Veuillez réessayer.",
+    "logout_title": "Verrouiller la session (déconnexion)"
+  },
   "console": {
     "title": "Console Live",
     "type_all": "Source : Tout",

@@ -1,7 +1,6 @@
 mod api;
-pub 
-
-
+mod auth;
+mod config;
 
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -16,6 +15,13 @@ async fn main() {
     greenup_driver::logger::log("SYS", "===================================================");
     greenup_driver::logger::log("SYS", &format!("               GREEN'UP LINK v{:<15}     ", pkg_version));
     greenup_driver::logger::log("SYS", "===================================================");
+
+    let app_config = config::AppConfig::load();
+    if app_config.http.api_token.is_some() {
+        greenup_driver::logger::log("SYS", "🔒 API authentication: ENABLED (Bearer token / Basic Auth)");
+    } else {
+        greenup_driver::logger::log("SYS", "🔓 API authentication: DISABLED (open LAN mode — set api_token in greenup.toml to secure)");
+    }
 
     let (tx, rx) = mpsc::channel::<greenup_protocol::Command>(32);
 
@@ -46,13 +52,14 @@ async fn main() {
     });
 
     // 2. Start the Axum HTTP server
-    let router = api::build_router(app_state);
+    let router = api::build_router(app_state, app_config.http.api_token);
     
-    // Listen on all network interfaces (0.0.0.0) on port 8080
-    let addr = "0.0.0.0:8080";
+    let addr = &app_config.http.bind;
     greenup_driver::logger::log("SYS", &format!("🌍 Web server started: http://{}", addr));
     
-    let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind port 8080");
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .unwrap_or_else(|e| panic!("Failed to bind {}: {}", addr, e));
     axum::serve(listener, router).await.expect("Fatal web server error");
 }
 

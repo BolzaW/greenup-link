@@ -17,20 +17,13 @@ use greenup_driver::SharedState;
 use greenup_driver::serial::TicStartError;
 use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
 
-pub fn build_router(state: SharedState) -> Router {
-    Router::new()
-        .route("/", get(serve_ui))
-        .route("/locales/fr.json", get(serve_fr_json))
-        .route("/locales/en.json", get(serve_en_json))
-        .route("/css/style.css", get(serve_css))
-        .route("/js/dom.js", get(serve_js_dom))
-        .route("/js/i18n.js", get(serve_js_i18n))
-        .route("/js/linky.js", get(serve_js_linky))
-        .route("/js/controls.js", get(serve_js_controls))
-        .route("/js/visuals.js", get(serve_js_visuals))
-        .route("/js/api.js", get(serve_js_api))
-        .route("/js/console.js", get(serve_js_console))
-        .route("/js/main.js", get(serve_js_main))
+use std::sync::Arc;
+use crate::auth::{self, SharedApiToken};
+
+pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
+    let token_state: SharedApiToken = api_token.map(Arc::new);
+
+    let protected_api = Router::new()
         .route("/api/info", get(get_info))
         .route("/api/telemetry", get(get_telemetry))
         .route("/api/logs", get(get_logs))
@@ -45,6 +38,30 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/bluetooth", post(set_bluetooth))
         .route("/api/command", post(send_raw_command))
         .with_state(state)
+        .route_layer(axum::middleware::from_fn_with_state(
+            token_state.clone(),
+            auth::require_auth,
+        ));
+
+    let auth_router = Router::new()
+        .route("/api/auth/status", get(auth::auth_status))
+        .with_state(token_state);
+
+    Router::new()
+        .route("/", get(serve_ui))
+        .route("/locales/fr.json", get(serve_fr_json))
+        .route("/locales/en.json", get(serve_en_json))
+        .route("/css/style.css", get(serve_css))
+        .route("/js/dom.js", get(serve_js_dom))
+        .route("/js/i18n.js", get(serve_js_i18n))
+        .route("/js/linky.js", get(serve_js_linky))
+        .route("/js/controls.js", get(serve_js_controls))
+        .route("/js/visuals.js", get(serve_js_visuals))
+        .route("/js/api.js", get(serve_js_api))
+        .route("/js/console.js", get(serve_js_console))
+        .route("/js/main.js", get(serve_js_main))
+        .merge(auth_router)
+        .merge(protected_api)
 }
 
 #[derive(serde::Deserialize)]

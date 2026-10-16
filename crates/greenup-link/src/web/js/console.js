@@ -21,8 +21,9 @@ const LOG_LEVEL_SEVERITY = {
 };
 
 async function syncLogLevelFromServer() {
+    if (window.isAuthRequired && !window.isAuthenticated) return;
     try {
-        const res = await fetch('/api/logs/level');
+        const res = await apiFetch('/api/logs/level');
         if (res.ok) {
             const data = await res.json();
             if (data && data.level) {
@@ -72,9 +73,10 @@ function setDebugMode(enabled) {
 
 function startLogStream() {
     if (logEventSource) return;
+    if (window.isAuthRequired && !window.isAuthenticated) return;
 
-    fetch('/api/logs')
-        .then(res => res.json())
+    apiFetch('/api/logs')
+        .then(res => res.ok ? res.json() : [])
         .then(logs => {
             if (Array.isArray(logs)) {
                 logEntries = logs;
@@ -89,8 +91,9 @@ function startLogStream() {
 }
 
 function connectSse() {
+    if (window.isAuthRequired && !window.isAuthenticated) return;
     try {
-        logEventSource = new EventSource('/api/logs/stream');
+        logEventSource = new EventSource(buildAuthUrl('/api/logs/stream'));
         logEventSource.onmessage = function(event) {
             if (isLogStreamPaused) return;
             try {
@@ -263,7 +266,7 @@ function setupConsoleDomListeners() {
             }
 
             try {
-                await fetch('/api/logs/level', {
+                await apiFetch('/api/logs/level', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ level: serverTargetLevel })
@@ -293,7 +296,7 @@ function setupConsoleDomListeners() {
     const btnExport = document.getElementById('btnConsoleExport');
     if (btnExport) {
         btnExport.addEventListener('click', () => {
-            window.location.href = '/api/logs/export';
+            window.location.href = buildAuthUrl('/api/logs/export');
         });
     }
 
@@ -360,7 +363,7 @@ function sendCommandRaw(cmd) {
         feedback.className = 'text-[10px] font-mono text-sky-400';
     }
 
-    fetch('/api/command', {
+    apiFetch('/api/command', {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: cmd

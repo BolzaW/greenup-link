@@ -4,6 +4,14 @@
     "ble_module": "BLE",
     "debug": "Debug"
   },
+  "auth": {
+    "title": "Authentication Required",
+    "description": "This charging station is protected by an access key. Please enter the API Token configured in greenup.toml.",
+    "placeholder": "API Key / Token...",
+    "submit": "Unlock",
+    "invalid": "Invalid API token. Please try again.",
+    "logout_title": "Lock session (logout)"
+  },
   "console": {
     "title": "Live Console",
     "type_all": "Source: All",

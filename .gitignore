@@ -26,3 +26,6 @@ __pycache__/
 
 #logs analyse
 logs/*
+
+# Local runtime configuration (may contain api_token secret)
+greenup.toml

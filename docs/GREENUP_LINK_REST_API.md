@@ -2,10 +2,35 @@
 
 This API allows interfacing the Green'Up Link software with any standard home automation controller (Home Assistant, Jeedom, Node-RED, etc.). All responses are in JSON format.
 
+## 🔒 Authentication (Optional)
+
+By default, `api_token` is empty (`""`) in `greenup.toml` (open access on trusted local networks).
+If you configure a non-empty `api_token` in `/home/pi/greenup/greenup.toml` (or via the `GREENUP_API_TOKEN` environment variable), all `/api/*` endpoints require authentication.
+
+Three standard authentication methods are supported simultaneously against the same `api_token`:
+
+1. **Bearer Token (Recommended for EVCC, Home Assistant, scripts)**:
+   ```http
+   Authorization: Bearer <your_api_token>
+   ```
+2. **API Key Header**:
+   ```http
+   X-API-Key: <your_api_token>
+   ```
+3. **HTTP Basic Auth** (with any username or empty username, and `<your_api_token>` as password):
+   ```bash
+   curl -u :your_api_token http://<station_ip>:8080/api/telemetry
+   ```
+
+*(Note: For browser Server-Sent Events `/api/logs/stream` and file downloads `/api/logs/export`, passing `?token=<your_api_token>` in the query string is also supported).*
+
+---
+
 ## 📋 Endpoints Overview
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
+| `GET` | `/api/auth/status` | Check if authentication is enabled and if the provided token is valid |
 | `GET` | `/api/info` | Hardware info (Firmware, Serial, Capabilities) |
 | `GET` | `/api/telemetry` | Real-time telemetry + Legrand / IEC states |
 | `GET` | `/api/logs` | Recent in-memory logs (last 500 entries) |

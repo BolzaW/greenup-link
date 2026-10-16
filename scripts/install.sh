@@ -224,6 +224,33 @@ else
     fi
 fi
 
+CONFIG_FILE="$TARGET_DIR/greenup.toml"
+if [ ! -f "$CONFIG_FILE" ]; then
+    cat << 'EOF' > "$CONFIG_FILE"
+# ==============================================================================
+# Green'Up Link - Configuration File
+# ==============================================================================
+
+[http]
+# Network interface and port to listen on.
+# Default: "0.0.0.0:8080" (all network interfaces).
+bind = "0.0.0.0:8080"
+
+# Optional API token / password to protect the Web GUI and REST API.
+# - Leave empty ("") to disable authentication (open access on trusted LAN).
+# - Set a secret string to require authentication on all /api/* routes.
+#   Compatible with:
+#     * Bearer Token : Authorization: Bearer <api_token>  (EVCC, Home Assistant, Web GUI)
+#     * API Key      : X-API-Key: <api_token>
+#     * Basic Auth   : Authorization: Basic <base64(user:api_token)>  (curl -u :token)
+api_token = ""
+EOF
+    chmod 600 "$CONFIG_FILE"
+    echo "  -> Created default configuration file at $CONFIG_FILE"
+else
+    echo "  -> Keeping existing configuration file at $CONFIG_FILE"
+fi
+
 chown -R pi:pi "$TARGET_DIR" 2>/dev/null || true
 
 # 5. Configure and start Systemd service
@@ -262,8 +289,9 @@ sleep 1
 if systemctl is-active --quiet greenup-link.service; then
     IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "your-pi-ip")
     echo "🎉 Success: Green'Up Link is active and running!"
-    echo "   Web Interface:  http://${IP_ADDR}:8080"
-    echo "   Service Status: sudo systemctl status greenup-link"
+    echo "   Web Interface:   http://${IP_ADDR}:8080"
+    echo "   Config & Auth:   /home/pi/greenup/greenup.toml"
+    echo "   Service Status:  sudo systemctl status greenup-link"
     echo "   Live Logs:       sudo journalctl -u greenup-link -f"
     echo "   Rollback/Remove: sudo /home/pi/greenup/uninstall.sh"
 else
