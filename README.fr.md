@@ -196,6 +196,28 @@ Le script d'installation configure l'ensemble du système automatiquement :
 - **Client CLI interactif** : Utilisez `scripts/cli-greenup-link.ps1` sous PowerShell Windows pour piloter ou tester la borne.
 - **Intégration EVCC** : Consultez le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md) pour la charge solaire dynamique.
 
+### 7. Rollback & Désinstallation (Restauration de la stack Legrand)
+
+Si vous souhaitez revenir au logiciel officiel Legrand ou désinstaller Green'Up Link, un script de rollback / désinstallation automatisé est fourni.
+
+- **Lancement direct depuis la borne** (installé automatiquement avec Green'Up Link) :
+  ```bash
+  sudo /home/pi/greenup/uninstall.sh
+  ```
+- **Ou via commande unique en ligne** :
+  ```bash
+  curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/uninstall.sh | sudo bash
+  ```
+
+Le script vous propose interactivement de choisir entre :
+1. **Désactiver uniquement (Conserver les fichiers)** : Arrête et supprime le service `greenup-link.service`, tout en préservant le dossier `/home/pi/greenup/` et l'historique des logs.
+2. **Purge complète** : Arrête le service et supprime intégralement le dossier `/home/pi/greenup/`.
+
+Dans les deux cas, le script réactive automatiquement l'environnement officiel Legrand :
+- Restaure le script `/etc/init.d/CommunicationArduinoRasp` depuis sa sauvegarde et le réenregistre au démarrage.
+- Restaure les scripts d'urgence `DeletAll.sh` neutralisés et rétablit leurs droits d'exécution.
+- Réactive et redémarre le serveur Apache Tomcat 9 et le daemon Java Legrand.
+
 ---
 
 ## 🚀 Fonctionnalités futures

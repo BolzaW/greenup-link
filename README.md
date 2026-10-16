@@ -199,6 +199,28 @@ The automated installer performs all required setup steps:
 - **Interactive CLI**: Use `scripts/cli-greenup-link.ps1` from PowerShell on Windows to test endpoints or send raw serial commands.
 - **EVCC Integration**: Refer to the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md) for smart solar diversion charging.
 
+### 7. Rollback & Uninstallation (Restoring Legrand software)
+
+If you ever wish to revert to the factory Legrand software stack or uninstall Green'Up Link, an automated rollback script is provided.
+
+- **Run locally from the station** (installed automatically with Green'Up Link):
+  ```bash
+  sudo /home/pi/greenup/uninstall.sh
+  ```
+- **Or run via online 1-liner**:
+  ```bash
+  curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/uninstall.sh | sudo bash
+  ```
+
+The script interactively prompts you to choose between:
+1. **Disable only (Keep files)**: Stops and removes `greenup-link.service`, preserving the `/home/pi/greenup/` directory and log files.
+2. **Full purge**: Stops the service and permanently deletes `/home/pi/greenup/`.
+
+In both cases, the script automatically restores the original Legrand environment:
+- Restores `/etc/init.d/CommunicationArduinoRasp` from backup and re-enables it on boot.
+- Restores all neutralized `DeletAll.sh` scripts from backup and restores execution permissions.
+- Re-enables and starts Apache Tomcat 9 and Java daemons.
+
 ---
 
 ## 🚀 Future Features

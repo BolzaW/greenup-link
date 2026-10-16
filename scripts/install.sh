@@ -194,6 +194,29 @@ else
 fi
 
 chmod +x "$TARGET_BIN"
+
+# Install uninstaller into target directory
+UNINSTALL_TARGET="$TARGET_DIR/uninstall.sh"
+if [ -f "$SCRIPT_DIR/uninstall.sh" ]; then
+    cp -p "$SCRIPT_DIR/uninstall.sh" "$UNINSTALL_TARGET"
+    chmod +x "$UNINSTALL_TARGET"
+    echo "  -> Installed uninstaller to $UNINSTALL_TARGET"
+elif [ -f "./uninstall.sh" ]; then
+    cp -p "./uninstall.sh" "$UNINSTALL_TARGET"
+    chmod +x "$UNINSTALL_TARGET"
+    echo "  -> Installed uninstaller to $UNINSTALL_TARGET"
+else
+    UNINSTALL_URL="https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/uninstall.sh"
+    if command -v curl >/dev/null 2>&1; then
+        curl -sSL "$UNINSTALL_URL" -o "$UNINSTALL_TARGET" 2>/dev/null && chmod +x "$UNINSTALL_TARGET" || true
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$UNINSTALL_TARGET" "$UNINSTALL_URL" 2>/dev/null && chmod +x "$UNINSTALL_TARGET" || true
+    fi
+    if [ -f "$UNINSTALL_TARGET" ]; then
+        echo "  -> Installed uninstaller to $UNINSTALL_TARGET"
+    fi
+fi
+
 chown -R pi:pi "$TARGET_DIR" 2>/dev/null || true
 
 # 6. Configure and start Systemd service
@@ -232,9 +255,10 @@ sleep 1
 if systemctl is-active --quiet greenup-link.service; then
     IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "your-pi-ip")
     echo "🎉 Success: Green'Up Link is active and running!"
-    echo "   Web Interface: http://${IP_ADDR}:8080"
+    echo "   Web Interface:  http://${IP_ADDR}:8080"
     echo "   Service Status: sudo systemctl status greenup-link"
-    echo "   Live Logs:      sudo journalctl -u greenup-link -f"
+    echo "   Live Logs:       sudo journalctl -u greenup-link -f"
+    echo "   Rollback/Remove: sudo /home/pi/greenup/uninstall.sh"
 else
     echo "⚠️ Warning: Service was configured and started, but is not reporting active yet."
     echo "   Check details with: sudo systemctl status greenup-link"

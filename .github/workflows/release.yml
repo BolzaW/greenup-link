@@ -110,9 +110,10 @@ jobs:
           PKG_DIR="pkg_${{ matrix.artifact_suffix }}"
           mkdir -p "$PKG_DIR"
           
-          # 1. Archive contents (binary, install script, documentation)
+          # 1. Archive contents (binary, install/uninstall scripts, documentation)
           cp "$BIN_PATH" "$PKG_DIR/greenup-link"
           cp "scripts/install.sh" "$PKG_DIR/"
+          cp "scripts/uninstall.sh" "$PKG_DIR/"
           cp "README.md" "$PKG_DIR/"
           cp "README.fr.md" "$PKG_DIR/"
           
