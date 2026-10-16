@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release Tag (e.g. v0.3.0)'
+        description: 'Release Tag (leave empty to auto-detect from Cargo.toml)'
         required: false
-        default: 'v0.3.0'
+        default: ''
 
 permissions:
   contents: write
@@ -44,7 +44,8 @@ jobs:
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF#refs/tags/}"
           else
-            VERSION="v0.3.0"
+            CARGO_VER=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
+            VERSION="v${CARGO_VER}"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "Building version: $VERSION"
@@ -150,7 +151,8 @@ jobs:
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG_NAME="${GITHUB_REF#refs/tags/}"
           else
-            TAG_NAME="v0.3.0"
+            CARGO_VER=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
+            TAG_NAME="v${CARGO_VER}"
           fi
           echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
           echo "Publishing release: $TAG_NAME"
