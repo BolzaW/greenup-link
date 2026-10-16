@@ -1,0 +1,180 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (leave empty to auto-detect from Cargo.toml)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target_name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            target_name: aarch64
+            use_zig: false
+            artifact_suffix: aarch64
+          - target: armv7-unknown-linux-gnueabihf
+            target_name: armv7-legacy
+            use_zig: true
+            zig_target: armv7-unknown-linux-gnueabihf.2.24
+            artifact_suffix: armv7-legacy
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract Version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            VERSION="${{ github.event.inputs.tag_name }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            CARGO_VER=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
+            VERSION="v${CARGO_VER}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Building version: $VERSION"
+
+      - name: Install Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+      # AArch64 specific configuration (GNU cross linker)
+      - name: Setup AArch64 Cross-Linker
+        if: ${{ !matrix.use_zig }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      # ARMv7 Legacy specific configuration (Zig + glibc 2.24)
+      - name: Setup Python & Zig
+        if: ${{ matrix.use_zig }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Zig & cargo-zigbuild
+        if: ${{ matrix.use_zig }}
+        run: |
+          pip install ziglang
+          cargo install cargo-zigbuild
+
+      # Build step
+      - name: Build Binary (Standard AArch64)
+        if: ${{ !matrix.use_zig }}
+        run: |
+          cargo build --release -p greenup-link --target ${{ matrix.target }}
+          aarch64-linux-gnu-strip target/${{ matrix.target }}/release/greenup-link || true
+
+      - name: Build Binary (Zigbuild ARMv7 glibc 2.24)
+        if: ${{ matrix.use_zig }}
+        run: |
+          cargo zigbuild --release -p greenup-link --target ${{ matrix.zig_target }}
+          strip target/${{ matrix.target }}/release/greenup-link || true
+
+      # Packaging step
+      - name: Package Release Assets
+        run: |
+          BIN_PATH="target/${{ matrix.target }}/release/greenup-link"
+          chmod +x "$BIN_PATH"
+          
+          # Temporary packaging directory
+          PKG_DIR="pkg_${{ matrix.artifact_suffix }}"
+          mkdir -p "$PKG_DIR"
+          
+          # 1. Archive contents (binary, install/uninstall scripts, documentation)
+          cp "$BIN_PATH" "$PKG_DIR/greenup-link"
+          cp "scripts/install.sh" "$PKG_DIR/"
+          cp "scripts/uninstall.sh" "$PKG_DIR/"
+          cp "README.md" "$PKG_DIR/"
+          cp "README.fr.md" "$PKG_DIR/"
+          
+          # 2. Create ZIP archive
+          ZIP_NAME="greenup-link-${{ env.VERSION }}-${{ matrix.artifact_suffix }}.zip"
+          (cd "$PKG_DIR" && zip -r "../$ZIP_NAME" .)
+          
+          # 3. Direct binaries
+          mkdir -p dist
+          mv "$ZIP_NAME" dist/
+          cp "$BIN_PATH" "dist/greenup-link-${{ matrix.artifact_suffix }}"
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: assets-${{ matrix.artifact_suffix }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract Tag / Version
+        id: release_version
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            TAG_NAME="${{ github.event.inputs.tag_name }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            CARGO_VER=$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)
+            TAG_NAME="v${CARGO_VER}"
+          fi
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "Publishing release: $TAG_NAME"
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: Generate Checksums (SHA256)
+        run: |
+          cd release_assets
+          sha256sum greenup-link* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: Release ${{ env.TAG_NAME }}
+          files: release_assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false

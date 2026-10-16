@@ -2,162 +2,316 @@
 
 [🇫🇷 Lire en Français](README.fr.md)
 
-> **Disclaimer :** Green'Up Link is an independent, community-developed project and is not affiliated with, sponsored or endorsed by Legrand. "Green'Up" and "Legrand" are trademarks of their respective owners.
+> [!CAUTION]
+> ### ⚡ Critical Electrical Safety Warning & Disclaimer of Liability
+> 
+> **Mains Voltage Danger (230V / 400V):**
+> Fatal electrical currents are present inside the charging station. **All physical interventions, opening of the station enclosure, hardware wiring, or modifications MUST strictly be performed with the main electrical supply completely turned OFF (mains circuit breaker switched off).** Always test and verify the complete absence of voltage before opening the unit. If you are not a qualified electrician, do not open the station.
+> 
+> **Disclaimer of Liability & "AS IS" Software:**
+> - **Green'Up Link** is an independent community project provided on an **"AS IS" BASIS**, without warranties or conditions of any kind, whether express, implied, or statutory (including fitness for a particular purpose, safety, or reliability).
+> - The author, developers, and contributors shall **under no circumstances be held liable** for any direct, indirect, incidental, special, exemplary, or consequential damages whatsoever (including, but not limited to, electrical shock, electrocution, personal injury, death, fire, electrical panel damage, vehicle or battery degradation, property damage, loss of manufacturer warranty, or data loss) resulting from the use, installation, modification, or inability to use this software, hardware, or documentation.
+> - **The end user assumes total and sole responsibility for using this software and modifying any hardware.**
+> 
+> **Trademark Notice:** Green'Up Link is an independent, community-developed project and is not affiliated with, sponsored, or endorsed by Legrand. "Green'Up" and "Legrand" are registered trademarks of their respective owners.
 
 ## 📖 Project Overview
 
-**Green'Up Link** is a lightweight, high-performance, independent software written in Rust. It installs directly on the official Legrand Communication Kit (reference 059056) to replace the software ("KitCom") provided by the manufacturer. 
+**Green'Up Link** is a lightweight, high-performance, independent software written in Rust. It can be installed directly on the official Legrand Communication Kit (reference 059056) to replace the manufacturer's software ("KitCom"), or on a **standard Raspberry Pi** (Pi Zero 2 W, Pi 3, Pi 4, etc.) running an official Raspberry Pi OS 64-bit Lite image connected via a USB cable (see the [DIY Communication Kit Guide](docs/KIT_COMMUNICATION_DIY.md)). 
 
-It communicates with the charging station's power board via the internal USB serial link and exposes:
-- A clean, responsive **local Web GUI**.
-- A comprehensive and documented **REST API**, perfect for home automation integration (Home Assistant, Jeedom, etc.).
+It communicates with the charging station's power board via an internal USB cable and exposes:
+- A clean, responsive **local Web GUI** with live visualizer, charging controls (7A–32A), Linky TIC status, and an integrated real-time debug console (SSE log streaming).
+- A comprehensive and documented **REST API**, perfect for home automation integration (Home Assistant, Jeedom, Node-RED, etc.).
+- Complete **log management** with daily rolling files (`greenup_YYYY-MM-DD.log`), 7-day automatic retention, and hot-reloadable log levels (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
 - Full compatibility with **EVCC** for smart solar charging (see the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md)).
 
-It also provides an EVerest integration without API/UI via a direct MQTT bridge, allowing the station to be controlled as a standard EVerest hardware module. *(Note: For a cleaner, native EVerest module implementation that replaces EvseManager entirely, check out the excellent community project [evorada/everest-greenup](https://github.com/evorada/everest-greenup) by suda).*
+*(Experimental / PoC)*: A standalone `greenup-everest` module is included as an experimental proof of concept to interface with the open-source EVerest framework via MQTT (not the core focus of this project; see also [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
+
+> [!NOTE]
+> **Mobile Apps & Bluetooth Interface:**
+> Green'Up Link does **not** replace the official Legrand mobile applications (**EV Charge Light** or the newer generation **EV Charge** introduced in early 2026), which communicate directly with the wallbox over Bluetooth. If you use one of these mobile apps and are unsure whether your station is equipped with the Communication Kit, you most likely do not have it: the IP Communication Kit (reference 059056) is an optional accessory sold separately.
+> 
+> Background reverse-engineering of the native Bluetooth protocol is actively underway, but this work is not yet mature enough for public use.
 
 ## 🤔 Why this project?
 
-The software provided with the official Communication Kit is bloated. It is buggy, unresponsive, and very difficult to use for standard home automation. 
+The software provided with the official Communication Kit is bloated, buggy, unresponsive, and very difficult to integrate with modern home automation systems.
 
-Moreover, it relies on a Raspberry Pi 3 running an obsolete operating system (Raspbian 9 "Stretch"), which is highly vulnerable from a security standpoint. This project allows you to take back full control of your hardware in a much healthier and more responsive way.
+Moreover, the official Legrand software stack (running outdated versions of Apache Tomcat 9, an unmaintained Java runtime, and obsolete system components on Raspbian 9 "Stretch") contains **multiple known CVEs and critical vulnerabilities**. Exposing this official stack directly to the internet (or even on an untrusted local network) poses severe security risks. Green'Up Link eliminates this legacy stack entirely in favor of a minimal, memory-safe Rust binary with no external runtime dependencies, giving you back full control over your charging station.
 
 ## ⚠️ Current Limitations
 
-This project is actively in development. Features will be added progressively. For now:
-- Only manages **direct charging**.
-- Only manages the **058001** charging station reference (1 Type 2 side, no Shuko domestic socket, 7kW). *This is the model I own and on which I could test.*
-- **DOES NOT MANAGE** the RFID badge reader.
-- **DOES NOT MANAGE** schedules (time programming).
-- **DOES NOT MANAGE** Modbus communication.
-- **DOES NOT MANAGE** the OCPP protocol.
+This project is actively in development:
+- **Scope of the software**: Green'Up Link only replaces the communication kit (software layer running on the Raspberry Pi). The charging station retains all of its native intelligence, electrical protections, and autonomous operation via its internal ATmega2560 power board.
+- **Tested hardware**: I can only test and validate on my own hardware: reference **058001** (single Type 2 socket, 7.4 kW single-phase, without domestic socket).
+- **Type 2 compatibility**: All Green'up Premium stations should nominally work with their Type 2 socket.
+- **Domestic socket (Schuko) & Three-phase**: Not supported at this stage due to a lack of knowledge, captured serial communication logs, and test hardware to investigate these configurations.
+- **Direct charging only**: No support for schedules / onboard time programming (use Home Assistant or EVCC to schedule charges instead).
+- **Does NOT manage**: RFID badge reader, Modbus communication, or OCPP protocol.
 
 ## ✅ Compatibility
 
-- **Operating System**: Legrand official image "Raspbian GNU/Linux 9 (stretch)" (for now).
+- **Operating System**:
+  - Legrand official legacy image: "Raspbian GNU/Linux 9 (stretch)" 32-bit (`armv7`, glibc 2.24). *(Note: modern 32-bit Debian/Raspberry Pi OS is not supported — only the 32-bit legacy Stretch build is provided).*
+  - Modern Raspberry Pi OS: 64-bit (`aarch64`, Bullseye / Bookworm) Lite or Desktop.
+- **Station hardware models**: Refer to the comprehensive [Hardware Compatibility Matrix](docs/COMPATIBLE_HARDWARE.md) for the complete reference list and support status (Full, Partial, or None).
 - **Power board firmware**:
   - `FirmwareBoardA-V01;18;10.hex` (Tested and validated)
+  - `FirmwareBoardA-V01;17;27.hex` (Tested and validated)
   - `FirmwareBoardA-V01;18;04.hex` (Theoretically compatible)
-  - `FirmwareBoardA-V01;17;27.hex` (Theoretically compatible)
+
+> [!NOTE]
+> **Regarding Legrand system images:** It is possible that newer Legrand factory image revisions exist whose exact specifications are not currently known. Legrand does not provide OS migration mechanisms between major image releases — only the application software stack and a few Debian packages are updated via Legrand's update mechanism. As a result, certain Legrand image versions might have glibc or kernel differences incompatible with the current prebuilt legacy binary. If you encounter such an image, please open an issue with your system details (`uname -a`, `ldd --version`), and a dedicated compilation toolchain can be created.
 
 ---
 
 ## 🛠️ Compiling the project (For developers)
 
-The project was developed on Windows 11 using the Windows Subsystem for Linux (WSL2), which allows seamless cross-compilation to the Raspberry Pi's ARM architecture. The steps below assume a Windows environment but can easily be adapted for Linux.
+The project is structured as a Cargo workspace and supports cross-compilation for both legacy 32-bit ARM (Debian Stretch) and modern 64-bit ARM (Raspberry Pi OS 64-bit).
 
-1. **Install WSL2** on Windows (e.g. `wsl --install -d Ubuntu`).
-2. **Install Rust** in the WSL environment (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`).
-3. **Install Linux dependencies (WSL)** required for cross-compilation. On Debian/Ubuntu, run:
-   ```bash
-   sudo apt update
-   sudo apt install -y gcc-arm-linux-gnueabihf pkg-config
-   ```
-4. **Install Cargo Zigbuild**: `cargo install cargo-zigbuild` (allows easy cross-compilation to ARM).
-5. Run the **`.\build_pi.bat`** script (from PowerShell or Windows Command Prompt). This script invokes WSL and generates the optimized binary for the charging station.
+Ready-to-use compilation scripts are available in the [`builds/`](builds/) directory. **Note:** These batch scripts are designed to be run from Windows using **WSL (Ubuntu)** with the cross-compilation toolchains installed.
+
+| Script | Target Architecture | Build Type | Output Binary / Package |
+| :--- | :--- | :--- | :--- |
+| **`builds/release-legacy.bat`** | 32-bit ARM (`armv7`) | Release (glibc 2.24) | `target/armv7-unknown-linux-gnueabihf/release/greenup-link` + `.zip` |
+| **`builds/release-aarch64.bat`** | 64-bit ARM (`aarch64`) | Release (Standard) | `target/aarch64-unknown-linux-gnu/release/greenup-link` + `.zip` |
+
+For manual compilation in WSL or Linux:
+```bash
+# For modern 64-bit Raspberry Pi OS (Pi 3 / 4 / 5):
+cargo build --release -p greenup-link --target aarch64-unknown-linux-gnu
+
+# For legacy 32-bit Legrand image (glibc 2.24 / Debian Stretch):
+cargo zigbuild --release -p greenup-link --target armv7-unknown-linux-gnueabihf.2.24
+```
+For full environment setup details, see the [Compilation Environment Guide](docs/ENV_COMPILATION_AARCH64_ARM7.md).
 
 ---
 
 ## ⚙️ Installation on the charging station (Raspberry Pi)
 
-> **WARNING:** Backup the official Legrand image (clone the SD card) before any manipulation to be able to rollback in case of an issue.
+> **WARNING:** Always backup your official Legrand SD card image before making any changes so that you can revert if needed.
+>
+> ⚠️ **Important:** Physical manipulation of the Raspberry Pi inside the wallbox MUST be performed with the **mains power completely turned off**.
 
-> ⚠️ **Important:** The physical installation of the Raspberry Pi in the station MUST be done with the **power off**.
+💡 **Quick Jump (DIY Kit / Pre-configured OS):** Steps **1 to 3** below are dedicated to the **official Legrand Communication Kit (059056)**. If you already have a **Raspberry Pi with SSH access** connected via USB inside the charging station ([DIY kit](docs/KIT_COMMUNICATION_DIY.md) or standard OS), you can skip directly to **[4. Installation of Green'Up Link](#4-installation-of-greenup-link)**.
 
 ### 1. Legrand kit initialization
-Follow the **[official Legrand documentation](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** to initialize the Raspberry Pi on your network.
+Follow the **[official Legrand documentation](https://www.legrand.fr/pro/catalogue/kit-de-communication-ip-pour-bornes-greenup-premium-pour-vehicule-electrique#scroll-to:product-details--documentation-et-conseils-de-pose)** to initialize the Raspberry Pi on your local network.
+
+*(If you do not own the official Legrand kit, see the [DIY Communication Kit Guide](docs/KIT_COMMUNICATION_DIY.md) to build an alternative communication hardware setup with a standard Raspberry Pi — powered either internally via a DC-DC converter or simply using a standard external power supply).*
    
 ### 2. Get SSH access (SD card modification)
-The embedded Raspberry Pi 3 uses a standard (unencrypted) installation, but the SSH port is closed and the default password has been changed by Legrand. You must intervene directly on the SD card:
 
-1. Dismount the station (power off) to retrieve the Raspberry Pi SD card and read it on your computer.
+> [!NOTE]
+> **Work in progress:** Tools and automated procedures are currently being developed to enable SSH access directly over the network without requiring physical disassembly or SD card removal.
+
+The embedded Raspberry Pi 3 uses a standard installation, but SSH is closed and the default password was changed by Legrand:
+
+1. Turn off power and retrieve the microSD card from the Raspberry Pi.
 2. **Enable SSH**: Create an empty file named `ssh` (no extension) at the root of the `boot` partition.
-3. **Reset password**: The `pi` user exists but its password is unknown.
-   - On your computer (under Linux or WSL), generate the hash of a new password with: `mkpasswd -m sha-512`
-   - Open the main partition (rootfs) of the SD card and edit the `/etc/shadow` file.
-   - Find the line starting with `pi:` (e.g., `pi:<unknown-hash>:18508:0:99999:7:::`) and replace the existing hash with the one you just generated.
-4. Put the SD card back into the Raspberry Pi and power on the station.
-5. You can now connect via SSH: `ssh pi@<station_ip>` using the password you set. The `pi` user has administrator (sudo) rights.
+3. **Reset password**:
+   - On your PC (Linux or WSL), generate a password hash: `mkpasswd -m sha-512`
+   - Open the main `rootfs` partition and edit `/etc/shadow`.
+   - Replace the hash on the line starting with `pi:` with your generated hash.
+4. Insert the SD card back into the Raspberry Pi and power on the station.
+5. Connect via SSH: `ssh pi@<station_ip>` using your password (`pi` has sudo rights).
 
 ### 3. Securing SSH access
-Once connected to the Raspberry Pi via SSH, it is imperative to secure it.
-⚠️ **SECURITY NOTE:** The Raspberry Pi runs on an old OS with many known vulnerabilities. **NEVER** expose it to the internet (no port forwarding on your router).
+⚠️ **SECURITY NOTE:** The Raspberry Pi runs on an older OS. **NEVER** expose it directly to the public internet (no port forwarding on your router).
 
-1. **Immediately change the root password**:
+1. **Change the root password**:
    ```bash
-   passwd root
+   sudo passwd root
    ```
-2. **Secure access via public key exchange**:
-   From your PC, send your public key (if you don't have one, generate it with `ssh-keygen`):
+2. **Install your SSH public key**:
    ```bash
-   ssh-copy-id pi@192.168.1.xxx
+   # From your PC:
+   ssh-copy-id pi@<station_ip>
    ```
-   > ⚠️ **Warning:** Before disabling password authentication, verify that key-based connection works, otherwise you will lose SSH access and will have to dismount the micro SD card again.
+3. Disable password authentication in `/etc/ssh/sshd_config` (`PasswordAuthentication no`, `PermitRootLogin no`), then reload ssh: `sudo systemctl reload ssh`.
 
-3. Disable password authentication in `/etc/ssh/sshd_config` (`PasswordAuthentication no`), as well as root authentication (`PermitRootLogin no`).
+### 4. Installation of Green'Up Link
 
-4. **Neutralize Legrand security**: 
-   The original software includes an emergency "destruction" script (`DeletAll.sh`) that erases all software if the network MAC addresses do not match Legrand's expectations.
-   - Edit the file: `nano ~/Desktop/DeletAll.sh`
-   - Add the `exit 0` command on the second line (right after `#!/bin/bash`).
-   - Remove execution rights: `chmod -x ~/Desktop/DeletAll.sh`
+#### GitHub Releases & Supported Architectures
+Pre-compiled packages and standalone binaries are available on the [GitHub Releases page](https://github.com/BolzaW/greenup-link/releases):
 
-### 4. Installing Green'Up Link
-1. Transfer the compiled binary (`greenup-link`) and the scripts to the station via SCP. From your PC:
+| Release Asset | Architecture / Target | Intended System | Package Contents |
+| :--- | :--- | :--- | :--- |
+| **`greenup-link-vX.Y.Z-armv7-legacy.zip`** | ARMv7 32-bit (`armv7-unknown-linux-gnueabihf.2.24`) | **Official Legrand kit** (Debian 9 Stretch, glibc 2.24) and 32-bit Raspberry Pi OS | `greenup-link`, `install.sh`, `uninstall.sh`, `README.md`, `README.fr.md` |
+| **`greenup-link-vX.Y.Z-aarch64.zip`** | AArch64 64-bit (`aarch64-unknown-linux-gnu`) | **Standard Raspberry Pi OS 64-bit Lite** (Pi Zero 2 W, Pi 3, Pi 4, Pi 5) | `greenup-link`, `install.sh`, `uninstall.sh`, `README.md`, `README.fr.md` |
+| **`greenup-link-armv7-legacy`** | ARMv7 32-bit | Standalone executable (glibc 2.24 compatible) | Single binary |
+| **`greenup-link-aarch64`** | AArch64 64-bit | Standalone executable | Single binary |
+| **`SHA256SUMS.txt`** | - | SHA256 checksums for integrity verification | Text file |
+
+#### Option A: Quick 1-Liner (Automatic architecture detection & download)
+If the Raspberry Pi has internet access, simply run the installation script directly:
+```bash
+ssh pi@<station_ip>
+curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash
+```
+> [!TIP]
+> - The script automatically identifies the system architecture (`armv7` 32-bit legacy or `aarch64` 64-bit), queries the latest release on GitHub, downloads the matching standalone binary directly, and installs `greenup-link` into `/home/pi/greenup/`.
+> - **To update:** Simply re-run the exact same 1-liner command at any time. The script detects your existing installation, downloads the latest release, and restarts the service automatically.
+
+#### Option B: Offline / Manual Installation (Using Release ZIP)
+If your charging station does not have direct internet access:
+1. **Download the appropriate ZIP archive** from the [GitHub Releases page](https://github.com/BolzaW/greenup-link/releases) on your PC:
+   - For official Legrand kit: `greenup-link-vX.Y.Z-armv7-legacy.zip`
+   - For modern 64-bit Raspberry Pi OS: `greenup-link-vX.Y.Z-aarch64.zip`
+2. **Transfer the archive to the Raspberry Pi** via SCP:
    ```bash
-   scp target/armv7-unknown-linux-gnueabihf/debug/greenup-link pi@192.168.1.xxx:~/Desktop/rust
-   scp scripts/* pi@192.168.1.xxx:~/Desktop/rust
+   scp greenup-link-v*.zip pi@<station_ip>:~/
    ```
-2. Stop the current Legrand services by running the `stop` script.
-3. **(Optional but recommended) Disable auto-start** of the original Legrand software. If you don't do this, the official software will restart on every reboot:
+3. **Connect via SSH, extract the archive, and run the installer**:
    ```bash
-   sudo update-rc.d -f CommunicationArduinoRasp remove
+   ssh pi@<station_ip>
+   unzip greenup-link-v*.zip
+   chmod +x install.sh
+   sudo ./install.sh
    ```
+   *(Note: The archive already bundles `install.sh` and the pre-configured `greenup-link` binary. If `unzip` is not installed on the station, extract the archive on your PC and transfer the contents).*
 
-### 5. Auto-start Green'Up Link at boot
-To launch the application automatically, create a Systemd service:
-1. Create the service file (requires sudo rights): `sudo nano /etc/systemd/system/greenup-link.service`
-2. Paste this configuration:
-   ```ini
-   [Unit]
-   Description=GreenUp Link Service
-   After=network.target
+---
 
-   [Service]
-   ExecStart=/home/pi/Desktop/rust/greenup-link
-   WorkingDirectory=/home/pi/Desktop/rust/
-   StandardOutput=inherit
-   StandardError=inherit
-   Restart=always
-   User=root
+The automated installer performs all required setup steps:
+- **Environment detection**: Automatically detects whether it is running on an official Legrand factory image or a clean/standard Raspberry Pi OS (e.g. DIY kit or reflashed SD card).
+- **Legrand stack neutralization (if present)**: Stops legacy Apache Tomcat 9 and Java daemon, neutralizes `/etc/init.d/CommunicationArduinoRasp` (with `.old` backup), and neutralizes `/home/pi/Desktop/DeletAll.sh` (with `.old` backup). On a standard/clean OS, this step is automatically bypassed.
+- **Binary installation**: Installs `greenup-link` into `/home/pi/greenup/` with executable permissions (auto-downloaded from GitHub or copied from local directory).
+- **Uninstaller installation**: Deploys `uninstall.sh` into `/home/pi/greenup/uninstall.sh` for quick local rollback.
+- **Systemd service configuration**: Generates, enables, and immediately starts `/etc/systemd/system/greenup-link.service`.
 
-   [Install]
-   WantedBy=multi-user.target
-   ```
-3. Enable and start the service:
-   ```bash
-   sudo systemctl enable greenup-link
-   sudo systemctl start greenup-link
-   ```
+### 5. Managing the Service
+
+- **Check service status**:
+  ```bash
+  sudo systemctl status greenup-link
+  ```
+- **Inspect live logs in console**:
+  ```bash
+  sudo journalctl -u greenup-link -f
+  ```
+- **Restart the service**:
+  ```bash
+  sudo systemctl restart greenup-link
+  ```
+- **Stop the service**:
+  ```bash
+  sudo systemctl stop greenup-link
+  ```
 
 ### 6. Usage
-- **Web GUI**: Simply open the station's IP address on port 8080 from your browser (e.g. `http://192.168.1.xxx:8080`).
-- **Tests & CLI**: Use the provided PowerShell script `cli-greenup-link.ps1` from your PC to interact with the API via command line.
-- **Home Automation**: Check the [REST API Documentation](docs/GREENUP_LINK_REST_API.md) to interface your home automation controller.
-- **EVerest Module**: For integration with the open-source EV charging framework EVerest (via MQTT), please refer to the dedicated [EVerest Integration Documentation](crates/greenup-everest/README.md).
+- **Web GUI**: Open `http://<station_ip>:8080` in your browser. Includes interactive telemetry, charging controls (7A–32A), Linky TIC status, and real-time live console with SSE log streaming.
+- **REST API**: Refer to the complete [REST API Documentation](docs/GREENUP_LINK_REST_API.md) to integrate with Home Assistant, Jeedom, Node-RED, etc.
+- **Interactive CLI**: Use `scripts/cli-greenup-link.ps1` from PowerShell on Windows to test endpoints or send raw serial commands.
+- **EVCC Integration**: Refer to the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md) for smart solar diversion charging.
+
+### 7. Rollback & Uninstallation (Restoring Legrand software)
+
+If you ever wish to revert to the factory Legrand software stack or uninstall Green'Up Link, an automated rollback script is provided.
+
+- **Run locally from the station** (installed automatically with Green'Up Link):
+  ```bash
+  sudo /home/pi/greenup/uninstall.sh
+  ```
+- **Or run via online 1-liner**:
+  ```bash
+  curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/uninstall.sh | sudo bash
+  ```
+
+The script interactively prompts you to choose between:
+1. **Disable only (Keep files)**: Stops and removes `greenup-link.service`, preserving the `/home/pi/greenup/` directory and log files.
+2. **Full purge**: Stops the service and permanently deletes `/home/pi/greenup/`.
+
+In both cases, if the official Legrand software stack is present on the OS, the script automatically restores it:
+- Restores `/etc/init.d/CommunicationArduinoRasp` from backup and re-enables it on boot.
+- Restores `/home/pi/Desktop/DeletAll.sh` from backup and restores execution permissions.
+- Re-enables and starts Apache Tomcat 9 and Java daemons.
+*(On a clean/standard Raspberry Pi OS or DIY kit, this Legrand restoration step is automatically bypassed).*
+
+> [!IMPORTANT]
+> **Worst-Case Scenario Safeguard:** While the rollback script faithfully restores your system configuration, making a complete raw disk image backup of your original microSD card (using tools like *Win32DiskImager*, *Raspberry Pi Imager*, or `dd`) before any modification is strongly recommended to protect against worst-case scenarios (such as filesystem corruption or flash memory failure).
+
+---
+
+## ❓ Frequently Asked Questions (FAQ)
+
+<details>
+<summary><strong>1. Do I strictly need the official Legrand Communication Kit (059056)?</strong></summary>
+
+**No.** If your station does not have the official kit, you can easily build your own using a standard Raspberry Pi (Pi Zero 2 W, Pi 3, Pi 4, etc.) running official 64-bit Raspberry Pi OS Lite, connected to the motherboard via an internal USB cable.
+
+Powering the Raspberry Pi can be achieved in two ways:
+- **Internally:** using a small waterproof DC-DC buck converter (12V/24V to 5V) plugged into the station's auxiliary Molex connector (just like the official kit).
+- **Externally (simplified alternative):** using a standard Raspberry Pi USB power supply (micro-USB or USB-C) routed into the enclosure through one of the waterproof cable entries / glands (*presse-étoupe*) located under the chassis (assuming an AC mains wall outlet or extension cord is nearby).
+
+See our step-by-step [DIY Communication Kit Guide](docs/KIT_COMMUNICATION_DIY.md) with parts list, wiring, and assembly instructions.
+</details>
+
+<details>
+<summary><strong>2. Does Green'Up Link replace the Legrand mobile apps (EV Charge / EV Charge Light)?</strong></summary>
+
+**No.** Legrand's mobile apps communicate directly with the charging station's power board over Bluetooth Low Energy (BLE). Green'Up Link replaces the IP network kit (Ethernet/Wi-Fi). If you currently control your station solely with the mobile app and do not have an IP kit, you will need a communication board (official or DIY) to run Green'Up Link. Background reverse-engineering of the native Bluetooth protocol is currently in progress.
+</details>
+
+<details>
+<summary><strong>3. Is there any risk to the electrical safety of my station or vehicle?</strong></summary>
+
+**No on the high-voltage/power side.** Green'Up Link only replaces the communication layer running on the Raspberry Pi. The station retains 100% of its native electrical safety features, physical protections, differential tripping, and autonomous control through its internal ATmega2560 microcontroller. Green'Up Link only transmits logical setpoint instructions (7A–32A) and reads telemetry over USB serial.
+</details>
+
+<details>
+<summary><strong>4. Can I revert to the factory Legrand software?</strong></summary>
+
+**Yes.** An automated rollback script is provided:
+```bash
+sudo /home/pi/greenup/uninstall.sh
+```
+It restores the original Legrand startup scripts, un-neutralizes emergency scripts, re-enables Apache Tomcat 9 and Java daemons, and gives you the option to keep or delete Green'Up Link files.
+
+*Safeguard tip:* In addition to the script, taking a full raw image backup of your microSD card before starting is strongly advised to guard against worst-case scenarios.
+</details>
+
+<details>
+<summary><strong>5. Is my three-phase or domestic Schuko socket station supported?</strong></summary>
+
+**The charging station operates nominally in local autonomous mode.** Even on a three-phase station or one equipped with an auxiliary domestic Schuko socket, the station continues to handle charging normally in local standalone mode (governed autonomously by the native ATmega2560 power board without remote management).
+
+However, **remote control via the Web UI and API** (three-phase telemetry monitoring, specific commands or switching for the domestic socket) is not yet supported due to a lack of serial capture logs and test hardware. If you own one of these models, please consider helping test and capture logs (see [Call for Testers](#-call-for-testers--contributions)).
+</details>
+
+<details>
+<summary><strong>6. How do I integrate Green'Up Link into Home Assistant or EVCC?</strong></summary>
+
+- **EVCC:** Follow the dedicated [EVCC Integration Guide](docs/EVCC_INTEGRATION.md) for dynamic solar diversion charging.
+- **Home Assistant:** You can integrate immediately using the [REST API](docs/GREENUP_LINK_REST_API.md) (REST sensor and command switches). Native MQTT with Home Assistant Auto-Discovery is also on the roadmap.
+</details>
+
+<details>
+<summary><strong>7. Why replace the official Legrand software?</strong></summary>
+
+The factory software running on Debian 9 Stretch contains obsolete packages (Apache Tomcat 9, legacy Java runtime) with multiple known critical CVEs. It is also slow, unmaintained, and closed to modern home automation. Green'Up Link provides a lightweight, secure, and modern alternative written in Rust with zero external dependencies.
+</details>
 
 ---
 
 ## 🚀 Future Features
 
 The roadmap includes (with no guaranteed timeline):
-- MQTT integration for Home Automation
-- Compatibility with recent Raspberry Pi OS releases
-- Custom ATmega firmware with more capabilities (like more telemetry info from TIC signals)
-- OCPP communication mode support
-- Extending compatibility to other station models in the range:
-  - Schuko (domestic socket) compatibility
-  - Three-phase equipment support
-  - Dual charge points wallbox support
+- **Native MQTT integration** with **Home Assistant Auto-Discovery** (automatic entity creation for sensors, switches, and charging current control).
+- **Charging session history**: Recording charging sessions in CSV format, with session visualization and CSV export directly from the Web GUI.
+- Custom ATmega firmware with enhanced telemetry and features.
+- Support for the OCPP communication protocol.
+- Extending compatibility to other station models in the range (domestic Schuko socket, three-phase equipment, dual charge points).
 
-*Note: Feel free to use GitHub "Issues" to suggest or request specific features you might need!*
+---
 
+## 🤝 Call for Testers & Contributions
+
+I am actively seeking testers who own different hardware configurations of the Legrand Green'up Premium range (e.g. wallboxes equipped with a domestic Schuko socket, three-phase models, dual charge points, or different PCB / firmware revisions).
+
+The goal is to collect serial communication logs to understand how these variants behave and extend Green'Up Link to support the entire range.
+
+If you have one of these models and would like to help test or share logs, please feel free to:
+- Open a **[GitHub Issue](https://github.com/BolzaW/greenup-link/issues)**
+- Or reach out directly by email: **[bolzaw.dev@gmail.com](mailto:bolzaw.dev@gmail.com)**
