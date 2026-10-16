@@ -268,7 +268,9 @@ It restores the original Legrand startup scripts, un-neutralizes emergency scrip
 <details>
 <summary><strong>5. Is my three-phase or domestic Schuko socket station supported?</strong></summary>
 
-**Nominally on Type 2 only.** The Type 2 socket operates normally across all Green'up Premium stations. However, charging on the domestic Schuko socket and three-phase mode are not yet supported due to a lack of test hardware and serial logs. If you own one of these models, please consider helping test and capture logs (see [Call for Testers](#-call-for-testers--contributions)).
+**The charging station operates nominally in local autonomous mode.** Even on a three-phase station or one equipped with an auxiliary domestic Schuko socket, the station continues to handle charging normally in local standalone mode (governed autonomously by the native ATmega2560 power board without remote management).
+
+However, **remote control via the Web UI and API** (three-phase telemetry monitoring, specific commands or switching for the domestic socket) is not yet supported due to a lack of serial capture logs and test hardware. If you own one of these models, please consider helping test and capture logs (see [Call for Testers](#-call-for-testers--contributions)).
 </details>
 
 <details>

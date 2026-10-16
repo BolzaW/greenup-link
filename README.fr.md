@@ -265,7 +265,9 @@ Il restaure les scripts de démarrage Legrand, retire les neutralisations des sc
 <details>
 <summary><strong>5. Ma borne est en triphasé ou dispose d'une prise domestique Schuko, est-elle supportée ?</strong></summary>
 
-**En théorie pour la prise Type 2 uniquement.** La prise Type 2 fonctionne de façon nominale sur toutes les bornes de la gamme Green'up Premium. En revanche, la charge sur la prise domestique Schuko et le triphasé ne sont pas encore pris en charge par manque de connaissances et de logs matériels. Si vous possédez l'un de ces modèles, n'hésitez pas à participer aux tests pour capturer des logs (voir [Appel à testeurs](#-appel-à-testeurs--contributions)).
+**La borne fonctionne nominalement en mode autonome local.** Même sur une borne triphasée ou équipée d'une prise domestique Schuko, la borne continue d'assurer les recharges normalement en local (géré de manière autonome par la carte de puissance ATmega2560 sans pilotage à distance).
+
+En revanche, c'est le **pilotage à distance via l'interface Web et l'API** (lecture de la télémétrie triphasée, commutation ou consignes spécifiques pour la prise Schuko) qui n'est pas encore pris en charge par manque de traces et de matériel de test. Si vous possédez l'un de ces modèles, n'hésitez pas à participer aux tests pour capturer des logs série (voir [Appel à testeurs](#-appel-à-testeurs--contributions)).
 </details>
 
 <details>
