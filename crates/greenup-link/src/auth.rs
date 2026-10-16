@@ -188,12 +188,16 @@ pub async fn auth_status(
     req: Request,
 ) -> impl IntoResponse {
     match api_token {
-        None => Json(json!({
-            "auth_required": false,
-            "authenticated": true
-        })),
+        None => {
+            logger::debug("API", "🔐 Auth status check: authentication disabled (open access)");
+            Json(json!({
+                "auth_required": false,
+                "authenticated": true
+            }))
+        }
         Some(expected) => {
             let valid = is_request_authorized(req.headers(), req.uri().query(), expected.as_str());
+            logger::debug("API", &format!("🔐 Auth status check: required=true, authenticated={}", valid));
             Json(json!({
                 "auth_required": true,
                 "authenticated": valid

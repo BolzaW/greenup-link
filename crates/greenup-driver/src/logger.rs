@@ -196,31 +196,15 @@ pub fn init() {
     println!("[Logger] 📝 Daily rolling log active: {} (level: {})", initial_path, get_log_level().as_str());
 }
 
-/// Writes an entry to stdout, daily log file, ring buffer, and live SSE broadcast.
-pub fn log(category: &str, message: &str) {
+/// Writes an entry to stdout, daily log file, ring buffer, and live SSE broadcast with an explicit category and level.
+pub fn log_with_level(category: &str, level: LogLevel, message: &str) {
     let now = Local::now();
     let time_str = now.format("%H:%M:%S%.3f").to_string();
     let full_timestamp = now.format("%Y-%m-%d %H:%M:%S%.3f");
-    let entry_text = format!("[{}] [{}] {}", full_timestamp, category, message);
-
-    let (level_enum, level_str) = match category {
-        "DEBUG" => (LogLevel::Debug, "DEBUG"),
-        "TRACE" => (LogLevel::Trace, "TRACE"),
-        "ERROR" => (LogLevel::Error, "ERROR"),
-        "WARN" => (LogLevel::Warn, "WARN"),
-        _ => {
-            if message.contains("❌") || message.to_lowercase().contains("error") {
-                (LogLevel::Error, "ERROR")
-            } else if message.contains("⚠️") {
-                (LogLevel::Warn, "WARN")
-            } else {
-                (LogLevel::Info, "INFO")
-            }
-        }
-    };
+    let entry_text = format!("[{}] [{}] [{}] {}", full_timestamp, level.as_str(), category, message);
 
     let configured_level = get_log_level();
-    let should_output = level_enum <= configured_level;
+    let should_output = level <= configured_level;
 
     // Console output
     if should_output {
@@ -239,7 +223,7 @@ pub fn log(category: &str, message: &str) {
         id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
         timestamp: time_str,
         category: category.to_string(),
-        level: level_str.to_string(),
+        level: level.as_str().to_string(),
         message: message.to_string(),
     };
 
@@ -253,4 +237,35 @@ pub fn log(category: &str, message: &str) {
 
     // Broadcast to SSE subscribers
     let _ = get_broadcast_sender().send(log_item);
+}
+
+/// Convenience function for logging at DEBUG level.
+pub fn debug(category: &str, message: &str) {
+    log_with_level(category, LogLevel::Debug, message);
+}
+
+/// Convenience function for logging at TRACE level.
+pub fn trace(category: &str, message: &str) {
+    log_with_level(category, LogLevel::Trace, message);
+}
+
+/// Writes an entry to stdout, daily log file, ring buffer, and live SSE broadcast (inferring level from category/content).
+pub fn log(category: &str, message: &str) {
+    let level_enum = match category {
+        "DEBUG" => LogLevel::Debug,
+        "TRACE" => LogLevel::Trace,
+        "ERROR" => LogLevel::Error,
+        "WARN" => LogLevel::Warn,
+        _ => {
+            if message.contains("❌") || message.to_lowercase().contains("error") {
+                LogLevel::Error
+            } else if message.contains("⚠️") {
+                LogLevel::Warn
+            } else {
+                LogLevel::Info
+            }
+        }
+    };
+
+    log_with_level(category, level_enum, message);
 }

@@ -1,9 +1,10 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Request, State},
     http::StatusCode,
+    middleware::Next,
     response::{
         sse::{Event, KeepAlive, Sse},
-        Html, IntoResponse,
+        Html, IntoResponse, Response,
     },
     routing::{get, post},
     Json, Router,
@@ -19,6 +20,27 @@ use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
 
 use std::sync::Arc;
 use crate::auth::{self, SharedApiToken};
+
+/// Axum middleware logging API requests at DEBUG level (or TRACE for high-frequency polling).
+async fn api_debug_logger(req: Request, next: Next) -> Response {
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+
+    // High frequency polling endpoints are logged at TRACE to avoid cluttering DEBUG logs
+    if path == "/api/telemetry" || path == "/api/logs/stream" {
+        logger::trace("API", &format!("{} {}", method, path));
+    } else {
+        logger::debug("API", &format!("→ {} {}", method, path));
+    }
+
+    let response = next.run(req).await;
+
+    if path != "/api/telemetry" && path != "/api/logs/stream" {
+        logger::debug("API", &format!("← {} {} [{}]", method, path, response.status()));
+    }
+
+    response
+}
 
 pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
     let token_state: SharedApiToken = api_token.map(Arc::new);
@@ -47,6 +69,11 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
         .route("/api/auth/status", get(auth::auth_status))
         .with_state(token_state);
 
+    let api_router = Router::new()
+        .merge(auth_router)
+        .merge(protected_api)
+        .layer(axum::middleware::from_fn(api_debug_logger));
+
     Router::new()
         .route("/", get(serve_ui))
         .route("/favicon.ico", get(serve_favicon))
@@ -61,8 +88,7 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
         .route("/js/api.js", get(serve_js_api))
         .route("/js/console.js", get(serve_js_console))
         .route("/js/main.js", get(serve_js_main))
-        .merge(auth_router)
-        .merge(protected_api)
+        .merge(api_router)
 }
 
 #[derive(serde::Deserialize)]
@@ -140,11 +166,14 @@ async fn serve_js_console() -> impl IntoResponse {
 
 /// GET /api/logs
 async fn get_logs() -> impl IntoResponse {
-    Json(logger::get_recent_logs())
+    let logs = logger::get_recent_logs();
+    logger::debug("API", &format!("📋 Fetching recent logs buffer ({} entries)", logs.len()));
+    Json(logs)
 }
 
 /// GET /api/logs/stream (SSE)
 async fn stream_logs() -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
+    logger::debug("API", "📡 SSE log stream client connected");
     let rx = logger::subscribe();
     let stream = BroadcastStream::new(rx).filter_map(|res| match res {
         Ok(entry) => {
@@ -163,6 +192,7 @@ async fn stream_logs() -> Sse<impl tokio_stream::Stream<Item = Result<Event, Inf
 /// GET /api/logs/export
 async fn export_logs() -> impl IntoResponse {
     let (filename, content) = logger::get_current_log_content();
+    logger::debug("API", &format!("💾 Exporting log archive: {} ({} bytes)", filename, content.len()));
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(
         axum::http::header::CONTENT_TYPE,
@@ -182,6 +212,7 @@ pub struct LogLevelPayload {
 /// GET /api/logs/level
 async fn get_log_level_handler() -> impl IntoResponse {
     let current = logger::get_log_level();
+    logger::debug("API", &format!("🎚️ Log level requested: {}", current.as_str()));
     Json(json!({ "level": current.as_str() }))
 }
 
@@ -189,11 +220,13 @@ async fn get_log_level_handler() -> impl IntoResponse {
 async fn set_log_level_handler(Json(payload): Json<LogLevelPayload>) -> impl IntoResponse {
     if let Some(level) = logger::LogLevel::from_str_loose(&payload.level) {
         logger::set_log_level(level);
+        logger::log("API", &format!("⚙️ Log level set to: {}", level.as_str()));
         (
             StatusCode::OK,
             Json(json!({ "status": "success", "level": level.as_str() })),
         )
     } else {
+        logger::log("API", &format!("⚠️ Invalid log level requested: '{}'", payload.level));
         (
             StatusCode::BAD_REQUEST,
             Json(json!({ "error": format!("Invalid log level: '{}'. Expected ERROR, WARN, INFO, DEBUG, or TRACE", payload.level) })),
@@ -203,7 +236,7 @@ async fn set_log_level_handler(Json(payload): Json<LogLevelPayload>) -> impl Int
 
 /// GET /api/info
 async fn get_info(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "🔍 GET request /api/info");
+    logger::debug("API", "🔍 GET request /api/info");
     let info = state.info.lock().unwrap().clone();
     Json(info)
 }
@@ -374,7 +407,10 @@ async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
             }
         },
-        _ => (StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid action"})))
+        _ => {
+            logger::log("API", &format!("⚠️ Invalid charge action received: '{}'", payload.action));
+            (StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid action"})))
+        }
     }
 }
 

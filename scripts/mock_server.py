@@ -109,6 +109,7 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             filename = url[len("/locales/"):]
             self.serve_file(BASE_DIR / "locales" / filename, "application/json; charset=utf-8")
         elif url == "/api/auth/status":
+            add_mock_log("API", "DEBUG", "🔐 GET /api/auth/status (auth_required: False)")
             self.send_json({"auth_required": False, "authenticated": True})
         elif url == "/api/telemetry":
             if state["iec_state"] == "C" and not state["charge_paused"]:
@@ -116,6 +117,7 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 state["energy"] += (state["power"] * 2.0 / 3600.0)
             self.send_json(state)
         elif url == "/api/info":
+            add_mock_log("API", "DEBUG", "🔍 GET /api/info")
             info = {
                 "reference": "059001",
                 "hardware_version": "01",
@@ -127,12 +129,15 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             }
             self.send_json(info)
         elif url == "/api/logs":
+            add_mock_log("API", "DEBUG", f"📋 GET /api/logs ({len(mock_logs)} entries)")
             self.send_json(mock_logs)
         elif url == "/api/logs/stream":
+            add_mock_log("API", "DEBUG", "📡 GET /api/logs/stream (SSE client connected)")
             self.handle_sse_stream()
         elif url == "/api/logs/export":
             self.handle_logs_export()
         elif url == "/api/logs/level":
+            add_mock_log("API", "DEBUG", f"🎚️ GET /api/logs/level → {state.get('log_level', 'INFO')}")
             self.send_json({"level": state.get("log_level", "INFO")})
         else:
             self.send_error(404, "Not Found")
@@ -140,6 +145,7 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
     def handle_logs_export(self):
         now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"greenup_{now}.log"
+        add_mock_log("API", "DEBUG", f"💾 GET /api/logs/export ({filename})")
         lines = []
         for entry in mock_logs:
             lines.append(f"[{entry['timestamp']}] [{entry['level']}] [{entry['category']}] {entry['message']}\n")
@@ -303,6 +309,12 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             else:
                 add_mock_log("SERIAL_RX", "INFO", "ACK")
             self.send_json({"status": "success", "message": "Command sent"})
+        elif url == "/api/init":
+            add_mock_log("API", "INFO", "🔄 Initialization sequence started (mock)")
+            self.send_json({"status": "success", "message": "Initialization sequence started"})
+        elif url == "/api/reset":
+            add_mock_log("API", "WARN", "⚠️ Hardware restart requested (mock)")
+            self.send_json({"status": "success", "message": "ATmega board restart requested"})
         else:
             self.send_json({"status": "success"})
 
