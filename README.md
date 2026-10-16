@@ -136,8 +136,8 @@ Pre-compiled packages and standalone binaries are available on the [GitHub Relea
 
 | Release Asset | Architecture / Target | Intended System | Package Contents |
 | :--- | :--- | :--- | :--- |
-| **`greenup-link-vX.Y.Z-armv7-legacy.zip`** | ARMv7 32-bit (`armv7-unknown-linux-gnueabihf.2.24`) | **Official Legrand kit** (Debian 9 Stretch, glibc 2.24) and 32-bit Raspberry Pi OS | `greenup-link`, `install.sh`, `README.md`, `README.fr.md` |
-| **`greenup-link-vX.Y.Z-aarch64.zip`** | AArch64 64-bit (`aarch64-unknown-linux-gnu`) | **Standard Raspberry Pi OS 64-bit Lite** (Pi Zero 2 W, Pi 3, Pi 4, Pi 5) | `greenup-link`, `install.sh`, `README.md`, `README.fr.md` |
+| **`greenup-link-vX.Y.Z-armv7-legacy.zip`** | ARMv7 32-bit (`armv7-unknown-linux-gnueabihf.2.24`) | **Official Legrand kit** (Debian 9 Stretch, glibc 2.24) and 32-bit Raspberry Pi OS | `greenup-link`, `install.sh`, `uninstall.sh`, `README.md`, `README.fr.md` |
+| **`greenup-link-vX.Y.Z-aarch64.zip`** | AArch64 64-bit (`aarch64-unknown-linux-gnu`) | **Standard Raspberry Pi OS 64-bit Lite** (Pi Zero 2 W, Pi 3, Pi 4, Pi 5) | `greenup-link`, `install.sh`, `uninstall.sh`, `README.md`, `README.fr.md` |
 | **`greenup-link-armv7-legacy`** | ARMv7 32-bit | Standalone executable (glibc 2.24 compatible) | Single binary |
 | **`greenup-link-aarch64`** | AArch64 64-bit | Standalone executable | Single binary |
 | **`SHA256SUMS.txt`** | - | SHA256 checksums for integrity verification | Text file |
@@ -221,10 +221,11 @@ The script interactively prompts you to choose between:
 1. **Disable only (Keep files)**: Stops and removes `greenup-link.service`, preserving the `/home/pi/greenup/` directory and log files.
 2. **Full purge**: Stops the service and permanently deletes `/home/pi/greenup/`.
 
-In both cases, the script automatically restores the original Legrand environment:
+In both cases, if the official Legrand software stack is present on the OS, the script automatically restores it:
 - Restores `/etc/init.d/CommunicationArduinoRasp` from backup and re-enables it on boot.
-- Restores all neutralized `DeletAll.sh` scripts from backup and restores execution permissions.
+- Restores `/home/pi/Desktop/DeletAll.sh` from backup and restores execution permissions.
 - Re-enables and starts Apache Tomcat 9 and Java daemons.
+*(On a clean/standard Raspberry Pi OS or DIY kit, this Legrand restoration step is automatically bypassed).*
 
 > [!IMPORTANT]
 > **Worst-Case Scenario Safeguard:** While the rollback script faithfully restores your system configuration, making a complete raw disk image backup of your original microSD card (using tools like *Win32DiskImager*, *Raspberry Pi Imager*, or `dd`) before any modification is strongly recommended to protect against worst-case scenarios (such as filesystem corruption or flash memory failure).

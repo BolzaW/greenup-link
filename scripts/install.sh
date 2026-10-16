@@ -197,17 +197,20 @@ fi
 chmod +x "$TARGET_BIN"
 
 # 4. Install uninstaller into target directory
+UNINSTALL_TARGET="$TARGET_DIR/uninstall.sh"
 echo ""
 echo "[3/4] Installing rollback/uninstall script to $UNINSTALL_TARGET..."
-UNINSTALL_TARGET="$TARGET_DIR/uninstall.sh"
-if [ -f "$SCRIPT_DIR/uninstall.sh" ]; then
+if [ -f "$SCRIPT_DIR/uninstall.sh" ] && [ "$(realpath "$SCRIPT_DIR/uninstall.sh" 2>/dev/null || echo "$SCRIPT_DIR/uninstall.sh")" != "$UNINSTALL_TARGET" ]; then
     cp -p "$SCRIPT_DIR/uninstall.sh" "$UNINSTALL_TARGET"
     chmod +x "$UNINSTALL_TARGET"
     echo "  -> Installed uninstaller to $UNINSTALL_TARGET"
-elif [ -f "./uninstall.sh" ]; then
+elif [ -f "./uninstall.sh" ] && [ "$(realpath ./uninstall.sh 2>/dev/null || echo "./uninstall.sh")" != "$UNINSTALL_TARGET" ]; then
     cp -p "./uninstall.sh" "$UNINSTALL_TARGET"
     chmod +x "$UNINSTALL_TARGET"
     echo "  -> Installed uninstaller to $UNINSTALL_TARGET"
+elif [ -f "$UNINSTALL_TARGET" ] && { [ "$1" = "--reconfigure" ] || [ "$1" = "--offline" ] || [ "$1" = "--no-download" ]; }; then
+    chmod +x "$UNINSTALL_TARGET"
+    echo "  -> Keeping existing uninstaller at $UNINSTALL_TARGET"
 else
     UNINSTALL_URL="https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/uninstall.sh"
     if command -v curl >/dev/null 2>&1; then
@@ -216,6 +219,7 @@ else
         wget -qO "$UNINSTALL_TARGET" "$UNINSTALL_URL" 2>/dev/null && chmod +x "$UNINSTALL_TARGET" || true
     fi
     if [ -f "$UNINSTALL_TARGET" ]; then
+        chmod +x "$UNINSTALL_TARGET"
         echo "  -> Installed uninstaller to $UNINSTALL_TARGET"
     fi
 fi

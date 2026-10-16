@@ -90,7 +90,7 @@ if [ -f "$SERVICE_FILE" ] || systemctl is-active --quiet greenup-link.service 2>
 else
     echo "  -> Service greenup-link was not active or installed."
 fi
-pkill -9 -f greenup-link 2>/dev/null || true
+pkill -9 -x greenup-link 2>/dev/null || true
 
 # 2. Restore Legrand software stack if present
 echo ""

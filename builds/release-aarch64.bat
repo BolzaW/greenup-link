@@ -38,7 +38,9 @@ if exist "release_pkg" rmdir /S /Q "release_pkg"
 mkdir "release_pkg"
 copy "%BINARY_PATH%" "release_pkg\greenup-link" >nul
 if exist "scripts\install.sh" copy "scripts\install.sh" "release_pkg\" >nul
+if exist "scripts\uninstall.sh" copy "scripts\uninstall.sh" "release_pkg\" >nul
 if exist "README.md" copy "README.md" "release_pkg\" >nul
+if exist "README.fr.md" copy "README.fr.md" "release_pkg\" >nul
 
 set ZIP_FILE=greenup-link-v%VERSION%-aarch64.zip
 if exist "%ZIP_FILE%" del "%ZIP_FILE%"
