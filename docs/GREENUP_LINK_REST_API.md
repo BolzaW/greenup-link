@@ -90,7 +90,7 @@ Three standard authentication methods are supported simultaneously against the s
     "serial": {
       "status": "usb_connected",
       "port": "/dev/ttyUSB0",
-      "message": "Liaison série USB active - Borne connectée",
+      "message": "USB serial link active - Station connected",
       "last_rx_secs_ago": 0
     },
     "voltage": 232.0,
@@ -133,7 +133,7 @@ Three standard authentication methods are supported simultaneously against the s
 > ```json
 > {
 >   "status": "error",
->   "error": "Commande impossible : Câble USB déconnecté (aucun adaptateur USB détecté)",
+>   "error": "Command unavailable: USB cable disconnected (no USB adapter detected)",
 >   "serial_status": "usb_disconnected"
 > }
 > ```

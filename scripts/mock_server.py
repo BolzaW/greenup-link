@@ -35,7 +35,7 @@ state = {
     "serial": {
         "status": "usb_connected",
         "port": "/dev/ttyUSB0",
-        "message": "Liaison série USB active - Borne connectée",
+        "message": "USB serial link active - Station connected",
         "last_rx_secs_ago": 0,
     },
     "voltage": 230.8,

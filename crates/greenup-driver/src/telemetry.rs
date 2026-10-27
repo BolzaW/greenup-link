@@ -26,7 +26,7 @@ impl Default for SerialConnection {
         Self {
             status: SerialStatus::UsbDisconnected,
             port: String::from("/dev/ttyUSB0"),
-            message: String::from("Câble USB non détecté (/dev/ttyUSB0 introuvable)"),
+            message: String::from("USB cable not detected (/dev/ttyUSB0 not found)"),
             last_rx_secs_ago: None,
         }
     }

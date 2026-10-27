@@ -119,7 +119,7 @@ pub fn run_serial_loop_with_options(
                     logger::error(
                         "SERIAL",
                         &format!(
-                            "❌ Port série USB introuvable ou inaccessible ({}: {}). Vérifiez le branchement du câble USB reliant le Raspberry Pi. Nouvelle tentative dans 2s...",
+                            "❌ USB serial port not found or inaccessible ({}: {}). Check the USB cable connected to the Raspberry Pi. Retrying in 2s...",
                             port_name, e
                         ),
                     );
@@ -129,7 +129,7 @@ pub fn run_serial_loop_with_options(
                 if let Ok(mut tel) = state.telemetry.lock() {
                     tel.serial.status = SerialStatus::UsbDisconnected;
                     tel.serial.port = port_name.clone();
-                    tel.serial.message = format!("Câble USB non détecté ({})", e);
+                    tel.serial.message = format!("USB cable not detected ({})", e);
                     tel.serial.last_rx_secs_ago = None;
                     tel.greenup_state = "DISCONNECTED".to_string();
                     tel.iec_state = None;
@@ -139,7 +139,7 @@ pub fn run_serial_loop_with_options(
                 }
 
                 while let Ok(cmd) = rx_channel.try_recv() {
-                    logger::debug("SERIAL", &format!("🗑️ Commande {} ignorée (USB déconnecté)", cmd.as_frame()));
+                    logger::debug("SERIAL", &format!("🗑️ Command {} dropped (USB disconnected)", cmd.as_frame()));
                 }
 
                 std::thread::sleep(Duration::from_secs(2));
@@ -151,7 +151,7 @@ pub fn run_serial_loop_with_options(
         logger::info(
             "SERIAL",
             &format!(
-                "🔌 Port série USB ouvert avec succès sur {} à {} bauds. Initialisation du dialogue avec l'ATmega...",
+                "🔌 USB serial port opened successfully on {} at {} baud. Initializing communication with ATmega...",
                 port_name, baud_rate
             ),
         );
@@ -159,14 +159,14 @@ pub fn run_serial_loop_with_options(
         if let Ok(mut tel) = state.telemetry.lock() {
             tel.serial.status = SerialStatus::UsbConnecting;
             tel.serial.port = port_name.clone();
-            tel.serial.message = "Port USB connecté, en attente de réponse de la carte Legrand".to_string();
+            tel.serial.message = "USB port connected, waiting for response from station board".to_string();
             tel.serial.last_rx_secs_ago = None;
         }
 
         let clone_port = match port.try_clone() {
             Ok(p) => p,
             Err(e) => {
-                logger::error("SERIAL", &format!("❌ Impossible de cloner le port série {}: {}", port_name, e));
+                logger::error("SERIAL", &format!("❌ Failed to clone serial port {}: {}", port_name, e));
                 std::thread::sleep(Duration::from_secs(2));
                 continue;
             }
@@ -196,10 +196,10 @@ pub fn run_serial_loop_with_options(
                             if let Ok(mut tel) = state_rx.telemetry.lock() {
                                 if tel.serial.status != SerialStatus::UsbConnected {
                                     tel.serial.status = SerialStatus::UsbConnected;
-                                    tel.serial.message = "Liaison série USB active - Borne connectée".to_string();
+                                    tel.serial.message = "USB serial link active - Station connected".to_string();
                                     logger::info(
                                         "SERIAL",
-                                        &format!("✅ Liaison série USB établie avec succès sur {} (dialogue ATmega actif)", port_name_reader),
+                                        &format!("✅ USB serial communication established on {} (ATmega link active)", port_name_reader),
                                     );
                                 }
                                 tel.serial.last_rx_secs_ago = Some(0);
@@ -213,7 +213,7 @@ pub fn run_serial_loop_with_options(
                     Ok(_) => {
                         logger::error(
                             "SERIAL",
-                            &format!("🔌 Câble USB déconnecté (fin de flux sur {}).", port_name_reader),
+                            &format!("🔌 USB cable disconnected (EOF on {}).", port_name_reader),
                         );
                         is_running_reader.store(false, Ordering::Relaxed);
                         break;
@@ -222,7 +222,7 @@ pub fn run_serial_loop_with_options(
                     Err(e) => {
                         logger::error(
                             "SERIAL",
-                            &format!("🔌 Erreur I/O sur le port USB {} : {}. Câble déconnecté ou liaison interrompue.", port_name_reader, e),
+                            &format!("🔌 I/O error on USB serial port {} : {}. Cable disconnected or link broken.", port_name_reader, e),
                         );
                         is_running_reader.store(false, Ordering::Relaxed);
                         break;
@@ -242,7 +242,7 @@ pub fn run_serial_loop_with_options(
                 Ok(cmd) => Some(cmd),
                 Err(tokio::sync::mpsc::error::TryRecvError::Empty) => None,
                 Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
-                    logger::warn("SERIAL", "Canal de commandes fermé (arrêt du service)");
+                    logger::warn("SERIAL", "Command channel closed (service shutting down)");
                     is_running.store(false, Ordering::Relaxed);
                     break;
                 }
@@ -259,7 +259,7 @@ pub fn run_serial_loop_with_options(
 
                     logger::log("SERIAL_TX", encoded.trim());
                     if let Err(e) = port.write_all(encoded.as_bytes()) {
-                        logger::error("SERIAL", &format!("❌ Erreur d'écriture sur {} : {}", port_name, e));
+                        logger::error("SERIAL", &format!("❌ Serial write error on {} : {}", port_name, e));
                         is_running.store(false, Ordering::Relaxed);
                         break;
                     }
@@ -285,9 +285,9 @@ pub fn run_serial_loop_with_options(
                             success = true;
                         } else {
                             if got_default {
-                                logger::warn("SERIAL", &format!("❌ Commande {} rejetée par la borne (Default), réessai: {}", cmd.as_frame(), retries));
+                                logger::warn("SERIAL", &format!("❌ Command {} rejected by station (Default), retry: {}", cmd.as_frame(), retries));
                             } else {
-                                logger::warn("SERIAL", &format!("⏳ Commande {} sans réponse (timeout), réessai: {}", cmd.as_frame(), retries));
+                                logger::warn("SERIAL", &format!("⏳ Command {} timeout, retry: {}", cmd.as_frame(), retries));
                             }
                             retries -= 1;
                         }
@@ -318,13 +318,13 @@ pub fn run_serial_loop_with_options(
                 if current_status == SerialStatus::UsbConnected {
                     if let Ok(mut tel) = state.telemetry.lock() {
                         tel.serial.status = SerialStatus::UsbNoResponse;
-                        tel.serial.message = "Aucune réponse de la carte Legrand (borne éteinte ou ATmega figé)".to_string();
+                        tel.serial.message = "No response from station board (station powered off or ATmega frozen)".to_string();
                     }
                     if last_watchdog_warn.elapsed() >= Duration::from_secs(10) {
                         logger::warn(
                             "SERIAL",
                             &format!(
-                                "⚠️ Aucune réponse de la carte Legrand sur {} depuis {}s. Vérifiez l'alimentation de la borne ou redémarrez-la électriquement si l'ATmega est figé.",
+                                "⚠️ No response from station board on {} for {}s. Check station power or power-cycle station if ATmega is frozen.",
                                 port_name,
                                 elapsed_since_rx.as_secs()
                             ),
@@ -334,13 +334,13 @@ pub fn run_serial_loop_with_options(
                 } else if current_status == SerialStatus::UsbConnecting && elapsed_since_rx > Duration::from_secs(5) {
                     if let Ok(mut tel) = state.telemetry.lock() {
                         tel.serial.status = SerialStatus::UsbNoResponse;
-                        tel.serial.message = "Aucune réponse de la carte Legrand (borne éteinte ou ATmega figé)".to_string();
+                        tel.serial.message = "No response from station board (station powered off or ATmega frozen)".to_string();
                     }
                     if last_watchdog_warn.elapsed() >= Duration::from_secs(10) {
                         logger::warn(
                             "SERIAL",
                             &format!(
-                                "⏳ Port USB ouvert sur {} mais aucune réponse de l'ATmega après {}s. Vérifiez l'alimentation de la borne ou redémarrez-la électriquement si l'ATmega est figé.",
+                                "⏳ USB port open on {} but no response from ATmega after {}s. Check station power or power-cycle station if ATmega is frozen.",
                                 port_name,
                                 elapsed_since_rx.as_secs()
                             ),
@@ -353,7 +353,7 @@ pub fn run_serial_loop_with_options(
                     last_watchdog_probe = Instant::now();
                     let hello = Command::RaspberryPiModeOk;
                     if let Err(e) = port.write_all(hello.encode().as_bytes()) {
-                        logger::error("SERIAL", &format!("❌ Erreur d'écriture sur {} pendant le probe: {}", port_name, e));
+                        logger::error("SERIAL", &format!("❌ Write error on {} during probe: {}", port_name, e));
                         is_running.store(false, Ordering::Relaxed);
                     }
                 }
@@ -364,7 +364,7 @@ pub fn run_serial_loop_with_options(
         let _ = reader_thread.join();
         drop(port);
 
-        logger::warn("SERIAL", "🔌 Session série terminée. Reprise de la recherche du port USB dans 2s...");
+        logger::warn("SERIAL", "🔌 Serial session ended. Resuming USB search in 2s...");
         std::thread::sleep(Duration::from_secs(2));
     }
 }

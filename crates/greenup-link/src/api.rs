@@ -253,21 +253,21 @@ fn check_serial_connected(state: &SharedState) -> Result<(), (StatusCode, Json<s
     if tel.serial.status != greenup_driver::telemetry::SerialStatus::UsbConnected {
         let err_msg = match tel.serial.status {
             greenup_driver::telemetry::SerialStatus::UsbDisconnected => {
-                "Câble USB déconnecté (aucun adaptateur USB détecté)"
+                "USB cable disconnected (no USB adapter detected)"
             }
             greenup_driver::telemetry::SerialStatus::UsbConnecting => {
-                "Liaison USB en cours d'initialisation"
+                "USB serial link initializing (waiting for station board)"
             }
             greenup_driver::telemetry::SerialStatus::UsbNoResponse => {
-                "Aucune réponse de la carte Legrand (borne éteinte ou ATmega figé)"
+                "No response from station board (station powered off or ATmega frozen)"
             }
-            _ => "Liaison série USB indisponible",
+            _ => "USB serial link unavailable",
         };
         return Err((
             StatusCode::SERVICE_UNAVAILABLE,
             Json(json!({
                 "status": "error",
-                "error": format!("Commande impossible : {}", err_msg),
+                "error": format!("Command unavailable: {}", err_msg),
                 "serial_status": tel.serial.status,
             })),
         ));
