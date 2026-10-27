@@ -17,8 +17,28 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_DIR="/home/pi/greenup"
+TARGET_DIR="/opt/greenup-link"
 TARGET_BIN="$TARGET_DIR/greenup-link"
+
+# Create dedicated unprivileged system user 'greenup' if it does not exist
+echo "  -> Setting up dedicated unprivileged system user 'greenup'..."
+if ! id -u greenup >/dev/null 2>&1; then
+    useradd --system --no-create-home --home-dir "$TARGET_DIR" --shell /usr/sbin/nologin greenup
+    echo "  -> Created system user 'greenup'"
+else
+    echo "  -> System user 'greenup' already exists"
+fi
+
+# Ensure greenup user belongs to 'dialout' group (required for /dev/ttyUSB* serial access)
+if getent group dialout >/dev/null 2>&1; then
+    usermod -a -G dialout greenup 2>/dev/null || true
+    echo "  -> Added 'greenup' user to group 'dialout' (serial port access)"
+fi
+
+# Also add to 'gpio' group if present on Raspberry Pi OS
+if getent group gpio >/dev/null 2>&1; then
+    usermod -a -G gpio greenup 2>/dev/null || true
+fi
 
 # 2. Environment check: Detect official Legrand software stack
 echo ""
@@ -245,13 +265,19 @@ bind = "0.0.0.0:8080"
 #     * Basic Auth   : Authorization: Basic <base64(user:api_token)>  (curl -u :token)
 api_token = ""
 EOF
-    chmod 600 "$CONFIG_FILE"
+    chmod 640 "$CONFIG_FILE"
     echo "  -> Created default configuration file at $CONFIG_FILE"
 else
+    chmod 640 "$CONFIG_FILE" 2>/dev/null || true
     echo "  -> Keeping existing configuration file at $CONFIG_FILE"
 fi
 
-chown -R pi:pi "$TARGET_DIR" 2>/dev/null || true
+# Ensure proper ownership and permissions for the dedicated user
+mkdir -p "$TARGET_DIR/logs"
+chown -R greenup:greenup "$TARGET_DIR"
+chmod 750 "$TARGET_DIR"
+chmod 755 "$TARGET_BIN"
+[ -f "$UNINSTALL_TARGET" ] && chmod 755 "$UNINSTALL_TARGET"
 
 # 5. Configure and start Systemd service
 echo ""
@@ -265,13 +291,20 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/pi/greenup
-ExecStart=/home/pi/greenup/greenup-link
+User=greenup
+Group=greenup
+WorkingDirectory=/opt/greenup-link
+ExecStart=/opt/greenup-link/greenup-link
 StandardOutput=inherit
 StandardError=inherit
 Restart=always
 RestartSec=5s
-User=root
+
+# Security hardening
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
@@ -290,10 +323,13 @@ if systemctl is-active --quiet greenup-link.service; then
     IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "your-pi-ip")
     echo "🎉 Success: Green'Up Link is active and running!"
     echo "   Web Interface:   http://${IP_ADDR}:8080"
-    echo "   Config & Auth:   /home/pi/greenup/greenup.toml"
+    echo "   Directory:       /opt/greenup-link"
+    echo "   Config & Auth:   /opt/greenup-link/greenup.toml"
+    echo "   Logs:            /opt/greenup-link/logs/"
+    echo "   Service User:    greenup (dialout group)"
     echo "   Service Status:  sudo systemctl status greenup-link"
     echo "   Live Logs:       sudo journalctl -u greenup-link -f"
-    echo "   Rollback/Remove: sudo /home/pi/greenup/uninstall.sh"
+    echo "   Rollback/Remove: sudo /opt/greenup-link/uninstall.sh"
 else
     echo "⚠️ Warning: Service was configured and started, but is not reporting active yet."
     echo "   Check details with: sudo systemctl status greenup-link"

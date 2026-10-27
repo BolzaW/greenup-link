@@ -16,7 +16,7 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-TARGET_DIR="/home/pi/greenup"
+TARGET_DIR="/opt/greenup-link"
 SERVICE_FILE="/etc/systemd/system/greenup-link.service"
 
 # Detect whether this system has an official Legrand software stack
@@ -138,6 +138,13 @@ if [ "$PURGE_FILES" = true ]; then
     echo "  -> Purging $TARGET_DIR (binaries, logs, configs)..."
     rm -rf "$TARGET_DIR"
     echo "  -> $TARGET_DIR successfully removed."
+    if id -u greenup >/dev/null 2>&1; then
+        echo "  -> Removing dedicated system user 'greenup'..."
+        userdel greenup 2>/dev/null || true
+    fi
+    if getent group greenup >/dev/null 2>&1; then
+        groupdel greenup 2>/dev/null || true
+    fi
 else
     echo "  -> Keeping $TARGET_DIR intact (disabled state)."
     echo "     You can manually delete it at any time with: sudo rm -rf $TARGET_DIR"

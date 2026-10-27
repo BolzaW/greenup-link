@@ -49,7 +49,15 @@ impl AppConfig {
     /// and applies environment variable overrides (`GREENUP_BIND`, `GREENUP_API_TOKEN`).
     pub fn load() -> Self {
         let config_path = env::var("GREENUP_CONFIG")
-            .unwrap_or_else(|_| DEFAULT_CONFIG_FILENAME.to_string());
+            .unwrap_or_else(|_| {
+                if Path::new(DEFAULT_CONFIG_FILENAME).exists() {
+                    DEFAULT_CONFIG_FILENAME.to_string()
+                } else if Path::new("/opt/greenup-link/greenup.toml").exists() {
+                    "/opt/greenup-link/greenup.toml".to_string()
+                } else {
+                    DEFAULT_CONFIG_FILENAME.to_string()
+                }
+            });
         let path = Path::new(&config_path);
 
         let mut config = if path.exists() {

@@ -148,7 +148,7 @@ ssh pi@<ip_borne>
 curl -sSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash
 ```
 > [!TIP]
-> - Le script détecte automatiquement l'architecture de votre système (`armv7` 32-bit legacy ou `aarch64` 64-bit), interroge la dernière release GitHub, télécharge directement le binaire autonome adéquat et l'installe dans `/home/pi/greenup/`.
+> - Le script détecte automatiquement l'architecture de votre système (`armv7` 32-bit legacy ou `aarch64` 64-bit), interroge la dernière release GitHub, télécharge directement le binaire autonome adéquat et l'installe dans `/opt/greenup-link/`.
 > - **Pour mettre à jour :** Relancez simplement la même commande 1-liner à tout moment. Le script détectera l'installation existante, téléchargera la dernière release et redémarrera le service automatiquement.
 
 #### Option B : Installation manuelle / Hors-ligne (Archive ZIP Release)
@@ -174,9 +174,10 @@ Si la borne n'a pas d'accès direct à Internet :
 Le script d'installation configure l'ensemble du système automatiquement :
 - **Détection d'environnement** : Détecte automatiquement s'il tourne sur l'image d'usine Legrand ou sur un Raspberry Pi OS standard/propre (kit DIY, carte SD réinstallée).
 - **Neutralisation de la stack Legrand (si présente)** : Arrête Apache Tomcat 9 / daemon Java, neutralise `/etc/init.d/CommunicationArduinoRasp` (avec sauvegarde `.old`), et neutralise `/home/pi/Desktop/DeletAll.sh` (avec sauvegarde `.old`). Sur un OS propre ou standard, cette étape est automatiquement ignorée.
-- **Installation du binaire** : Installe `greenup-link` dans `/home/pi/greenup/` avec les permissions d'exécution appropriées (téléchargé depuis GitHub ou copié localement).
-- **Mise en place de l'outil de rollback** : Installe `uninstall.sh` dans `/home/pi/greenup/uninstall.sh` pour un retour arrière facile à tout moment.
-- **Service Systemd** : Crée, active et démarre immédiatement le service `/etc/systemd/system/greenup-link.service`.
+- **Utilisateur système dédié & sécurisé** : Crée un utilisateur non privilégié `greenup` appartenant au groupe `dialout` (nécessaire pour communiquer avec le port série `/dev/ttyUSB0` sans être root) et au groupe `gpio` si présent.
+- **Répertoire confiné dans `/opt`** : Regroupe tous les composants (binaire `greenup-link`, configuration `greenup.toml`, logs et outil de désinstallation) dans un unique dossier `/opt/greenup-link/` aux permissions restreintes (`chmod 750`, propriétaire `greenup:greenup`). Aucun composant n'est dispersé dans l'arborescence système.
+- **Mise en place de l'outil de rollback** : Installe `uninstall.sh` dans `/opt/greenup-link/uninstall.sh` pour un retour arrière facile à tout moment.
+- **Service Systemd durci** : Crée, active et démarre immédiatement le service `/etc/systemd/system/greenup-link.service` exécuté sous l'utilisateur `greenup` avec durcissement de sécurité (`ProtectSystem=full`, `ProtectHome=true`, `NoNewPrivileges=true`, `PrivateTmp=true`).
 
 ### 5. Gestion du service
 
@@ -209,7 +210,7 @@ Si vous souhaitez revenir au logiciel officiel Legrand ou désinstaller Green'Up
 
 - **Lancement direct depuis la borne** (installé automatiquement avec Green'Up Link) :
   ```bash
-  sudo /home/pi/greenup/uninstall.sh
+  sudo /opt/greenup-link/uninstall.sh
   ```
 - **Ou via commande unique en ligne** :
   ```bash
@@ -217,8 +218,8 @@ Si vous souhaitez revenir au logiciel officiel Legrand ou désinstaller Green'Up
   ```
 
 Le script vous propose interactivement de choisir entre :
-1. **Désactiver uniquement (Conserver les fichiers)** : Arrête et supprime le service `greenup-link.service`, tout en préservant le dossier `/home/pi/greenup/` et l'historique des logs.
-2. **Purge complète** : Arrête le service et supprime intégralement le dossier `/home/pi/greenup/`.
+1. **Désactiver uniquement (Conserver les fichiers)** : Arrête et supprime le service `greenup-link.service`, tout en préservant le dossier `/opt/greenup-link/` et l'historique des logs.
+2. **Purge complète** : Arrête le service, supprime l'utilisateur système `greenup` et supprime intégralement le dossier `/opt/greenup-link/` sans laisser aucune trace.
 
 Dans les deux cas, si la stack officielle Legrand est présente sur l'OS, le script la réactive automatiquement :
 - Restaure le script `/etc/init.d/CommunicationArduinoRasp` depuis sa sauvegarde et le réenregistre au démarrage.
@@ -262,7 +263,7 @@ Consultez le [Guide du kit de communication alternatif DIY](docs/KIT_COMMUNICATI
 
 **Oui.** Un script de rollback automatisé est fourni :
 ```bash
-sudo /home/pi/greenup/uninstall.sh
+sudo /opt/greenup-link/uninstall.sh
 ```
 Il restaure les scripts de démarrage Legrand, retire les neutralisations des scripts d'urgence, réactive Apache Tomcat 9 et les daemons Java, et vous permet de choisir entre conserver ou supprimer les fichiers Green'Up Link.
 

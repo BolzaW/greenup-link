@@ -104,17 +104,34 @@ pub fn get_recent_logs() -> Vec<LogEntry> {
     }
 }
 
+/// Returns the configured log directory.
+/// Checks `GREENUP_LOG_DIR` env var, local `logs/`, or `/opt/greenup-link/logs/`.
+pub fn get_log_dir() -> String {
+    if let Ok(dir) = std::env::var("GREENUP_LOG_DIR") {
+        return dir;
+    }
+    if Path::new("logs").exists() {
+        return "logs".to_string();
+    }
+    if Path::new("/opt/greenup-link/logs").exists() {
+        return "/opt/greenup-link/logs".to_string();
+    }
+    "logs".to_string()
+}
+
 /// Returns the path of today's log file.
 pub fn get_log_file_path() -> Option<String> {
     let today = Local::now().format("%Y-%m-%d").to_string();
-    Some(format!("logs/greenup_{}.log", today))
+    let dir = get_log_dir();
+    Some(format!("{}/greenup_{}.log", dir, today))
 }
 
 /// Reads the current daily log file content or returns recent in-memory logs formatted as text.
 pub fn get_current_log_content() -> (String, String) {
     let today = Local::now().format("%Y-%m-%d").to_string();
     let filename = format!("greenup_{}.log", today);
-    let path = format!("logs/{}", filename);
+    let dir = get_log_dir();
+    let path = format!("{}/{}", dir, filename);
 
     if let Ok(content) = fs::read_to_string(&path) {
         return (filename, content);
@@ -153,7 +170,8 @@ fn cleanup_old_logs(log_dir: &str) {
 /// Ensures the daily log file is open, rotating when midnight passes.
 fn get_or_rotate_daily_file() -> String {
     let today = Local::now().format("%Y-%m-%d").to_string();
-    let path = format!("logs/greenup_{}.log", today);
+    let dir = get_log_dir();
+    let path = format!("{}/greenup_{}.log", dir, today);
 
     let mut guard = CURRENT_LOG_DATE.lock().unwrap();
     let is_new_day = match *guard {
@@ -163,8 +181,8 @@ fn get_or_rotate_daily_file() -> String {
 
     if is_new_day {
         *guard = Some(today.clone());
-        let _ = fs::create_dir_all("logs");
-        cleanup_old_logs("logs");
+        let _ = fs::create_dir_all(&dir);
+        cleanup_old_logs(&dir);
 
         // Write daily header if newly created
         if !Path::new(&path).exists() {
@@ -179,7 +197,8 @@ fn get_or_rotate_daily_file() -> String {
 
 /// Initializes the logger and sets initial log level from environment.
 pub fn init() {
-    let _ = fs::create_dir_all("logs");
+    let dir = get_log_dir();
+    let _ = fs::create_dir_all(&dir);
 
     // Initialize level from GREENUP_LOG_LEVEL or GREENUP_DEBUG
     if let Ok(val) = std::env::var("GREENUP_LOG_LEVEL") {

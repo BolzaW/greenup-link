@@ -5,7 +5,7 @@ This API allows interfacing the Green'Up Link software with any standard home au
 ## 🔒 Authentication (Optional)
 
 By default, `api_token` is empty (`""`) in `greenup.toml` (open access on trusted local networks).
-If you configure a non-empty `api_token` in `/home/pi/greenup/greenup.toml` (or via the `GREENUP_API_TOKEN` environment variable), all `/api/*` endpoints require authentication.
+If you configure a non-empty `api_token` in `/opt/greenup-link/greenup.toml` (or via the `GREENUP_API_TOKEN` environment variable), all `/api/*` endpoints require authentication.
 
 Three standard authentication methods are supported simultaneously against the same `api_token`:
 
