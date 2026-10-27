@@ -22,6 +22,19 @@ bind = "0.0.0.0:8080"
 #     * API Key      : X-API-Key: <api_token>
 #     * Basic Auth   : Authorization: Basic <base64(user:api_token)>  (curl -u :token)
 api_token = ""
+
+[serial]
+# Serial port connected to the charging station microcontroller.
+# Default: "/dev/ttyUSB0"
+port = "/dev/ttyUSB0"
+
+# Baud rate for communication with the ATmega2560 board.
+# Default: 115200
+baud_rate = 115200
+
+# Silence timeout before alerting on loss of communication (seconds).
+# Default: 6
+watchdog_timeout_secs = 6
 "#;
 
 #[derive(Debug, Clone)]
@@ -39,9 +52,27 @@ impl Default for HttpConfig {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct SerialConfig {
+    pub port: String,
+    pub baud_rate: u32,
+    pub watchdog_timeout_secs: u64,
+}
+
+impl Default for SerialConfig {
+    fn default() -> Self {
+        Self {
+            port: "/dev/ttyUSB0".to_string(),
+            baud_rate: 115_200,
+            watchdog_timeout_secs: 6,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct AppConfig {
     pub http: HttpConfig,
+    pub serial: SerialConfig,
 }
 
 impl AppConfig {
@@ -104,6 +135,13 @@ impl AppConfig {
             }
         }
 
+        if let Ok(env_port) = env::var("GREENUP_SERIAL_PORT") {
+            let trimmed = env_port.trim();
+            if !trimmed.is_empty() {
+                config.serial.port = trimmed.to_string();
+            }
+        }
+
         config
     }
 
@@ -140,6 +178,25 @@ impl AppConfig {
                                 config.http.api_token = None;
                             } else {
                                 config.http.api_token = Some(trimmed.to_string());
+                            }
+                        }
+                        _ => {}
+                    }
+                } else if current_section == "serial" {
+                    match key.as_str() {
+                        "port" => {
+                            if !val.is_empty() {
+                                config.serial.port = val;
+                            }
+                        }
+                        "baud_rate" => {
+                            if let Ok(b) = val.parse::<u32>() {
+                                config.serial.baud_rate = b;
+                            }
+                        }
+                        "watchdog_timeout_secs" => {
+                            if let Ok(w) = val.parse::<u64>() {
+                                config.serial.watchdog_timeout_secs = w;
                             }
                         }
                         _ => {}

@@ -87,6 +87,12 @@ Three standard authentication methods are supported simultaneously against the s
 - **Typical Response**:
   ```json
   {
+    "serial": {
+      "status": "usb_connected",
+      "port": "/dev/ttyUSB0",
+      "message": "Liaison série USB active - Borne connectée",
+      "last_rx_secs_ago": 0
+    },
     "voltage": 232.0,
     "current": 15.6,
     "power": 3619.2,
@@ -104,7 +110,12 @@ Three standard authentication methods are supported simultaneously against the s
     "tic_mode": "9600"
   }
   ```
-  - `greenup_state`: Legrand proprietary state (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). See [`STATE_MACHINE.md`](STATE_MACHINE.md).
+  - `serial`: USB serial communication state with the ATmega2560 board:
+    - `status`: `"usb_connected"` (bidirectional link active), `"usb_connecting"` (port opened, waiting for board), `"usb_no_response"` (USB open but station board silent/frozen), `"usb_disconnected"` (USB cable unplugged or `/dev/ttyUSB0` missing).
+    - `port`: Port path (e.g. `"/dev/ttyUSB0"`).
+    - `message`: Human-readable status description.
+    - `last_rx_secs_ago`: Elapsed seconds since the last frame received from the board (or `null` if disconnected).
+  - `greenup_state`: Legrand proprietary state (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). Returns `"DISCONNECTED"` if USB is unplugged. See [`STATE_MACHINE.md`](STATE_MACHINE.md).
   - `iec_state`: Deduced standard IEC 61851-1 state (`A`, `B`, `C`, `E`, `F`). Returns `null` if it cannot be deduced.
   - `cp_voltage` (`CP?`): Control Pilot voltage in volts (`12`, `9`, `6`).
   - `charge_authorized`: Indicates whether charging is currently authorized (`true`) or blocked (`false`).
@@ -116,6 +127,16 @@ Three standard authentication methods are supported simultaneously against the s
 ---
 
 ## 🛠️ Action Endpoints (POST)
+
+> [!IMPORTANT]
+> **USB Connection Guard:** If the USB serial link with the station is not active (`serial.status != "usb_connected"`), all POST action endpoints immediately return HTTP `503 Service Unavailable` with a descriptive message:
+> ```json
+> {
+>   "status": "error",
+>   "error": "Commande impossible : Câble USB déconnecté (aucun adaptateur USB détecté)",
+>   "serial_status": "usb_disconnected"
+> }
+> ```
 
 ### 3. Control charge state
 - **URL**: `/api/charge`

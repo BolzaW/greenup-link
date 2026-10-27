@@ -1,7 +1,40 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SerialStatus {
+    /// Aucun adaptateur USB détecté / câble USB débranché du Raspberry Pi
+    UsbDisconnected,
+    /// Port USB ouvert, en attente de la première réponse de la borne
+    UsbConnecting,
+    /// Liaison USB active et saine (dialogue bidirectionnel avec l'ATmega)
+    UsbConnected,
+    /// Port USB ouvert mais aucune réponse reçue (borne éteinte ou ATmega figé)
+    UsbNoResponse,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SerialConnection {
+    pub status: SerialStatus,
+    pub port: String,
+    pub message: String,
+    pub last_rx_secs_ago: Option<u64>,
+}
+
+impl Default for SerialConnection {
+    fn default() -> Self {
+        Self {
+            status: SerialStatus::UsbDisconnected,
+            port: String::from("/dev/ttyUSB0"),
+            message: String::from("Câble USB non détecté (/dev/ttyUSB0 introuvable)"),
+            last_rx_secs_ago: None,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Telemetry {
+    pub serial: SerialConnection,
     pub voltage: f32,
     pub current: f32,
     pub power: f32, // Calculated: V * I
@@ -30,12 +63,13 @@ pub struct Telemetry {
 impl Default for Telemetry {
     fn default() -> Self {
         Self {
-            voltage: 230.0, // Arbitrary default voltage for power calculation
+            serial: SerialConnection::default(),
+            voltage: 0.0,
             current: 0.0,
             power: 0.0,
             energy: 0.0,
             frequency: 0.0,
-            greenup_state: String::new(),
+            greenup_state: String::from("DISCONNECTED"),
             error_code: String::new(),
             limit_amps: 16, // 16A by default
             eliot_limit_amps: None,

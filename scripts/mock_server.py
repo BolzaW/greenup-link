@@ -32,6 +32,12 @@ BASE_DIR = pathlib.Path(__file__).parent.parent / "crates" / "greenup-link" / "s
 
 # Simulated backend state
 state = {
+    "serial": {
+        "status": "usb_connected",
+        "port": "/dev/ttyUSB0",
+        "message": "Liaison série USB active - Borne connectée",
+        "last_rx_secs_ago": 0,
+    },
     "voltage": 230.8,
     "current": 16.0,
     "power": 3692.0,

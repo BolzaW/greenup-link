@@ -39,8 +39,14 @@ async fn main() {
     // 1. Start the Serial communication daemon
     // We use spawn_blocking because reading from the serial port (port.read) is blocking
     let state_for_serial = app_state.clone();
+    let serial_options = greenup_driver::SerialOptions {
+        port: app_config.serial.port.clone(),
+        baud_rate: app_config.serial.baud_rate,
+        timeout_ms: 100,
+        watchdog_timeout_secs: app_config.serial.watchdog_timeout_secs,
+    };
     tokio::task::spawn_blocking(move || {
-        greenup_driver::run_serial_loop(state_for_serial, rx);
+        greenup_driver::run_serial_loop_with_options(state_for_serial, rx, serial_options);
     });
 
     // Send the initialization sequence on startup

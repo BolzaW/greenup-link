@@ -258,6 +258,21 @@ pub fn log_with_level(category: &str, level: LogLevel, message: &str) {
     let _ = get_broadcast_sender().send(log_item);
 }
 
+/// Convenience function for logging at ERROR level.
+pub fn error(category: &str, message: &str) {
+    log_with_level(category, LogLevel::Error, message);
+}
+
+/// Convenience function for logging at WARN level.
+pub fn warn(category: &str, message: &str) {
+    log_with_level(category, LogLevel::Warn, message);
+}
+
+/// Convenience function for logging at INFO level.
+pub fn info(category: &str, message: &str) {
+    log_with_level(category, LogLevel::Info, message);
+}
+
 /// Convenience function for logging at DEBUG level.
 pub fn debug(category: &str, message: &str) {
     log_with_level(category, LogLevel::Debug, message);

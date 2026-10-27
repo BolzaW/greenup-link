@@ -2,7 +2,30 @@ use crate::logger;
 use crate::state::SharedState;
 use greenup_protocol::{commands::FunctioningMode, Command, parser::{parse_line, ProtocolEvent}};
 use std::io::{BufRead, BufReader, Write};
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use crate::telemetry::SerialStatus;
+
+#[derive(Clone, Debug)]
+pub struct SerialOptions {
+    pub port: String,
+    pub baud_rate: u32,
+    pub timeout_ms: u64,
+    pub watchdog_timeout_secs: u64,
+}
+
+impl Default for SerialOptions {
+    fn default() -> Self {
+        Self {
+            port: std::env::var("GREENUP_SERIAL_PORT")
+                .unwrap_or_else(|_| "/dev/ttyUSB0".to_string()),
+            baud_rate: 115_200,
+            timeout_ms: 100,
+            watchdog_timeout_secs: 6,
+        }
+    }
+}
 
 const TICTM_MAX_ZEROS: u32 = 5;
 
@@ -65,99 +88,284 @@ pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, _stat
 
 }
 
-pub fn run_serial_loop(state: SharedState, mut rx_channel: tokio::sync::mpsc::Receiver<Command>) {
-    let mut port = serialport::new("/dev/ttyUSB0", 115_200)
-        .timeout(Duration::from_millis(100))
-        .open()
-        .expect("Cannot open the serial port /dev/ttyUSB0");
+pub fn run_serial_loop(state: SharedState, rx_channel: tokio::sync::mpsc::Receiver<Command>) {
+    run_serial_loop_with_options(state, rx_channel, SerialOptions::default());
+}
 
-    let clone_port = port.try_clone().expect("Failed to clone serial port");
+pub fn run_serial_loop_with_options(
+    state: SharedState,
+    mut rx_channel: tokio::sync::mpsc::Receiver<Command>,
+    options: SerialOptions,
+) {
+    let port_name = options.port;
+    let baud_rate = options.baud_rate;
+    let watchdog_timeout = Duration::from_secs(options.watchdog_timeout_secs);
+    let mut last_logged_disconnect: Option<Instant> = None;
 
-    // Internal channel to send read lines to the TX thread for acknowledgment
-    let (internal_tx, internal_rx) = std::sync::mpsc::channel::<String>();
+    loop {
+        // 1. Attempt to open serial port without crashing
+        let mut port = match serialport::new(&port_name, baud_rate)
+            .timeout(Duration::from_millis(options.timeout_ms))
+            .open()
+        {
+            Ok(p) => p,
+            Err(e) => {
+                let should_log = match last_logged_disconnect {
+                    None => true,
+                    Some(t) => t.elapsed() >= Duration::from_secs(15),
+                };
 
-    let state_rx = state.clone();
-    std::thread::spawn(move || {
-        let mut reader = BufReader::new(clone_port);
-        let mut line = String::new();
-        loop {
-            match reader.read_line(&mut line) {
-                Ok(n) if n > 0 => {
-                    let clean_line = line.trim();
-                    if !clean_line.is_empty() {
-                        // We send a copy to TX for matching
-                        let _ = internal_tx.send(clean_line.to_string());
-                        
-                        // We parse to update telemetry
-                        parse_incoming_line(clean_line, &state_rx);
-                    }
-                    line.clear();
+                if should_log {
+                    logger::error(
+                        "SERIAL",
+                        &format!(
+                            "❌ Port série USB introuvable ou inaccessible ({}: {}). Vérifiez le branchement du câble USB reliant le Raspberry Pi. Nouvelle tentative dans 2s...",
+                            port_name, e
+                        ),
+                    );
+                    last_logged_disconnect = Some(Instant::now());
                 }
-                Ok(_) => {
-                    // EOF
-                    std::thread::sleep(Duration::from_millis(10));
+
+                if let Ok(mut tel) = state.telemetry.lock() {
+                    tel.serial.status = SerialStatus::UsbDisconnected;
+                    tel.serial.port = port_name.clone();
+                    tel.serial.message = format!("Câble USB non détecté ({})", e);
+                    tel.serial.last_rx_secs_ago = None;
+                    tel.greenup_state = "DISCONNECTED".to_string();
+                    tel.iec_state = None;
+                    tel.voltage = 0.0;
+                    tel.current = 0.0;
+                    tel.power = 0.0;
                 }
-                Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                    // Normal timeout, we keep what has already been read in line
+
+                while let Ok(cmd) = rx_channel.try_recv() {
+                    logger::debug("SERIAL", &format!("🗑️ Commande {} ignorée (USB déconnecté)", cmd.as_frame()));
                 }
-                Err(e) => {
-                    // Other error
-                    crate::logger::log("SERIAL", &format!("Serial read error: {:?}", e));
-                    line.clear();
-                    std::thread::sleep(Duration::from_millis(100));
-                }
+
+                std::thread::sleep(Duration::from_secs(2));
+                continue;
             }
+        };
+
+        last_logged_disconnect = None;
+        logger::info(
+            "SERIAL",
+            &format!(
+                "🔌 Port série USB ouvert avec succès sur {} à {} bauds. Initialisation du dialogue avec l'ATmega...",
+                port_name, baud_rate
+            ),
+        );
+
+        if let Ok(mut tel) = state.telemetry.lock() {
+            tel.serial.status = SerialStatus::UsbConnecting;
+            tel.serial.port = port_name.clone();
+            tel.serial.message = "Port USB connecté, en attente de réponse de la carte Legrand".to_string();
+            tel.serial.last_rx_secs_ago = None;
         }
-    });
 
-    // TX Loop (Current thread)
-    while let Some(cmd) = rx_channel.blocking_recv() {
-        let encoded = cmd.encode();
-        let expects_response = cmd.expects_response();
-        
-        let mut retries = 1;
-        let mut success = false;
-
-        while retries >= 0 && !success {
-            // Empty the channel of old messages
-            while let Ok(_) = internal_rx.try_recv() {}
-
-            logger::log("SERIAL_TX", encoded.trim());
-            if let Err(e) = port.write_all(encoded.as_bytes()) {
-                logger::log("SERIAL", &format!("Serial write error: {}", e));
+        let clone_port = match port.try_clone() {
+            Ok(p) => p,
+            Err(e) => {
+                logger::error("SERIAL", &format!("❌ Impossible de cloner le port série {}: {}", port_name, e));
+                std::thread::sleep(Duration::from_secs(2));
+                continue;
             }
+        };
 
-            if expects_response {
-                let start_wait = std::time::Instant::now();
-                let mut matched = false;
-                let mut got_default = false;
+        let is_running = Arc::new(AtomicBool::new(true));
+        let last_rx_time = Arc::new(std::sync::Mutex::new(None::<Instant>));
+        let (internal_tx, internal_rx) = std::sync::mpsc::channel::<String>();
 
-                while start_wait.elapsed() < Duration::from_millis(1000) {
-                    if let Ok(rx_line) = internal_rx.recv_timeout(Duration::from_millis(50)) {
-                        if cmd.matches_response(&rx_line) {
-                            matched = true;
-                            break;
-                        } else if rx_line.starts_with("Default:") {
-                            got_default = true;
-                            break;
+        let is_running_reader = is_running.clone();
+        let last_rx_reader = last_rx_time.clone();
+        let state_rx = state.clone();
+        let port_name_reader = port_name.clone();
+
+        let reader_thread = std::thread::spawn(move || {
+            let mut reader = BufReader::new(clone_port);
+            let mut line = String::new();
+            while is_running_reader.load(Ordering::Relaxed) {
+                match reader.read_line(&mut line) {
+                    Ok(n) if n > 0 => {
+                        let clean_line = line.trim();
+                        if !clean_line.is_empty() {
+                            if let Ok(mut t) = last_rx_reader.lock() {
+                                *t = Some(Instant::now());
+                            }
+
+                            if let Ok(mut tel) = state_rx.telemetry.lock() {
+                                if tel.serial.status != SerialStatus::UsbConnected {
+                                    tel.serial.status = SerialStatus::UsbConnected;
+                                    tel.serial.message = "Liaison série USB active - Borne connectée".to_string();
+                                    logger::info(
+                                        "SERIAL",
+                                        &format!("✅ Liaison série USB établie avec succès sur {} (dialogue ATmega actif)", port_name_reader),
+                                    );
+                                }
+                                tel.serial.last_rx_secs_ago = Some(0);
+                            }
+
+                            let _ = internal_tx.send(clean_line.to_string());
+                            parse_incoming_line(clean_line, &state_rx);
                         }
+                        line.clear();
+                    }
+                    Ok(_) => {
+                        logger::error(
+                            "SERIAL",
+                            &format!("🔌 Câble USB déconnecté (fin de flux sur {}).", port_name_reader),
+                        );
+                        is_running_reader.store(false, Ordering::Relaxed);
+                        break;
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {}
+                    Err(e) => {
+                        logger::error(
+                            "SERIAL",
+                            &format!("🔌 Erreur I/O sur le port USB {} : {}. Câble déconnecté ou liaison interrompue.", port_name_reader, e),
+                        );
+                        is_running_reader.store(false, Ordering::Relaxed);
+                        break;
                     }
                 }
+            }
+        });
 
-                if matched {
-                    success = true;
-                } else {
-                    if got_default {
-                        logger::log("SERIAL", &format!("❌ Command {} rejected (Default), retry: {}", cmd.as_frame(), retries));
-                    } else {
-                        logger::log("SERIAL", &format!("⏳ Command {} timeout, retry: {}", cmd.as_frame(), retries));
+        send_init_sequence_sync(&mut port, &state);
+
+        let session_start = Instant::now();
+        let mut last_watchdog_probe = Instant::now();
+        let mut last_watchdog_warn = Instant::now();
+
+        while is_running.load(Ordering::Relaxed) {
+            let cmd_opt = match rx_channel.try_recv() {
+                Ok(cmd) => Some(cmd),
+                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => None,
+                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                    logger::warn("SERIAL", "Canal de commandes fermé (arrêt du service)");
+                    is_running.store(false, Ordering::Relaxed);
+                    break;
+                }
+            };
+
+            if let Some(cmd) = cmd_opt {
+                let encoded = cmd.encode();
+                let expects_response = cmd.expects_response();
+                let mut retries = 1;
+                let mut success = false;
+
+                while retries >= 0 && !success && is_running.load(Ordering::Relaxed) {
+                    while let Ok(_) = internal_rx.try_recv() {}
+
+                    logger::log("SERIAL_TX", encoded.trim());
+                    if let Err(e) = port.write_all(encoded.as_bytes()) {
+                        logger::error("SERIAL", &format!("❌ Erreur d'écriture sur {} : {}", port_name, e));
+                        is_running.store(false, Ordering::Relaxed);
+                        break;
                     }
-                    retries -= 1;
+
+                    if expects_response {
+                        let start_wait = Instant::now();
+                        let mut matched = false;
+                        let mut got_default = false;
+
+                        while start_wait.elapsed() < Duration::from_millis(1000) && is_running.load(Ordering::Relaxed) {
+                            if let Ok(rx_line) = internal_rx.recv_timeout(Duration::from_millis(50)) {
+                                if cmd.matches_response(&rx_line) {
+                                    matched = true;
+                                    break;
+                                } else if rx_line.starts_with("Default:") {
+                                    got_default = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if matched {
+                            success = true;
+                        } else {
+                            if got_default {
+                                logger::warn("SERIAL", &format!("❌ Commande {} rejetée par la borne (Default), réessai: {}", cmd.as_frame(), retries));
+                            } else {
+                                logger::warn("SERIAL", &format!("⏳ Commande {} sans réponse (timeout), réessai: {}", cmd.as_frame(), retries));
+                            }
+                            retries -= 1;
+                        }
+                    } else {
+                        success = true;
+                    }
                 }
             } else {
-                success = true; // No acknowledgment expected
+                std::thread::sleep(Duration::from_millis(50));
+            }
+
+            let (last_rx_opt, current_status) = {
+                let rx_lock = last_rx_time.lock().unwrap();
+                let tel_lock = state.telemetry.lock().unwrap();
+                (*rx_lock, tel_lock.serial.status.clone())
+            };
+
+            let elapsed_since_rx = match last_rx_opt {
+                Some(t) => t.elapsed(),
+                None => session_start.elapsed(),
+            };
+
+            if let Ok(mut tel) = state.telemetry.lock() {
+                tel.serial.last_rx_secs_ago = Some(elapsed_since_rx.as_secs());
+            }
+
+            if elapsed_since_rx > watchdog_timeout {
+                if current_status == SerialStatus::UsbConnected {
+                    if let Ok(mut tel) = state.telemetry.lock() {
+                        tel.serial.status = SerialStatus::UsbNoResponse;
+                        tel.serial.message = "Aucune réponse de la carte Legrand (borne éteinte ou ATmega figé)".to_string();
+                    }
+                    if last_watchdog_warn.elapsed() >= Duration::from_secs(10) {
+                        logger::warn(
+                            "SERIAL",
+                            &format!(
+                                "⚠️ Aucune réponse de la carte Legrand sur {} depuis {}s. Vérifiez l'alimentation de la borne ou redémarrez-la électriquement si l'ATmega est figé.",
+                                port_name,
+                                elapsed_since_rx.as_secs()
+                            ),
+                        );
+                        last_watchdog_warn = Instant::now();
+                    }
+                } else if current_status == SerialStatus::UsbConnecting && elapsed_since_rx > Duration::from_secs(5) {
+                    if let Ok(mut tel) = state.telemetry.lock() {
+                        tel.serial.status = SerialStatus::UsbNoResponse;
+                        tel.serial.message = "Aucune réponse de la carte Legrand (borne éteinte ou ATmega figé)".to_string();
+                    }
+                    if last_watchdog_warn.elapsed() >= Duration::from_secs(10) {
+                        logger::warn(
+                            "SERIAL",
+                            &format!(
+                                "⏳ Port USB ouvert sur {} mais aucune réponse de l'ATmega après {}s. Vérifiez l'alimentation de la borne ou redémarrez-la électriquement si l'ATmega est figé.",
+                                port_name,
+                                elapsed_since_rx.as_secs()
+                            ),
+                        );
+                        last_watchdog_warn = Instant::now();
+                    }
+                }
+
+                if last_watchdog_probe.elapsed() >= Duration::from_secs(5) {
+                    last_watchdog_probe = Instant::now();
+                    let hello = Command::RaspberryPiModeOk;
+                    if let Err(e) = port.write_all(hello.encode().as_bytes()) {
+                        logger::error("SERIAL", &format!("❌ Erreur d'écriture sur {} pendant le probe: {}", port_name, e));
+                        is_running.store(false, Ordering::Relaxed);
+                    }
+                }
             }
         }
+
+        is_running.store(false, Ordering::Relaxed);
+        let _ = reader_thread.join();
+        drop(port);
+
+        logger::warn("SERIAL", "🔌 Session série terminée. Reprise de la recherche du port USB dans 2s...");
+        std::thread::sleep(Duration::from_secs(2));
     }
 }
 

@@ -68,6 +68,16 @@
   "info": {
     "not_available": "Informations non disponibles"
   },
+  "usb": {
+    "status_connected": "Liaison USB active",
+    "status_connecting": "USB connecté — En attente borne",
+    "status_no_response": "USB connecté — Aucune réponse ATmega",
+    "status_disconnected": "Câble USB déconnecté",
+    "alert_disconnected": "Câble USB non détecté (/dev/ttyUSB0 introuvable). Vérifiez le branchement du câble USB reliant le Raspberry Pi.",
+    "alert_no_response": "Aucune réponse de la carte Legrand sur /dev/ttyUSB0. Vérifiez l'alimentation de la borne ou redémarrez-la électriquement si l'ATmega est figé.",
+    "alert_connecting": "Port USB connecté. Initialisation du dialogue avec l'ATmega...",
+    "controls_disabled": "Commandes désactivées : liaison série USB non connectée"
+  },
   "alert": {
     "error": "Erreur: ",
     "tic_refresh_state_a": "La borne doit être à l'état A (Libre) pour lancer une détection TIC."

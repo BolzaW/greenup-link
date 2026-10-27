@@ -68,6 +68,16 @@
   "info": {
     "not_available": "Information not available"
   },
+  "usb": {
+    "status_connected": "USB link active",
+    "status_connecting": "USB connected — Waiting for station",
+    "status_no_response": "USB connected — No response",
+    "status_disconnected": "USB cable disconnected",
+    "alert_disconnected": "USB cable not detected (/dev/ttyUSB0 not found). Check the USB connection to the Raspberry Pi.",
+    "alert_no_response": "No response from the Legrand board on /dev/ttyUSB0. Check station power or power-cycle the station if the ATmega is frozen.",
+    "alert_connecting": "USB port connected. Initializing communication with the ATmega...",
+    "controls_disabled": "Controls disabled: USB serial link not connected"
+  },
   "alert": {
     "error": "Error: ",
     "tic_refresh_state_a": "The station must be in state A (Free) to start TIC detection."

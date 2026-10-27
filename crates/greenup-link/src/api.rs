@@ -248,8 +248,38 @@ async fn get_telemetry(State(state): State<SharedState>) -> impl IntoResponse {
     Json(telemetry)
 }
 
+fn check_serial_connected(state: &SharedState) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    let tel = state.telemetry.lock().unwrap();
+    if tel.serial.status != greenup_driver::telemetry::SerialStatus::UsbConnected {
+        let err_msg = match tel.serial.status {
+            greenup_driver::telemetry::SerialStatus::UsbDisconnected => {
+                "Câble USB déconnecté (aucun adaptateur USB détecté)"
+            }
+            greenup_driver::telemetry::SerialStatus::UsbConnecting => {
+                "Liaison USB en cours d'initialisation"
+            }
+            greenup_driver::telemetry::SerialStatus::UsbNoResponse => {
+                "Aucune réponse de la carte Legrand (borne éteinte ou ATmega figé)"
+            }
+            _ => "Liaison série USB indisponible",
+        };
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "status": "error",
+                "error": format!("Commande impossible : {}", err_msg),
+                "serial_status": tel.serial.status,
+            })),
+        ));
+    }
+    Ok(())
+}
+
 /// POST /api/current/:amps
 async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     let cmd = match u8::try_from(amps).ok().map(Command::set_current_limit) {
         Some(Ok(cmd)) => cmd,
         _ => {
@@ -290,6 +320,9 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
 
 /// POST /api/init
 async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     logger::log("API", "🔄 Starting initialization sequence");
     tokio::spawn(async move {
         // TIC detection is never started automatically:
@@ -303,6 +336,9 @@ async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// POST /api/reset
 async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     logger::log("API", "⚠️ Hardware restart request (Reset)");
     if state.serial_tx.send(Command::Reset).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "ATmega board restart requested"})))
@@ -319,6 +355,9 @@ async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// POST /api/command
 async fn send_raw_command(State(state): State<SharedState>, body: String) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     let cmd = body.trim().to_string();
     logger::log("API", &format!("🔧 Raw command: {}", body.trim()));
     if state.serial_tx.send(Command::Raw(cmd)).await.is_ok() {
@@ -330,6 +369,9 @@ async fn send_raw_command(State(state): State<SharedState>, body: String) -> imp
 
 /// POST /api/tic/refresh
 async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     logger::log("API", "🔄 Manual TIC detection request (TICTM:1)");
     match greenup_driver::serial::start_tic_detection(&state).await {
         Ok(()) => (StatusCode::OK, Json(json!({"status": "success", "message": "TIC detection started"}))),
@@ -346,6 +388,9 @@ async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// POST /api/bluetooth
 async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<BluetoothPayload>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     let cmd = Command::SetBluetooth(payload.enabled);
     let log_msg = if payload.enabled { "🔵 Activating" } else { "⚪ Deactivating" };
     
@@ -371,6 +416,9 @@ pub struct ChargeActionPayload { action: String }
 
 /// POST /api/charge
 async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<ChargeActionPayload>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     match payload.action.as_str() {
         "enable" => {
             logger::log("API", "⚡ Charge enable requested (T2COK + FM2:0 + DOK)");

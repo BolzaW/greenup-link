@@ -32,6 +32,13 @@ async function apiFetch(url, options = {}) {
     const response = await fetch(url, Object.assign({}, options, { headers }));
     if (response.status === 401) {
         handleUnauthorized();
+    } else if (response.status === 503) {
+        try {
+            const errData = await response.clone().json();
+            if (errData && errData.error) {
+                alert(errData.error);
+            }
+        } catch (_) {}
     }
     return response;
 }
@@ -197,6 +204,68 @@ async function fetchInfo() {
     }
 }
 
+
+function updateUsbStatus(serial) {
+    if (!serial) return;
+    const status = serial.status;
+    window.isUsbConnected = (status === 'usb_connected');
+
+    if (!usbLed || !usbStatusBadge || !usbAlertBanner) return;
+
+    // Base styling
+    usbLed.className = 'w-2.5 h-2.5 rounded-full inline-block flex-shrink-0';
+    usbStatusBadge.className = 'font-bold text-[10px] md:text-[11px] flex-shrink-0';
+    usbAlertBanner.className = 'max-w-6xl mx-auto w-full mb-6 p-3 px-4 rounded-xl border flex items-center space-x-3 transition-all duration-300';
+
+    if (status === 'usb_connected') {
+        usbLed.classList.add('bg-emerald-500', 'shadow-[0_0_8px_rgba(16,185,129,0.8)]');
+        usbStatusBadge.classList.add('text-emerald-400');
+        usbStatusBadge.innerText = t('usb.status_connected');
+        usbAlertBanner.classList.add('hidden');
+        if (controlsPanel && !isActionPending) {
+            controlsPanel.classList.remove('opacity-40', 'pointer-events-none');
+            controlsPanel.removeAttribute('title');
+        }
+    } else if (status === 'usb_connecting') {
+        usbLed.classList.add('bg-amber-400', 'animate-pulse');
+        usbStatusBadge.classList.add('text-amber-400');
+        usbStatusBadge.innerText = t('usb.status_connecting');
+        usbAlertBanner.classList.remove('hidden');
+        usbAlertBanner.classList.add('bg-amber-950/40', 'border-amber-700/60', 'text-amber-200');
+        if (usbAlertIcon) usbAlertIcon.innerText = '⏳';
+        if (usbAlertText) usbAlertText.innerText = t('usb.alert_connecting');
+        if (controlsPanel && !isActionPending) {
+            controlsPanel.classList.add('opacity-40', 'pointer-events-none');
+            controlsPanel.title = t('usb.controls_disabled');
+        }
+    } else if (status === 'usb_no_response') {
+        usbLed.classList.add('bg-amber-500', 'animate-pulse');
+        usbStatusBadge.classList.add('text-amber-400');
+        usbStatusBadge.innerText = t('usb.status_no_response');
+        usbAlertBanner.classList.remove('hidden');
+        usbAlertBanner.classList.add('bg-amber-950/50', 'border-amber-600', 'text-amber-200');
+        if (usbAlertIcon) usbAlertIcon.innerText = '⚠️';
+        if (usbAlertText) usbAlertText.innerText = t('usb.alert_no_response');
+        if (controlsPanel && !isActionPending) {
+            controlsPanel.classList.add('opacity-40', 'pointer-events-none');
+            controlsPanel.title = t('usb.controls_disabled');
+        }
+    } else {
+        // usb_disconnected
+        usbLed.classList.add('bg-rose-500', 'animate-pulse');
+        usbStatusBadge.classList.add('text-rose-400');
+        usbStatusBadge.innerText = t('usb.status_disconnected');
+        usbAlertBanner.classList.remove('hidden');
+        usbAlertBanner.classList.add('bg-rose-950/50', 'border-rose-700/70', 'text-rose-200');
+        if (usbAlertIcon) usbAlertIcon.innerText = '🔴';
+        if (usbAlertText) usbAlertText.innerText = t('usb.alert_disconnected');
+        if (controlsPanel && !isActionPending) {
+            controlsPanel.classList.add('opacity-40', 'pointer-events-none');
+            controlsPanel.title = t('usb.controls_disabled');
+        }
+    }
+}
+
 async function fetchTelemetry() {
     if (window.isAuthRequired && !window.isAuthenticated) return;
     try {
@@ -204,10 +273,21 @@ async function fetchTelemetry() {
         if (!response.ok) return;
         const data = await response.json();
 
-        valVoltage.innerText = data.voltage.toFixed(1);
-        valCurrent.innerText = data.current.toFixed(1);
-        valPower.innerText = (data.power).toFixed(0);
-        valEnergy.innerText = (data.energy).toFixed(0);
+        if (data.serial) {
+            updateUsbStatus(data.serial);
+        }
+
+        if (!window.isUsbConnected) {
+            valVoltage.innerText = '--';
+            valCurrent.innerText = '--';
+            valPower.innerText = '--';
+            valEnergy.innerText = '--';
+        } else {
+            valVoltage.innerText = data.voltage.toFixed(1);
+            valCurrent.innerText = data.current.toFixed(1);
+            valPower.innerText = (data.power).toFixed(0);
+            valEnergy.innerText = (data.energy).toFixed(0);
+        }
 
         if (data.error_code && data.error_code !== "0000" && data.error_code !== "") {
             const desc = t('hardware_errors.' + data.error_code);
@@ -267,6 +347,10 @@ async function refreshTic() {
 }
 
 async function sendPostAction(url, bodyObj = null) {
+    if (!window.isUsbConnected) {
+        alert(t('usb.controls_disabled'));
+        return;
+    }
     lockControls();
     try {
         let opts = { method: 'POST' };

@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
-pub use crate::telemetry::{BoardInfo, Telemetry};
+pub use crate::telemetry::{BoardInfo, SerialConnection, SerialStatus, Telemetry};
 
 #[derive(Default)]
 pub struct TicDetectionState {
@@ -27,6 +27,14 @@ impl AppState {
             tic_detection: Mutex::new(TicDetectionState::default()),
             tokio_handle: tokio::runtime::Handle::current(),
         }
+    }
+
+    /// Returns true if the USB serial link is active and actively communicating with the ATmega.
+    pub fn is_serial_connected(&self) -> bool {
+        self.telemetry
+            .lock()
+            .map(|t| t.serial.status == SerialStatus::UsbConnected)
+            .unwrap_or(false)
     }
 }
 

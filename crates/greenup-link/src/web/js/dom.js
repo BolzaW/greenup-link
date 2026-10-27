@@ -35,6 +35,14 @@ const btToggle = document.getElementById('btToggle');
 const boardInfo = document.getElementById('boardInfo');
 const subInfo = document.getElementById('subInfo');
 
+// USB Connection Elements
+const usbLed = document.getElementById('usbLed');
+const usbStatusBadge = document.getElementById('usbStatusBadge');
+const usbAlertBanner = document.getElementById('usbAlertBanner');
+const usbAlertIcon = document.getElementById('usbAlertIcon');
+const usbAlertText = document.getElementById('usbAlertText');
+window.isUsbConnected = false;
+
 // Shared state
 let isActionPending = false;
 let isDraggingSlider = false;
