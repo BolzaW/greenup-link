@@ -30,7 +30,10 @@
     "clear_title": "Effacer la console",
     "pause_title": "Mettre en pause le défilement",
     "export_title": "Exporter le fichier de log en cours",
-    "hint": "Entrée pour envoyer • ↑↓ Historique"
+    "hint": "Entrée pour envoyer • ↑↓ Historique",
+    "invalid_cmd_format": "Format invalide : lettres, chiffres, : et ? (1 à 20 car.)",
+    "sending": "Envoi : ",
+    "cmd_sent": "Commande envoyée"
   },
   "visualizer": {
     "force_tic_refresh": "Forcer l'actualisation du mode TIC",
@@ -57,7 +60,9 @@
     "charge_params": "Paramètres de charge",
     "current_limit": "Consigne de Courant",
     "enable": "ACTIVER",
-    "disable": "DÉSACTIVER", "pause": "PAUSE", "resume": "REPRENDRE"
+    "disable": "DÉSACTIVER",
+    "pause": "PAUSE",
+    "resume": "REPRENDRE"
   },
   "tic": {
     "standard": "TIC Standard\n(9600 bauds)",

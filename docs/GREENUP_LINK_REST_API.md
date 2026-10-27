@@ -219,6 +219,16 @@ Three standard authentication methods are supported simultaneously against the s
 - **Method**: `POST`
 - **Body (Plain text)**: the command to send (e.g., `State?`)
 - **Description**: Directly transmits the string on the serial port. Reserved for testing and debugging. See [`LEGRAND_SERIAL_PROTOCOL.md`](LEGRAND_SERIAL_PROTOCOL.md) for the list of known commands.
+- **Validation & Security**:
+  - Whitelist: only characters matching `[a-zA-Z0-9:?]` are accepted (strictly eliminates CRLF `\r`, `\n`, control characters, and injection attempts).
+  - Length: maximum 20 characters (`1..=20`).
+  - If invalid, returns HTTP `400 Bad Request`:
+    ```json
+    {
+      "status": "error",
+      "error": "Invalid command format. Allowed characters: [a-zA-Z0-9:?], length 1-20 characters."
+    }
+    ```
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Command sent" }

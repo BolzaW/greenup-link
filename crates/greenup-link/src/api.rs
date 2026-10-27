@@ -353,14 +353,38 @@ async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
 
 
 
+const MAX_RAW_COMMAND_LEN: usize = 20;
+
+fn is_valid_raw_command(cmd: &str) -> bool {
+    !cmd.is_empty()
+        && cmd.len() <= MAX_RAW_COMMAND_LEN
+        && cmd.chars().all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '?')
+}
+
 /// POST /api/command
 async fn send_raw_command(State(state): State<SharedState>, body: String) -> impl IntoResponse {
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
-    let cmd = body.trim().to_string();
-    logger::log("API", &format!("🔧 Raw command: {}", body.trim()));
-    if state.serial_tx.send(Command::Raw(cmd)).await.is_ok() {
+    let cmd = body.trim();
+    if !is_valid_raw_command(cmd) {
+        logger::warn("API", &format!("⛔ Rejected invalid raw command: '{}'", cmd));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "status": "error",
+                "error": "Invalid command format. Allowed characters: [a-zA-Z0-9:?], length 1-20 characters."
+            })),
+        );
+    }
+
+    if cmd.eq_ignore_ascii_case("service") {
+        logger::warn("API", "⚠️ Warning: ATmega interactive service menu triggered via raw command");
+    } else {
+        logger::info("API", &format!("🔧 Raw command: {}", cmd));
+    }
+
+    if state.serial_tx.send(Command::Raw(cmd.to_string())).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Command sent"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
@@ -461,6 +485,30 @@ async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<
         }
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[test]
+    fn test_is_valid_raw_command() {
+        // Valid commands
+        assert!(is_valid_raw_command("service"));
+        assert!(is_valid_raw_command("0"));
+        assert!(is_valid_raw_command("1"));
+        assert!(is_valid_raw_command("WeekYearProduction?")); // 19 chars
+        assert!(is_valid_raw_command("FM2:0"));
+        assert!(is_valid_raw_command("TICTM:1"));
+        assert!(is_valid_raw_command("12345678901234567890")); // exactly 20 chars
 
-
+        // Invalid commands
+        assert!(!is_valid_raw_command("")); // empty
+        assert!(!is_valid_raw_command("123456789012345678901")); // 21 chars (> 20)
+        assert!(!is_valid_raw_command("FM2: 0")); // contains space
+        assert!(!is_valid_raw_command("cmd\n")); // newline injection
+        assert!(!is_valid_raw_command("cmd\r\n")); // CRLF injection
+        assert!(!is_valid_raw_command("test;rm")); // semicolon
+        assert!(!is_valid_raw_command("cmd|pipe")); // pipe
+        assert!(!is_valid_raw_command("$VAR")); // dollar sign
+        assert!(!is_valid_raw_command("cmd=val")); // equals sign
+    }
+}

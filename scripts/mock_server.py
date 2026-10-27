@@ -297,23 +297,36 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 self.send_error(400, str(e))
         elif url == "/api/command":
             cmd = body.strip()
-            add_mock_log("API", "INFO", f"🔧 Raw command received: {cmd}")
-            add_mock_log("SERIAL_TX", "INFO", cmd)
-            # Simulated responses
-            if cmd in ("!GET_STATE", "State?"):
-                add_mock_log("SERIAL_RX", "INFO", f"State:{state['greenup_state']}")
-            elif cmd == "CC?":
-                add_mock_log("SERIAL_RX", "INFO", "CC:32A")
-            elif cmd == "Side?":
-                add_mock_log("SERIAL_RX", "INFO", "Side:Left")
-            elif cmd == "!GET_ALL":
-                add_mock_log("SERIAL_RX", "INFO", f"State:{state['greenup_state']} I:{state['current']} V:{state['voltage']}")
-            elif cmd.startswith("FM1:"):
-                add_mock_log("SERIAL_RX", "INFO", f"{cmd}:OK")
-            elif cmd == "RPIMODEOK":
-                add_mock_log("SERIAL_RX", "INFO", "RPIMODE:OK")
+            import re
+            if not re.match(r'^[a-zA-Z0-9:?]{1,20}$', cmd):
+                add_mock_log("API", "WARN", f"⛔ Rejected invalid raw command: '{cmd}'")
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "status": "error",
+                    "error": "Invalid command format. Allowed characters: [a-zA-Z0-9:?], length 1-20 characters."
+                }).encode("utf-8"))
+                return
+
+            if cmd.lower() == "service":
+                add_mock_log("API", "WARN", "⚠️ Warning: ATmega interactive service menu triggered via raw command")
+                add_mock_log("SERIAL_TX", "INFO", cmd)
+                add_mock_log("SERIAL_RX", "INFO", "---service menu--- Press 0 : Exit")
             else:
-                add_mock_log("SERIAL_RX", "INFO", "ACK")
+                add_mock_log("API", "INFO", f"🔧 Raw command received: {cmd}")
+                add_mock_log("SERIAL_TX", "INFO", cmd)
+                # Simulated responses
+                if cmd == "State?":
+                    add_mock_log("SERIAL_RX", "INFO", f"State:{state['greenup_state']}")
+                elif cmd == "CC?":
+                    add_mock_log("SERIAL_RX", "INFO", "CC:32A")
+                elif cmd == "Side?":
+                    add_mock_log("SERIAL_RX", "INFO", "Side:Left")
+                elif cmd == "RPIMODEOK":
+                    add_mock_log("SERIAL_RX", "INFO", "RPIMODE:OK")
+                else:
+                    add_mock_log("SERIAL_RX", "INFO", "ACK")
             self.send_json({"status": "success", "message": "Command sent"})
         elif url == "/api/init":
             add_mock_log("API", "INFO", "🔄 Initialization sequence started (mock)")

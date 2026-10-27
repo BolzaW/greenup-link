@@ -329,12 +329,21 @@ function setupConsoleDomListeners() {
     }
 
     // Raw prompt send
+    const RAW_CMD_REGEX = /^[a-zA-Z0-9:?]{1,20}$/;
     const btnSend = document.getElementById('btnConsoleSend');
     const inputPrompt = document.getElementById('consoleCommandInput');
     if (btnSend && inputPrompt) {
         const sendCmd = () => {
             const raw = inputPrompt.value.trim();
             if (!raw) return;
+            const feedback = document.getElementById('consoleCommandFeedback');
+            if (!RAW_CMD_REGEX.test(raw)) {
+                if (feedback) {
+                    feedback.textContent = t('console.invalid_cmd_format');
+                    feedback.className = 'text-[10px] font-mono text-rose-400';
+                }
+                return;
+            }
             sendCommandRaw(raw);
             addCommandToHistory(raw);
             inputPrompt.value = '';
@@ -359,7 +368,7 @@ function setupConsoleDomListeners() {
 function sendCommandRaw(cmd) {
     const feedback = document.getElementById('consoleCommandFeedback');
     if (feedback) {
-        feedback.textContent = `Envoi: ${cmd}...`;
+        feedback.textContent = `${t('console.sending')}${cmd}...`;
         feedback.className = 'text-[10px] font-mono text-sky-400';
     }
 
@@ -372,20 +381,20 @@ function sendCommandRaw(cmd) {
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
             if (feedback) {
-                feedback.textContent = `OK: ${data.message || 'Commande envoyée'}`;
+                feedback.textContent = `OK: ${data.message || t('console.cmd_sent')}`;
                 feedback.className = 'text-[10px] font-mono text-emerald-400';
                 setTimeout(() => { if (feedback.textContent.startsWith('OK:')) feedback.textContent = ''; }, 3000);
             }
         } else {
             if (feedback) {
-                feedback.textContent = `Erreur: ${data.error || res.statusText}`;
+                feedback.textContent = `Error: ${data.error || res.statusText}`;
                 feedback.className = 'text-[10px] font-mono text-rose-400';
             }
         }
     })
     .catch(err => {
         if (feedback) {
-            feedback.textContent = `Erreur réseau: ${err.message}`;
+            feedback.textContent = `Error: ${err.message}`;
             feedback.className = 'text-[10px] font-mono text-rose-400';
         }
     });

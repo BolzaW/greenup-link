@@ -30,7 +30,10 @@
     "clear_title": "Clear console",
     "pause_title": "Pause auto-scroll",
     "export_title": "Export active log file",
-    "hint": "Enter to send • ↑↓ History"
+    "hint": "Enter to send • ↑↓ History",
+    "invalid_cmd_format": "Invalid format: letters, numbers, : and ? only (1 to 20 chars)",
+    "sending": "Sending: ",
+    "cmd_sent": "Command sent"
   },
   "visualizer": {
     "force_tic_refresh": "Force TIC mode refresh",
@@ -57,7 +60,9 @@
     "charge_params": "Charge parameters",
     "current_limit": "Current Setpoint",
     "enable": "ENABLE",
-    "disable": "DISABLE", "pause": "PAUSE", "resume": "RESUME"
+    "disable": "DISABLE",
+    "pause": "PAUSE",
+    "resume": "RESUME"
   },
   "tic": {
     "standard": "Standard TIC\n(9600 baud)",
