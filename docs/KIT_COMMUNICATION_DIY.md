@@ -48,7 +48,7 @@ To replicate Legrand's setup with off-the-shelf commercial components:
 | **Waterproof Buck Converter 12V/24V to 5V 3A (15W)** | - Input: 8V – 32V DC<br>- Output: 5.0V / 3A (15W)<br>- Format: Sealed black resin case (IP67 waterproof)<br>- Output connector: **Micro-USB male** (for Pi Zero 2 W or Pi 3B+) or **USB-C male** (for Pi 4) | *12V to 5V 3A Micro USB buck converter* / *DC-DC Step Down Waterproof 12V 5V 3A* | ~**8 € – 12 €** |
 
 *Advantages:* Completely self-contained inside the wallbox enclosure; no external cable or power outlet required.  
-*Requirements:* Requires a 4-pin Molex connector (see Section C below) to tap into the station's internal auxiliary harness.
+*Requirements:* Requires a 2-pin Molex connector (see Section C below) to tap into the station's internal auxiliary harness.
 
 #### Option 2: External Standard USB Power Supply (Simplified Alternative)
 As an easier alternative, you can use a standard official or commercial Raspberry Pi 5V power supply (5.1V / 2.5A or 3A with Micro-USB for Pi Zero 2 W / Pi 3B+, or USB-C for Pi 4). 
@@ -68,9 +68,18 @@ The low-voltage power cord is simply routed into the charging station enclosure 
 
 | Component | Specification | Role | Indicative Price |
 | :--- | :--- | :--- | :--- |
-| **Wallbox Auxiliary Power Connector** *(Option 1 only)* | Connector type **Molex Mini-Fit Jr.** (4-pin, 2x2 arrangement) | Plugs directly into the station's internal auxiliary power output. *(Not needed if using Option 2 External PSU)*. | ~**3 € – 4 €** |
+| **Wallbox Auxiliary Power Connector** *(Option 1 only)* | Connector type **Molex Mini-Fit Jr. 2-pin (1x2 single row)** with top locking latch (pitch 4.2 mm, e.g. Molex series 5557 / 39-01-4020 or 39-01-4021) | Plugs directly into the station's internal 12V auxiliary power cable. **Pinout:** Red = **+12V DC**, Black = **GND (0V)**. Pre-crimped pigtails or DIY kits with female pins. *(Not needed if using Option 2 External PSU)*. | ~**2 € – 4 €** |
 | **USB Cable for Controller Link** | - For Pi Zero 2 W: **Micro-USB male to USB-A female OTG adapter** + short USB cable.<br>- For Pi 3B+ / 4: Short standard **USB-A to USB cable** connecting to the power board. | Connects the Raspberry Pi to the ATmega2560 power controller board. | ~**3 € – 5 €** |
 | **High Endurance MicroSD Card** | **Kingston High Endurance** (32 GB, `SDCE/32GB`) or **Kingston Industrial** (`SDCIT2/32GB`) / **SanDisk MAX Endurance** | System storage. High/Industrial endurance cards are built to withstand continuous writes and extreme operating temperatures (-25°C to +85°C) in outdoor wallboxes. | ~**45 € – 50 €** *(Standard consumer card: ~10 €)* |
+
+> [!NOTE]
+> ### 🔌 12V Auxiliary Power Connector Identification & Pinout
+> - **Arrangement:** 2-pin single row (**1x2**) with retention clip / positive lock (pitch 4.20 mm).
+> - **Polarity / Wiring:**
+>   - **Red wire:** **+12V DC** (positive from the station's internal Mean Well power supply)
+>   - **Black wire:** **GND / 0V** (ground return)
+> - **Important Distinction:** Inside the charging station, an adjacent harness with identical connectors powers other auxiliary modules (such as the optional RFID reader 0 590 59 or TIC/Bluetooth board). Verify that you tap the 2-pin harness with Red/Black wires delivering 12V DC.
+> - **Search references:** *Molex Mini-Fit Jr 2 pin 1x2* / *Molex 5557 2P 4.2mm* / *Molex 39-01-4020*. Pre-crimped 2-pin pigtail cables (*"câble Molex 2 broches 4.2mm pré-câblé"*) make connection to the DC-DC buck converter quick and easy without dedicated crimping pliers.
 
 ---
 
@@ -106,9 +115,9 @@ The low-voltage power cord is simply routed into the charging station enclosure 
                         |
                         | (Factory Legrand harness)
                         v
-          [ Molex 4-pin (2x2) Connector ]
+          [ Molex 2-pin (1x2) Connector ]
               |                     |
-              | (+12V / +24V DC)    | (GND / Return)
+              | (+12V DC - Red)     | (GND - Black)
               +----------+   +------+
                          |   |
                          v   v
