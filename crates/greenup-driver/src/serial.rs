@@ -1,7 +1,7 @@
 use crate::logger;
 use crate::state::SharedState;
 use greenup_protocol::{commands::FunctioningMode, Command, parser::{parse_line, ProtocolEvent}};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -26,6 +26,10 @@ impl Default for SerialOptions {
         }
     }
 }
+
+/// Maximum allowed length in bytes for a single line from the serial port (256 bytes).
+/// Protects against OOM caused by electrical noise on the UART bus streaming bytes without delimiters.
+pub const MAX_SERIAL_LINE_LEN: usize = 256;
 
 const TICTM_MAX_ZEROS: u32 = 5;
 
@@ -183,32 +187,56 @@ pub fn run_serial_loop_with_options(
 
         let reader_thread = std::thread::spawn(move || {
             let mut reader = BufReader::new(clone_port);
-            let mut line = String::new();
+            let mut byte_buf = Vec::new();
             while is_running_reader.load(Ordering::Relaxed) {
-                match reader.read_line(&mut line) {
+                if byte_buf.len() >= MAX_SERIAL_LINE_LEN {
+                    logger::warn(
+                        "SERIAL",
+                        &format!(
+                            "⚠️ Serial buffer exceeded {} bytes without newline delimiter (noise or invalid baud). Discarding corrupted buffer.",
+                            MAX_SERIAL_LINE_LEN
+                        ),
+                    );
+                    byte_buf.clear();
+                }
+
+                let remaining = (MAX_SERIAL_LINE_LEN - byte_buf.len()) as u64;
+                match (&mut reader).take(remaining).read_until(b'\n', &mut byte_buf) {
                     Ok(n) if n > 0 => {
-                        let clean_line = line.trim();
-                        if !clean_line.is_empty() {
-                            if let Ok(mut t) = last_rx_reader.lock() {
-                                *t = Some(Instant::now());
-                            }
-
-                            if let Ok(mut tel) = state_rx.telemetry.lock() {
-                                if tel.serial.status != SerialStatus::UsbConnected {
-                                    tel.serial.status = SerialStatus::UsbConnected;
-                                    tel.serial.message = "USB serial link active - Station connected".to_string();
-                                    logger::info(
-                                        "SERIAL",
-                                        &format!("✅ USB serial communication established on {} (ATmega link active)", port_name_reader),
-                                    );
+                        if byte_buf.ends_with(b"\n") {
+                            let clean_str = String::from_utf8_lossy(&byte_buf);
+                            let clean_line = clean_str.trim();
+                            if !clean_line.is_empty() {
+                                if let Ok(mut t) = last_rx_reader.lock() {
+                                    *t = Some(Instant::now());
                                 }
-                                tel.serial.last_rx_secs_ago = Some(0);
-                            }
 
-                            let _ = internal_tx.send(clean_line.to_string());
-                            parse_incoming_line(clean_line, &state_rx);
+                                if let Ok(mut tel) = state_rx.telemetry.lock() {
+                                    if tel.serial.status != SerialStatus::UsbConnected {
+                                        tel.serial.status = SerialStatus::UsbConnected;
+                                        tel.serial.message = "USB serial link active - Station connected".to_string();
+                                        logger::info(
+                                            "SERIAL",
+                                            &format!("✅ USB serial communication established on {} (ATmega link active)", port_name_reader),
+                                        );
+                                    }
+                                    tel.serial.last_rx_secs_ago = Some(0);
+                                }
+
+                                let _ = internal_tx.send(clean_line.to_string());
+                                parse_incoming_line(clean_line, &state_rx);
+                            }
+                            byte_buf.clear();
+                        } else if byte_buf.len() >= MAX_SERIAL_LINE_LEN {
+                            logger::warn(
+                                "SERIAL",
+                                &format!(
+                                    "⚠️ Serial buffer exceeded {} bytes without newline delimiter (noise or invalid baud). Discarding corrupted buffer.",
+                                    MAX_SERIAL_LINE_LEN
+                                ),
+                            );
+                            byte_buf.clear();
                         }
-                        line.clear();
                     }
                     Ok(_) => {
                         logger::error(
@@ -633,5 +661,73 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             logger::log("SERIAL", &format!("⚠️ Command not recognized by the charging station: {}", cmd));
         }
         ProtocolEvent::Unknown(_) => {}
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_bounded_line_reading_normal() {
+        let data = b"State:A\r\nI:0.0 V:230.0\n";
+        let mut reader = Cursor::new(data);
+        let mut byte_buf = Vec::new();
+
+        // First line
+        let remaining = (MAX_SERIAL_LINE_LEN - byte_buf.len()) as u64;
+        let n = (&mut reader).take(remaining).read_until(b'\n', &mut byte_buf).unwrap();
+        assert!(n > 0);
+        assert!(byte_buf.ends_with(b"\n"));
+        let clean = String::from_utf8_lossy(&byte_buf).trim().to_string();
+        assert_eq!(clean, "State:A");
+        byte_buf.clear();
+
+        // Second line
+        let remaining = (MAX_SERIAL_LINE_LEN - byte_buf.len()) as u64;
+        let n = (&mut reader).take(remaining).read_until(b'\n', &mut byte_buf).unwrap();
+        assert!(n > 0);
+        assert!(byte_buf.ends_with(b"\n"));
+        let clean = String::from_utf8_lossy(&byte_buf).trim().to_string();
+        assert_eq!(clean, "I:0.0 V:230.0");
+    }
+
+    #[test]
+    fn test_bounded_line_reading_noise_overflow() {
+        // Continuous 300 bytes without newline
+        let noise = vec![b'X'; 300];
+        let mut reader = Cursor::new(noise);
+        let mut byte_buf = Vec::new();
+
+        let remaining = (MAX_SERIAL_LINE_LEN - byte_buf.len()) as u64;
+        let n = (&mut reader).take(remaining).read_until(b'\n', &mut byte_buf).unwrap();
+
+        // Must cap at MAX_SERIAL_LINE_LEN (256 bytes) and NOT end with newline
+        assert_eq!(n, MAX_SERIAL_LINE_LEN);
+        assert_eq!(byte_buf.len(), MAX_SERIAL_LINE_LEN);
+        assert!(!byte_buf.ends_with(b"\n"));
+
+        // Overflow condition triggers buffer clear
+        if byte_buf.len() >= MAX_SERIAL_LINE_LEN {
+            byte_buf.clear();
+        }
+        assert_eq!(byte_buf.len(), 0);
+    }
+
+    #[test]
+    fn test_bounded_line_reading_invalid_utf8_glitch() {
+        // Frame containing raw binary electrical noise / glitch bytes (0xFF, 0xFE)
+        let glitch_frame = vec![0xFF, 0xFE, b'O', b'K', b'\n'];
+        let mut reader = Cursor::new(glitch_frame);
+        let mut byte_buf = Vec::new();
+
+        let remaining = (MAX_SERIAL_LINE_LEN - byte_buf.len()) as u64;
+        let n = (&mut reader).take(remaining).read_until(b'\n', &mut byte_buf).unwrap();
+        assert!(n > 0);
+        assert!(byte_buf.ends_with(b"\n"));
+
+        // from_utf8_lossy handles glitch bytes gracefully without panic or error
+        let clean = String::from_utf8_lossy(&byte_buf).trim().to_string();
+        assert!(clean.contains("OK"));
     }
 }
