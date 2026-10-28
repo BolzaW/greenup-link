@@ -13,4 +13,4 @@ chrono = "0.4"
 greenup-protocol = { path = "../greenup-protocol" }
 greenup-driver = { path = "../greenup-driver" }
 tokio-stream = { version = "0.1", features = ["sync"] }
-
+zip = { version = "2.2", default-features = false, features = ["deflate"] }

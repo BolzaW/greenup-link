@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Local};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -470,6 +471,238 @@ RAW LEGRAND TICKET
     }
 }
 
+
+/// Validates session identifier to prevent path traversal or malformed requests.
+pub fn is_valid_session_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// Structured summary of a saved session.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SessionSummary {
+    pub id: String,
+    pub start_time: String,
+    pub end_time: String,
+    pub termination_reason: String,
+    pub total_duration_seconds: u64,
+    pub charging_duration_seconds: u64,
+    pub idle_duration_seconds: u64,
+    pub total_energy_kwh: f64,
+    pub phase: String,
+    pub max_current_a: f32,
+    pub max_power_w: f32,
+    pub avg_power_w: f32,
+    pub has_csv: bool,
+    pub has_txt: bool,
+    pub csv_size_bytes: u64,
+}
+
+/// Structured summary of an ongoing active session.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ActiveSessionSummary {
+    pub session_id: String,
+    pub start_time: String,
+    pub elapsed_seconds: u64,
+    pub charging_duration_seconds: u64,
+    pub total_energy_kwh: f64,
+    pub current_a: f32,
+    pub power_w: f32,
+    pub max_current_a: f32,
+    pub max_power_w: f32,
+    pub state: String,
+    pub phase: String,
+}
+
+fn extract_seconds_in_parens(s: &str) -> u64 {
+    if let Some(open) = s.rfind('(') {
+        if let Some(close) = s[open..].find('s') {
+            let num_str = s[open + 1..open + close].trim();
+            return num_str.parse::<u64>().unwrap_or(0);
+        }
+    }
+    0
+}
+
+fn extract_first_float(s: &str) -> f64 {
+    let mut num_str = String::new();
+    for c in s.chars() {
+        if c.is_ascii_digit() || c == '.' {
+            num_str.push(c);
+        } else if !num_str.is_empty() {
+            break;
+        }
+    }
+    num_str.parse::<f64>().unwrap_or(0.0)
+}
+
+/// Parses a companion `.txt` summary file into a structured `SessionSummary`.
+pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary> {
+    let content = fs::read_to_string(txt_path).ok()?;
+    let mut id = String::new();
+    let mut start_time = String::new();
+    let mut end_time = String::new();
+    let mut termination_reason = String::new();
+    let mut total_duration_seconds = 0;
+    let mut charging_duration_seconds = 0;
+    let mut idle_duration_seconds = 0;
+    let mut total_energy_kwh = 0.0;
+    let mut phase = "Mono (1-Phase)".to_string();
+    let mut max_current_a = 0.0f32;
+    let mut max_power_w = 0.0f32;
+    let mut avg_power_w = 0.0f32;
+
+    for line in content.lines() {
+        if let Some((key, val)) = line.split_once(':') {
+            let key = key.trim();
+            let val = val.trim();
+            match key {
+                "Session ID" => id = val.to_string(),
+                "Start Time" => start_time = val.to_string(),
+                "End Time" => end_time = val.to_string(),
+                "Termination Reason" => termination_reason = val.to_string(),
+                "Total Connected" => total_duration_seconds = extract_seconds_in_parens(val),
+                "Active Charging" => charging_duration_seconds = extract_seconds_in_parens(val),
+                "Idle / Waiting" => idle_duration_seconds = extract_seconds_in_parens(val),
+                "Total Energy" => total_energy_kwh = extract_first_float(val),
+                "Phase Detection" => phase = val.to_string(),
+                "Max Current" => max_current_a = extract_first_float(val) as f32,
+                "Max Power" => max_power_w = extract_first_float(val) as f32,
+                "Average Active Power" => avg_power_w = extract_first_float(val) as f32,
+                _ => {}
+            }
+        }
+    }
+
+    if id.is_empty() {
+        if let Some(stem) = txt_path.file_stem().and_then(|s| s.to_str()) {
+            id = stem.to_string();
+        }
+    }
+
+    let parent = txt_path.parent().unwrap_or_else(|| Path::new("."));
+    let csv_path = parent.join(format!("{}.csv", id));
+    let has_csv = csv_path.exists();
+    let csv_size_bytes = if has_csv {
+        fs::metadata(&csv_path).map(|m| m.len()).unwrap_or(0)
+    } else {
+        0
+    };
+
+    Some(SessionSummary {
+        id,
+        start_time,
+        end_time,
+        termination_reason,
+        total_duration_seconds,
+        charging_duration_seconds,
+        idle_duration_seconds,
+        total_energy_kwh,
+        phase,
+        max_current_a,
+        max_power_w,
+        avg_power_w,
+        has_csv,
+        has_txt: true,
+        csv_size_bytes,
+    })
+}
+
+/// Lists all saved sessions from disk, sorted in reverse chronological order (newest first).
+pub fn list_saved_sessions() -> Vec<SessionSummary> {
+    let sessions_dir = get_sessions_dir();
+    let mut summaries = Vec::new();
+
+    if let Ok(entries) = fs::read_dir(&sessions_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(file_name) = path.file_name().and_then(|f| f.to_str()) {
+                if file_name.starts_with("session_") && file_name.ends_with(".txt") {
+                    if let Some(summary) = parse_session_summary_from_txt(&path) {
+                        summaries.push(summary);
+                    }
+                }
+            }
+        }
+    }
+
+    summaries.sort_by(|a, b| b.id.cmp(&a.id));
+    summaries
+}
+
+/// Returns live summary metrics of the currently active session, if any.
+pub fn get_active_session_summary(tel: &Telemetry) -> Option<ActiveSessionSummary> {
+    let lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
+    lock.as_ref().map(|s| {
+        let elapsed = s.start_instant.elapsed().as_secs();
+        let charging = s.active_charging_duration_secs_f64.round() as u64;
+        let energy_kwh = s.get_total_energy_kwh(tel);
+
+        ActiveSessionSummary {
+            session_id: s.session_id.clone(),
+            start_time: s.start_time.format("%Y-%m-%d %H:%M:%S").to_string(),
+            elapsed_seconds: elapsed,
+            charging_duration_seconds: charging,
+            total_energy_kwh: energy_kwh,
+            current_a: tel.current,
+            power_w: tel.power,
+            max_current_a: s.max_current,
+            max_power_w: s.max_power,
+            state: tel.greenup_state.clone(),
+            phase: match s.phase.as_str() {
+                "Mono" | "1" => "Mono (1-Phase)".to_string(),
+                "Tri" | "3" => "Tri (3-Phase)".to_string(),
+                other if !other.is_empty() => other.to_string(),
+                _ => "Mono (1-Phase)".to_string(),
+            },
+        }
+    })
+}
+
+/// Deletes the session files (`.csv` and `.txt`) for the given session ID.
+/// Returns `Ok(true)` if files were removed, `Ok(false)` if session didn't exist,
+/// or `Err(...)` if the session is currently active or ID is invalid.
+pub fn delete_session(session_id: &str) -> Result<bool, &'static str> {
+    if !is_valid_session_id(session_id) {
+        return Err("Invalid session ID");
+    }
+
+    if let Some(active_id) = get_active_session_id() {
+        if active_id == session_id {
+            return Err("Cannot delete currently active charging session");
+        }
+    }
+
+    let sessions_dir = get_sessions_dir();
+    let csv_path = sessions_dir.join(format!("{}.csv", session_id));
+    let txt_path = sessions_dir.join(format!("{}.txt", session_id));
+
+    let mut deleted = false;
+    if csv_path.exists() {
+        if let Err(e) = fs::remove_file(&csv_path) {
+            logger::error("SESSION", &format!("Failed to delete CSV {:?}: {}", csv_path, e));
+        } else {
+            deleted = true;
+        }
+    }
+
+    if txt_path.exists() {
+        if let Err(e) = fs::remove_file(&txt_path) {
+            logger::error("SESSION", &format!("Failed to delete TXT {:?}: {}", txt_path, e));
+        } else {
+            deleted = true;
+        }
+    }
+
+    if deleted {
+        logger::info("SESSION", &format!("Deleted session files for {}", session_id));
+        Ok(true)
+    } else {
+        Ok(false)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -678,6 +911,57 @@ mod tests {
         let txt_entry = entries.iter().find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("txt")).unwrap();
         let txt_content = fs::read_to_string(txt_entry.path()).unwrap();
         assert!(txt_content.contains("Session stopped (State: A > 60s)"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_is_valid_session_id() {
+        assert!(is_valid_session_id("session_2026-10-28_18-05-12"));
+        assert!(is_valid_session_id("session-123_abc"));
+        assert!(!is_valid_session_id(""));
+        assert!(!is_valid_session_id("../etc/passwd"));
+        assert!(!is_valid_session_id("session/file"));
+        assert!(!is_valid_session_id("session\\file"));
+    }
+
+    #[test]
+    fn test_list_and_delete_sessions() {
+        let dir = setup_test_dir();
+        let mut tel = Telemetry::default();
+        tel.greenup_state = "B".into();
+        tel.voltage = 230.0;
+
+        // 1. Create a session
+        start_session("B", &tel);
+        let active = get_active_session_summary(&tel);
+        assert!(active.is_some());
+        let active_id = active.unwrap().session_id;
+
+        // Trying to delete active session should fail
+        assert!(delete_session(&active_id).is_err());
+
+        // Accumulate charge and complete session
+        if let Some(ref mut session) = *ACTIVE_SESSION.lock().unwrap() {
+            session.active_charging_duration_secs_f64 = 60.0;
+            session.cumulative_energy_wh = 100.0;
+        }
+        end_session("Session stopped", &tel);
+
+        // Session now appears in list_saved_sessions
+        let sessions = list_saved_sessions();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].id, active_id);
+        assert!(sessions[0].has_csv);
+        assert!(sessions[0].has_txt);
+        assert_eq!(sessions[0].total_energy_kwh, 0.1);
+
+        // Delete session
+        assert_eq!(delete_session(&active_id), Ok(true));
+        assert_eq!(list_saved_sessions().len(), 0);
+
+        // Second delete returns Ok(false)
+        assert_eq!(delete_session(&active_id), Ok(false));
 
         let _ = fs::remove_dir_all(&dir);
     }
