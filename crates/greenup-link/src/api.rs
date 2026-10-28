@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Request, State},
+    extract::{DefaultBodyLimit, Path, Request, State},
     http::StatusCode,
     middleware::Next,
     response::{
@@ -72,6 +72,7 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
     let api_router = Router::new()
         .merge(auth_router)
         .merge(protected_api)
+        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
         .layer(axum::middleware::from_fn(api_debug_logger));
 
     Router::new()
@@ -352,6 +353,9 @@ async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
 
 
 
+
+/// Maximum allowed HTTP request body size (4 KB).
+const MAX_REQUEST_BODY_SIZE: usize = 4096;
 
 const MAX_RAW_COMMAND_LEN: usize = 20;
 

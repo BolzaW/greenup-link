@@ -220,6 +220,17 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         url = self.path.split("?")[0]
         content_len = int(self.headers.get("Content-Length", 0))
+        if content_len > 4096:
+            add_mock_log("API", "WARN", f"⛔ Request payload exceeded 4 KB limit ({content_len} bytes)")
+            self.send_response(413)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "error",
+                "error": "Payload too large. Maximum body size is 4 KB."
+            }).encode("utf-8"))
+            return
+
         body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
 
         if url.startswith("/api/current/"):

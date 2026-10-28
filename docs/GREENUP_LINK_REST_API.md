@@ -26,6 +26,17 @@ Three standard authentication methods are supported simultaneously against the s
 
 ---
 
+## 🛡️ Security & Resource Limits
+
+1. **Request Body Size Limit (4 KB)**:
+   All incoming HTTP request bodies are globally capped at **4096 bytes (4 KB)** via Axum's `DefaultBodyLimit`. Any request exceeding this limit is immediately rejected with HTTP `413 Payload Too Large` to protect Raspberry Pi system resources.
+2. **Raw Command Sanitization**:
+   `POST /api/command` strictly validates input against `^[a-zA-Z0-9:?]{1,20}$`, blocking CRLF injection (`\r`, `\n`), escape sequences, and oversized frames on the ATmega serial bus.
+3. **Daily Log Size Warning**:
+   To safeguard Raspberry Pi microSD endurance, the logger monitors active daily log file growth. If a log file exceeds **10 MB** (and each subsequent 10 MB step, typically when `DEBUG` or `TRACE` is active), a `SYS` warning is emitted to alert the administrator. Logging continues without truncation or interruption so that complete diagnostic data is preserved.
+
+---
+
 ## 📋 Endpoints Overview
 
 | Method | Endpoint | Description |

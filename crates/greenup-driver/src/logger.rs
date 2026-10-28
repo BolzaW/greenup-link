@@ -5,7 +5,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::sync::{
-    atomic::{AtomicU8, AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
     Mutex, OnceLock,
 };
 use tokio::sync::broadcast;
@@ -65,6 +65,25 @@ impl LogLevel {
 }
 
 const RETENTION_DAYS: i64 = 7;
+/// Threshold in bytes before warning that a daily log file is growing large (10 MB).
+pub const LOG_WARN_THRESHOLD_BYTES: u64 = 10 * 1024 * 1024;
+
+/// Evaluates whether a daily log file has exceeded the size warning threshold.
+/// Returns `Some((warned_mb, size_mb))` if a warning should be emitted.
+pub fn should_warn_file_size(len: u64, last_warned_mb: u64) -> Option<(u64, f64)> {
+    if len >= LOG_WARN_THRESHOLD_BYTES {
+        let current_mb = len / (1024 * 1024);
+        if (last_warned_mb == 0 && current_mb >= 10) || current_mb >= last_warned_mb + 10 {
+            let size_mb = len as f64 / (1024.0 * 1024.0);
+            return Some((current_mb, size_mb));
+        }
+    }
+    None
+}
+
+static LAST_WARNED_MB: AtomicU64 = AtomicU64::new(0);
+static WRITE_COUNT: AtomicU64 = AtomicU64::new(0);
+static IS_CHECKING_SIZE: AtomicBool = AtomicBool::new(false);
 static CONFIGURED_LOG_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Info as u8);
 static CURRENT_LOG_DATE: Mutex<Option<String>> = Mutex::new(None);
 static RECENT_LOGS: Mutex<VecDeque<LogEntry>> = Mutex::new(VecDeque::new());
@@ -183,6 +202,7 @@ fn get_or_rotate_daily_file() -> String {
         *guard = Some(today.clone());
         let _ = fs::create_dir_all(&dir);
         cleanup_old_logs(&dir);
+        LAST_WARNED_MB.store(0, Ordering::Relaxed);
 
         // Write daily header if newly created
         if !Path::new(&path).exists() {
@@ -213,6 +233,20 @@ pub fn init() {
 
     let initial_path = get_or_rotate_daily_file();
     println!("[Logger] 📝 Daily rolling log active: {} (level: {})", initial_path, get_log_level().as_str());
+
+    // Check if initial log file already exceeds threshold
+    if let Ok(meta) = fs::metadata(&initial_path) {
+        if let Some((current_mb, size_mb)) = should_warn_file_size(meta.len(), LAST_WARNED_MB.load(Ordering::Relaxed)) {
+            LAST_WARNED_MB.store(current_mb, Ordering::Relaxed);
+            warn(
+                "SYS",
+                &format!(
+                    "⚠️ Daily log file exceeds {} MB ({:.1} MB). Storage usage will increase while DEBUG/TRACE is active.",
+                    current_mb, size_mb
+                ),
+            );
+        }
+    }
 }
 
 /// Writes an entry to stdout, daily log file, ring buffer, and live SSE broadcast with an explicit category and level.
@@ -231,10 +265,23 @@ pub fn log_with_level(category: &str, level: LogLevel, message: &str) {
     }
 
     // Daily file output
+    let mut warning_to_emit: Option<(u64, f64)> = None;
+
     if should_output {
         let path = get_or_rotate_daily_file();
         if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) {
             let _ = writeln!(f, "{}", entry_text);
+
+            let count = WRITE_COUNT.fetch_add(1, Ordering::Relaxed);
+            if count % 256 == 0 && !IS_CHECKING_SIZE.swap(true, Ordering::SeqCst) {
+                if let Ok(meta) = f.metadata() {
+                    if let Some((current_mb, size_mb)) = should_warn_file_size(meta.len(), LAST_WARNED_MB.load(Ordering::Relaxed)) {
+                        LAST_WARNED_MB.store(current_mb, Ordering::Relaxed);
+                        warning_to_emit = Some((current_mb, size_mb));
+                    }
+                }
+                IS_CHECKING_SIZE.store(false, Ordering::SeqCst);
+            }
         }
     }
 
@@ -256,6 +303,14 @@ pub fn log_with_level(category: &str, level: LogLevel, message: &str) {
 
     // Broadcast to SSE subscribers
     let _ = get_broadcast_sender().send(log_item);
+
+    if let Some((warned_mb, size_mb)) = warning_to_emit {
+        let warn_msg = format!(
+            "⚠️ Daily log file exceeds {} MB ({:.1} MB). Storage usage will increase while DEBUG/TRACE is active.",
+            warned_mb, size_mb
+        );
+        log_with_level("SYS", LogLevel::Warn, &warn_msg);
+    }
 }
 
 /// Convenience function for logging at ERROR level.
@@ -302,4 +357,39 @@ pub fn log(category: &str, message: &str) {
     };
 
     log_with_level(category, level_enum, message);
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_should_warn_file_size() {
+        // Below 10 MB: no warning
+        assert_eq!(should_warn_file_size(5 * 1024 * 1024, 0), None);
+        assert_eq!(should_warn_file_size(9 * 1024 * 1024 + 500_000, 0), None);
+
+        // At or above 10 MB for the first time: warning emitted
+        assert_eq!(should_warn_file_size(10 * 1024 * 1024, 0), Some((10, 10.0)));
+        let warn_10_5 = should_warn_file_size((10.5 * 1024.0 * 1024.0) as u64, 0);
+        assert!(warn_10_5.is_some());
+        assert_eq!(warn_10_5.unwrap().0, 10);
+
+        // Already warned at 10 MB, below next 10 MB step: no warning
+        assert_eq!(should_warn_file_size(15 * 1024 * 1024, 10), None);
+        assert_eq!(should_warn_file_size(19 * 1024 * 1024, 10), None);
+
+        // Reaching next 10 MB step (20 MB): warning emitted
+        assert_eq!(should_warn_file_size(20 * 1024 * 1024, 10), Some((20, 20.0)));
+    }
+
+    #[test]
+    fn test_log_level_parsing() {
+        assert_eq!(LogLevel::from_str_loose("info"), Some(LogLevel::Info));
+        assert_eq!(LogLevel::from_str_loose("DEBUG"), Some(LogLevel::Debug));
+        assert_eq!(LogLevel::from_str_loose("warn"), Some(LogLevel::Warn));
+        assert_eq!(LogLevel::from_str_loose("warning"), Some(LogLevel::Warn));
+        assert_eq!(LogLevel::from_str_loose("error"), Some(LogLevel::Error));
+        assert_eq!(LogLevel::from_str_loose("trace"), Some(LogLevel::Trace));
+        assert_eq!(LogLevel::from_str_loose("invalid"), None);
+    }
 }
