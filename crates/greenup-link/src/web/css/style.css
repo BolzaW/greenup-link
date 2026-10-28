@@ -654,3 +654,103 @@
 .pulse-led-green {
     animation: pulseLedGreen 2.5s ease-in-out infinite;
 }
+
+
+/* --- Config Panel Styles --- */
+.config-panel {
+    display: flex;
+    flex-direction: column;
+    height: 550px;
+    max-height: 550px;
+    background-color: #0b1120;
+    border: 1px solid #1e293b;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+    position: relative;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.config-input {
+    width: 100%;
+    background-color: #020617;
+    border: 1px solid #334155;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.8rem;
+    color: #f8fafc;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.config-input:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3);
+}
+
+.config-btn-tool {
+    width: 36px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+    border: 1px solid #334155;
+    background-color: #1e293b;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.config-btn-tool:hover {
+    color: #f1f5f9;
+    border-color: #475569;
+}
+
+.config-btn {
+    width: 100%;
+    padding: 0.55rem 0.85rem;
+    border-radius: 0.5rem;
+    border: 1px solid #334155;
+    background-color: #1e293b;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.config-btn:hover {
+    color: #ffffff;
+    border-color: #475569;
+    background-color: #273549;
+}
+
+.config-btn-save {
+    width: 100%;
+    padding: 0.65rem 1rem;
+    border-radius: 0.625rem;
+    border: 1px solid rgba(14, 165, 233, 0.4);
+    background-color: #0ea5e9;
+    color: #020617;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: 0 0 16px rgba(14, 165, 233, 0.25);
+}
+
+.config-btn-save:hover {
+    background-color: #38bdf8;
+    box-shadow: 0 0 22px rgba(56, 189, 248, 0.45);
+}
+
+.config-btn-save:active {
+    transform: scale(0.98);
+}

@@ -171,6 +171,9 @@ function onAuthenticatedStart() {
     if (typeof initSessions === 'function') {
         initSessions();
     }
+    if (typeof initConfig === 'function') {
+        initConfig();
+    }
 }
 
 async function fetchInfo() {

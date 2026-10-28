@@ -54,7 +54,7 @@ async fn api_debug_logger(req: Request, next: Next) -> Response {
 }
 
 pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
-    let token_state: SharedApiToken = api_token.map(Arc::new);
+    let token_state: SharedApiToken = Arc::new(std::sync::RwLock::new(api_token));
 
     let protected_api = Router::new()
         .route("/api/info", get(get_info))
@@ -81,11 +81,20 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
 
     let auth_router = Router::new()
         .route("/api/auth/status", get(auth::auth_status))
-        .with_state(token_state);
+        .with_state(token_state.clone());
+
+    let config_api = Router::new()
+        .route("/api/config", get(get_config_handler).post(set_config_handler))
+        .with_state(token_state.clone())
+        .route_layer(axum::middleware::from_fn_with_state(
+            token_state.clone(),
+            auth::require_auth,
+        ));
 
     let api_router = Router::new()
         .merge(auth_router)
         .merge(protected_api)
+        .merge(config_api)
         .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
         .layer(axum::middleware::from_fn(api_debug_logger));
 
@@ -103,6 +112,7 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
         .route("/js/api.js", get(serve_js_api))
         .route("/js/console.js", get(serve_js_console))
         .route("/js/sessions.js", get(serve_js_sessions))
+        .route("/js/config.js", get(serve_js_config))
         .route("/js/main.js", get(serve_js_main))
         .merge(api_router)
         .layer(axum::middleware::from_fn(security_headers_middleware))
@@ -174,6 +184,11 @@ async fn serve_js_api() -> impl IntoResponse {
 /// GET /js/sessions.js
 async fn serve_js_sessions() -> impl IntoResponse {
     ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/sessions.js"))
+}
+
+/// GET /js/config.js
+async fn serve_js_config() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/config.js"))
 }
 
 /// GET /js/main.js
@@ -766,6 +781,68 @@ async fn delete_session_handler(
             Err((
                 status,
                 Json(json!({ "error": err_msg })),
+            ))
+        }
+    }
+}
+
+
+// ==============================================================================
+// CONFIGURATION API HANDLERS
+// ==============================================================================
+
+#[derive(serde::Deserialize)]
+pub struct UpdateConfigPayload {
+    pub api_token: Option<String>,
+}
+
+/// GET /api/config
+/// Returns the current configuration (bind address, token, serial parameters).
+async fn get_config_handler(
+    State(token_state): State<SharedApiToken>,
+) -> impl IntoResponse {
+    let cfg = crate::config::AppConfig::load();
+    let current_token = token_state.read().unwrap_or_else(|e| e.into_inner()).clone();
+    Json(json!({
+        "bind": cfg.http.bind,
+        "api_token": current_token.unwrap_or_default(),
+        "serial_port": cfg.serial.port,
+        "baud_rate": cfg.serial.baud_rate,
+        "watchdog_timeout_secs": cfg.serial.watchdog_timeout_secs,
+    }))
+}
+
+/// POST /api/config
+/// Updates configuration and saves to greenup.toml.
+async fn set_config_handler(
+    State(token_state): State<SharedApiToken>,
+    Json(payload): Json<UpdateConfigPayload>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    let mut cfg = crate::config::AppConfig::load();
+
+    if let Some(tok) = payload.api_token {
+        let trimmed = tok.trim();
+        if trimmed.is_empty() {
+            cfg.http.api_token = None;
+            *token_state.write().unwrap_or_else(|e| e.into_inner()) = None;
+            logger::info("API", "API authentication disabled via config update");
+        } else {
+            cfg.http.api_token = Some(trimmed.to_string());
+            *token_state.write().unwrap_or_else(|e| e.into_inner()) = Some(trimmed.to_string());
+            logger::info("API", "API authentication token updated via config update");
+        }
+    }
+
+    match cfg.save() {
+        Ok(_) => Ok(Json(json!({
+            "status": "success",
+            "message": "Configuration saved successfully"
+        }))),
+        Err(e) => {
+            logger::error("API", &format!("Failed to save configuration: {}", e));
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": format!("Failed to save configuration: {}", e) })),
             ))
         }
     }

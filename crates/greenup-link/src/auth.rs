@@ -9,7 +9,7 @@ use serde_json::json;
 use std::sync::Arc;
 use greenup_driver::logger;
 
-pub type SharedApiToken = Option<Arc<String>>;
+pub type SharedApiToken = Arc<std::sync::RwLock<Option<String>>>;
 
 /// Constant-time byte slice comparison to prevent timing side-channel attacks.
 pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -155,11 +155,12 @@ pub fn is_request_authorized(headers: &HeaderMap, query: Option<&str>, expected_
 /// Deliberately omits the `WWW-Authenticate: Basic` response header on 401 so that
 /// web browsers do not display their native basic-auth popup over the Web GUI.
 pub async fn require_auth(
-    State(api_token): State<SharedApiToken>,
+    State(api_token_lock): State<SharedApiToken>,
     req: Request,
     next: Next,
 ) -> Response {
-    let Some(expected) = api_token else {
+    let expected_opt = api_token_lock.read().unwrap_or_else(|e| e.into_inner()).clone();
+    let Some(expected) = expected_opt else {
         return next.run(req).await;
     };
 
@@ -184,10 +185,11 @@ pub async fn require_auth(
 /// Public endpoint allowing the Web GUI to check if authentication is enabled
 /// and whether the currently stored token is valid.
 pub async fn auth_status(
-    State(api_token): State<SharedApiToken>,
+    State(api_token_lock): State<SharedApiToken>,
     req: Request,
 ) -> impl IntoResponse {
-    match api_token {
+    let expected_opt = api_token_lock.read().unwrap_or_else(|e| e.into_inner()).clone();
+    match expected_opt {
         None => {
             logger::debug("API", "🔐 Auth status check: authentication disabled (open access)");
             Json(json!({

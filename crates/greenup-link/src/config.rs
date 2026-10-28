@@ -145,6 +145,71 @@ impl AppConfig {
         config
     }
 
+    /// Returns the resolved path to the `greenup.toml` file.
+    pub fn get_config_path() -> String {
+        env::var("GREENUP_CONFIG")
+            .unwrap_or_else(|_| {
+                if Path::new("/opt/greenup-link/greenup.toml").exists() {
+                    "/opt/greenup-link/greenup.toml".to_string()
+                } else if Path::new(DEFAULT_CONFIG_FILENAME).exists() {
+                    DEFAULT_CONFIG_FILENAME.to_string()
+                } else {
+                    DEFAULT_CONFIG_FILENAME.to_string()
+                }
+            })
+    }
+
+    /// Saves the current configuration to `greenup.toml` on disk.
+    pub fn save(&self) -> Result<(), std::io::Error> {
+        let config_path = Self::get_config_path();
+        let path = Path::new(&config_path);
+        let content = self.to_toml_string();
+        fs::write(path, content)
+    }
+
+    /// Serializes configuration into a clean TOML string with documentation comments.
+    pub fn to_toml_string(&self) -> String {
+        let token_val = self.http.api_token.as_deref().unwrap_or("");
+        format!(
+r#"# ==============================================================================
+# Green'Up Link - Configuration File
+# ==============================================================================
+
+[http]
+# Network interface and port to listen on.
+# Default: "0.0.0.0:8080" (all network interfaces).
+bind = "{bind}"
+
+# Optional API token / password to protect the Web GUI and REST API.
+# - Leave empty ("") to disable authentication (open access on trusted LAN).
+# - Set a secret string to require authentication on all /api/* routes.
+#   Compatible with:
+#     * Bearer Token : Authorization: Bearer <api_token>  (EVCC, Home Assistant, Web GUI)
+#     * API Key      : X-API-Key: <api_token>
+#     * Basic Auth   : Authorization: Basic <base64(user:api_token)>  (curl -u :token)
+api_token = "{token}"
+
+[serial]
+# Serial port connected to the charging station microcontroller.
+# Default: "/dev/ttyUSB0"
+port = "{port}"
+
+# Baud rate for communication with the ATmega2560 board.
+# Default: 115200
+baud_rate = {baud}
+
+# Silence timeout before alerting on loss of communication (seconds).
+# Default: 6
+watchdog_timeout_secs = {watchdog}
+"#,
+            bind = self.http.bind,
+            token = token_val,
+            port = self.serial.port,
+            baud = self.serial.baud_rate,
+            watchdog = self.serial.watchdog_timeout_secs
+        )
+    }
+
     /// Minimal, zero-dependency parser for `greenup.toml`.
     pub fn parse_toml(content: &str) -> Self {
         let mut config = Self::default();

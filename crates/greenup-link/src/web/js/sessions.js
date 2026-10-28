@@ -47,17 +47,20 @@ function switchMainTab(tabName) {
     const visualizerPanel = document.getElementById('visualizerPanel');
     const sessionsPanel = document.getElementById('sessionsPanel');
     const consolePanel = document.getElementById('consolePanel');
+    const configPanel = document.getElementById('configPanel');
     const tabBoard = document.getElementById('tabBoard');
     const tabSessions = document.getElementById('tabSessions');
     const tabConsole = document.getElementById('tabConsole');
+    const tabConfig = document.getElementById('tabConfig');
 
-    [tabBoard, tabSessions, tabConsole].forEach(btn => {
+    [tabBoard, tabSessions, tabConsole, tabConfig].forEach(btn => {
         if (btn) btn.classList.remove('active');
     });
 
     if (visualizerPanel) visualizerPanel.classList.add('hidden');
     if (sessionsPanel) sessionsPanel.classList.add('hidden');
     if (consolePanel) consolePanel.classList.add('hidden');
+    if (configPanel) configPanel.classList.add('hidden');
 
     if (tabName === 'sessions') {
         if (tabSessions) tabSessions.classList.add('active');
@@ -71,6 +74,11 @@ function switchMainTab(tabName) {
         if (consolePanel) consolePanel.classList.remove('hidden');
         if (typeof syncLogLevelFromServer === 'function') syncLogLevelFromServer();
         if (typeof startLogStream === 'function') startLogStream();
+    } else if (tabName === 'config') {
+        if (tabConfig) tabConfig.classList.add('active');
+        if (configPanel) configPanel.classList.remove('hidden');
+        if (typeof stopLogStream === 'function') stopLogStream();
+        if (typeof loadConfigData === 'function') loadConfigData();
     } else {
         // default to 'board'
         tabName = 'board';
@@ -674,10 +682,12 @@ function initSessions() {
     const tabBoard = document.getElementById('tabBoard');
     const tabSessions = document.getElementById('tabSessions');
     const tabConsole = document.getElementById('tabConsole');
+    const tabConfig = document.getElementById('tabConfig');
 
     if (tabBoard) tabBoard.addEventListener('click', () => switchMainTab('board'));
     if (tabSessions) tabSessions.addEventListener('click', () => switchMainTab('sessions'));
     if (tabConsole) tabConsole.addEventListener('click', () => switchMainTab('console'));
+    if (tabConfig) tabConfig.addEventListener('click', () => switchMainTab('config'));
 
     // Dropdown change listener
     const select = document.getElementById('sessionSelect');

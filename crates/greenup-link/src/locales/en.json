@@ -5,7 +5,8 @@
     "debug": "Debug",
     "tab_board": "Charger",
     "tab_sessions": "Sessions",
-    "tab_console": "Console"
+    "tab_console": "Console",
+    "tab_config": "Config"
   },
   "auth": {
     "title": "Authentication Required",
@@ -136,5 +137,26 @@
     "time_h": "h",
     "time_m": "m",
     "time_s": "s"
+  },
+  "config": {
+    "title": "Configuration",
+    "subtitle": "Charging station and Green'Up Link service settings",
+    "auth_title": "Security & Access",
+    "token_placeholder": "Leave empty for open access...",
+    "token_hint": "Leave empty to allow password-less access on your local network.",
+    "toggle_visibility": "Show / Hide",
+    "copy_token": "Copy token",
+    "ble_title": "Bluetooth Module (BLE)",
+    "ble_desc": "Enable or disable Bluetooth communication on the Legrand board",
+    "tic_title": "Customer Tele-Information (TIC)",
+    "tic_desc": "Automatic Linky meter TIC speed detection",
+    "btn_refresh_tic": "Test / Refresh TIC detection",
+    "tic_refreshing": "TIC detection triggered on ATmega...",
+    "network_title": "Hardware Link & Network",
+    "serial_port": "ATmega Serial Port",
+    "http_bind": "HTTP Interface",
+    "btn_save": "Save configuration",
+    "save_success": "Configuration saved successfully",
+    "save_error": "Error saving configuration: "
   }
 }

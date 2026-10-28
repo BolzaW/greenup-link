@@ -38,25 +38,17 @@
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
                 <span data-i18n="header.tab_console">Console</span>
             </button>
+            <button id="tabConfig" class="header-tab" data-tab="config">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <span data-i18n="header.tab_config">Config</span>
+            </button>
         </div>
     </div>
 
-    <!-- Controls: BT Toggle, Language & Auth (Top Right on Mobile, Right on Desktop) -->
-    <div class="col-span-1 flex items-center justify-end space-x-2 md:space-x-4 order-2 md:order-3">
-        <!-- Bluetooth Toggle Widget -->
-        <div class="flex flex-col items-center justify-center mt-1">
-            <div class="flex items-center space-x-1 mb-1">
-                <svg class="w-3 h-3 text-slate-500 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7l10 10-5 5V2l5 5-10 10"></path></svg>
-                <span class="text-[8px] md:text-[9px] font-bold text-slate-500 uppercase tracking-wider" data-i18n="header.ble_module">BLE</span>
-            </div>
-            <div class="relative inline-block align-middle select-none transition duration-200 ease-in w-[48px] opacity-80 hover:opacity-100">
-                <input type="checkbox" name="toggle" id="btToggle" onclick="toggleBluetooth()" class="toggle-checkbox absolute block rounded-full bg-slate-200 border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
-                <label for="btToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-800 cursor-pointer transition-colors duration-200 ease-in-out border border-slate-700"></label>
-            </div>
-        </div>
-
+    <!-- Controls: Language & Auth (Top Right on Mobile, Right on Desktop) -->
+    <div class="col-span-1 flex items-center justify-end space-x-2 md:space-x-3 order-2 md:order-3">
         <!-- Language Selector -->
-        <select id="langSelector" class="bg-slate-800 text-[10px] md:text-xs text-slate-300 border border-slate-700 rounded px-2 py-1 outline-none cursor-pointer mt-3">
+        <select id="langSelector" class="bg-slate-800 text-[10px] md:text-xs text-slate-300 border border-slate-700 rounded px-2 py-1 outline-none cursor-pointer">
             <option value="fr">🇫🇷 FR</option>
             <option value="en">🇬🇧 EN</option>
         </select>
@@ -108,7 +100,7 @@
                     
                     <!-- Linky (Cols 1-2) -->
                     <div class="col-span-3 md:col-span-2 flex flex-col items-center pt-4">
-                        <div id="linkyBox" class="relative group cursor-pointer transition-transform hover:scale-105 z-20" onclick="refreshTic()" title="Forcer l'actualisation du mode TIC" data-i18n-title="visualizer.force_tic_refresh">
+                        <div id="linkyBox" class="relative z-20">
                             <div class="w-14 h-14 md:w-16 md:h-16 rounded-xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center transition-all duration-300 shadow-inner" id="linkyContainer">
                                 <svg class="w-6 h-6 md:w-8 md:h-8 text-slate-600 transition-colors" id="linkyIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
@@ -367,6 +359,120 @@
                 </div>
             </div>
         </div>
+
+        <!-- Configuration Panel (Replaces visualizer in Config mode) -->
+        <div id="configPanel" class="hidden config-panel">
+            <!-- Header Title -->
+            <div class="flex items-center space-x-2 pb-3 mb-4 border-b border-slate-800">
+                <svg class="w-5 h-5 text-sky-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <div>
+                    <h2 class="text-sm font-bold text-white leading-none" data-i18n="config.title">Configuration</h2>
+                    <span class="text-[10px] text-slate-500" data-i18n="config.subtitle">Paramètres de la borne et du service Green'Up Link</span>
+                </div>
+            </div>
+
+            <!-- Sections Container -->
+            <div class="space-y-4 flex-1">
+                <!-- Section 1: Security & API Token -->
+                <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 sm:p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                            <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                            <span data-i18n="config.auth_title">Sécurité & Accès</span>
+                        </span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <input type="password" id="cfgApiToken" placeholder="Laisser vide pour accès libre..." data-i18n-placeholder="config.token_placeholder" class="config-input flex-1" autocomplete="new-password" />
+                        <!-- Eye toggle button -->
+                        <button type="button" id="btnToggleTokenVisibility" class="config-btn-tool" title="Afficher / Masquer" data-i18n-title="config.toggle_visibility">
+                            <!-- Eye icon -->
+                            <svg id="iconEye" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                            <!-- Eye Slash icon (hidden by default) -->
+                            <svg id="iconEyeSlash" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
+                        </button>
+                        <!-- Copy button -->
+                        <button type="button" id="btnCopyToken" class="config-btn-tool" title="Copier le token" data-i18n-title="config.copy_token">
+                            <svg id="iconCopyToken" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                            <svg id="iconCheckToken" class="w-4 h-4 text-emerald-400 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                        </button>
+                    </div>
+                    <p class="text-[10px] text-slate-500 mt-1.5" data-i18n="config.token_hint">Laisser vide pour autoriser l'accès sans mot de passe sur le réseau local.</p>
+                </div>
+
+                <!-- Section 2: Bluetooth & Tele-Information Linky (2 columns on sm+) -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <!-- Bluetooth Module -->
+                    <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 sm:p-4 flex flex-col justify-between">
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                                    <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7l10 10-5 5V2l5 5-10 10"/></svg>
+                                    <span data-i18n="config.ble_title">Module Bluetooth</span>
+                                </span>
+                                <p class="text-[10px] text-slate-500 mt-1" data-i18n="config.ble_desc">Active ou désactive la communication Bluetooth sur la carte Legrand</p>
+                            </div>
+                            <!-- Switch -->
+                            <div class="relative inline-block align-middle select-none transition duration-200 ease-in w-[48px] flex-shrink-0 ml-2">
+                                <input type="checkbox" name="toggle" id="btToggle" onclick="toggleBluetooth()" class="toggle-checkbox absolute block rounded-full bg-slate-200 border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
+                                <label for="btToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-800 cursor-pointer transition-colors duration-200 ease-in-out border border-slate-700"></label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TIC Test / Refresh -->
+                    <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 sm:p-4 flex flex-col justify-between">
+                        <div>
+                            <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                <span data-i18n="config.tic_title">Télé-Information Client (TIC)</span>
+                            </span>
+                            <p class="text-[10px] text-slate-500 mt-1" data-i18n="config.tic_desc">Détection automatique de la vitesse TIC du compteur Linky</p>
+                        </div>
+                        <div class="mt-2.5">
+                            <button type="button" id="btnRefreshTicConfig" class="config-btn flex items-center justify-center gap-1.5">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                <span data-i18n="config.btn_refresh_tic">Tester / Actualiser détection TIC</span>
+                            </button>
+                            <div id="cfgTicFeedback" class="text-[11px] font-medium text-center min-h-[14px]"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 3: Hardware & Network Read-only Info -->
+                <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 sm:p-4">
+                    <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+                        <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
+                        <span data-i18n="config.network_title">Liaison Matérielle & Réseau</span>
+                    </span>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800/60">
+                            <span class="text-slate-500 text-[11px]" data-i18n="config.serial_port">Port Série ATmega</span>
+                            <span id="cfgSerialPort" class="text-slate-300 font-semibold">/dev/ttyUSB0</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800/60">
+                            <span class="text-slate-500 text-[11px]">Baudrate</span>
+                            <span id="cfgBaudRate" class="text-slate-300 font-semibold">115200 bauds</span>
+                        </div>
+                        <div class="sm:col-span-2 flex items-center justify-between p-2 rounded-lg bg-slate-900/80 border border-slate-800/60">
+                            <span class="text-slate-500 text-[11px]" data-i18n="config.http_bind">Interface HTTP</span>
+                            <span id="cfgHttpBind" class="text-slate-300 font-semibold">0.0.0.0:8080</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bottom Save Button & Feedback -->
+            <div class="pt-3 mt-auto border-t border-slate-800">
+                <button type="button" id="btnSaveConfig" class="config-btn-save flex items-center justify-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+                    <span data-i18n="config.btn_save">Enregistrer la configuration</span>
+                </button>
+                <div id="cfgSaveFeedback" class="text-[11px] font-medium text-slate-400 text-center min-h-[16px] mt-1.5"></div>
+            </div>
+        </div>
     </div>
 
     <!-- RIGHT COLUMN : Data & Controls -->
@@ -485,6 +591,7 @@
 <script src="/js/api.js"></script>
 <script src="/js/console.js"></script>
 <script src="/js/sessions.js"></script>
+<script src="/js/config.js"></script>
 <script src="/js/main.js"></script>
 </body>
 </html>
