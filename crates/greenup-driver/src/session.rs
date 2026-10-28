@@ -8,6 +8,17 @@ use std::time::{Duration, Instant};
 use crate::logger;
 use crate::telemetry::Telemetry;
 
+/// Returns true if the state indicates an immediate session termination
+/// (unlatched, fault, power outage, or emergency stop).
+pub fn is_immediate_termination_state(state: &str) -> bool {
+    matches!(state, "L" | "R" | "ST" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z")
+}
+
+/// Returns true if the state indicates a connected vehicle session.
+pub fn is_connected_state(state: &str) -> bool {
+    !is_immediate_termination_state(state) && state != "A" && state != "DISCONNECTED"
+}
+
 /// Formats duration in seconds into a human-readable string (e.g. "2h 10m 18s" or "45m 12s" or "32s").
 pub fn format_duration(seconds: u64) -> String {
     let hours = seconds / 3600;
@@ -66,6 +77,7 @@ pub struct ActiveSession {
     pub txt_path: PathBuf,
     pub csv_writer: Option<File>,
     pub sample_count: usize,
+    pub pending_state_a_since: Option<Instant>,
 }
 
 impl ActiveSession {
@@ -210,6 +222,7 @@ pub fn start_session(initial_state: &str, tel: &Telemetry) {
         txt_path,
         csv_writer: writer,
         sample_count: 0,
+        pending_state_a_since: None,
     };
 
     // Record initial point (t = 0)
@@ -224,13 +237,55 @@ pub fn on_state_change(new_state: &str, tel: &Telemetry) {
     if let Some(ref mut session) = *lock {
         let now_instant = Instant::now();
         let now_local = Local::now();
+
+        if new_state == "A" {
+            if session.pending_state_a_since.is_none() {
+                session.pending_state_a_since = Some(now_instant);
+                logger::info("SESSION", "Entered State:A, temporary disconnect countdown (60s grace period) started");
+            }
+        } else if let Some(since) = session.pending_state_a_since.take() {
+            let elapsed_secs = since.elapsed().as_secs();
+            logger::info(
+                "SESSION",
+                &format!("Temporary State:A canceled after {}s, resumed session in State:{}", elapsed_secs, new_state),
+            );
+        }
+
         session.record_sample(tel, now_instant, now_local);
         session.last_sample_state = new_state.to_string();
     }
 }
 
+/// Checks if an active session has been in State A for more than 60 seconds.
+/// If so, the session is formally terminated and returns true.
+pub fn check_state_a_timeout(tel: &Telemetry) -> bool {
+    let should_terminate = {
+        let lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(ref session) = *lock {
+            if let Some(since) = session.pending_state_a_since {
+                since.elapsed() >= Duration::from_secs(60)
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    };
+
+    if should_terminate {
+        end_session("Vehicle unplugged (State: A confirmed > 60s)", tel);
+        true
+    } else {
+        false
+    }
+}
+
 /// Called on every telemetry tick (e.g. `CCI:` reading) to update metrics and write samples adaptively.
 pub fn on_telemetry_tick(tel: &Telemetry) {
+    if check_state_a_timeout(tel) {
+        return;
+    }
+
     let mut lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(ref mut session) = *lock {
         let now_instant = Instant::now();
@@ -458,6 +513,7 @@ mod tests {
             txt_path: PathBuf::new(),
             csv_writer: None,
             sample_count: 1,
+            pending_state_a_since: None,
         };
 
         // 1. State change -> immediate sample
@@ -536,6 +592,91 @@ mod tests {
         assert!(txt_content.contains("0.125 kWh"));
         assert!(txt_content.contains("Mono (1-Phase)"));
         assert!(txt_content.contains("WT:10:1138:50:CT:2:6:37:EVplug:5546.38:0.00:"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_immediate_termination_states() {
+        for state in &["L", "R", "ST", "S", "T", "U", "V", "W", "X", "Y", "Z"] {
+            assert!(is_immediate_termination_state(state), "State {} should be termination state", state);
+            assert!(!is_connected_state(state), "State {} should NOT be connected state", state);
+        }
+        for state in &["B", "C", "D", "E", "I", "J"] {
+            assert!(!is_immediate_termination_state(state), "State {} should NOT be termination state", state);
+            assert!(is_connected_state(state), "State {} should be connected state", state);
+        }
+        assert!(!is_connected_state("A"));
+        assert!(!is_connected_state("DISCONNECTED"));
+    }
+
+    #[test]
+    fn test_state_a_grace_period_and_cancellation() {
+        let dir = setup_test_dir();
+        let mut tel = Telemetry::default();
+        tel.greenup_state = "B".into();
+
+        start_session("B", &tel);
+        assert!(is_active());
+
+        // Vehicle enters State A (temporary interruption)
+        tel.greenup_state = "A".into();
+        on_state_change("A", &tel);
+        assert!(is_active(), "Session must remain active during State A grace period");
+
+        if let Some(ref session) = *ACTIVE_SESSION.lock().unwrap() {
+            assert!(session.pending_state_a_since.is_some(), "State A grace timer should be running");
+        }
+
+        // Within grace period (< 60s), state returns to B
+        tel.greenup_state = "B".into();
+        on_state_change("B", &tel);
+        assert!(is_active(), "Session must remain active after resuming");
+
+        if let Some(ref session) = *ACTIVE_SESSION.lock().unwrap() {
+            assert!(session.pending_state_a_since.is_none(), "State A grace timer should be canceled");
+        }
+
+        end_session("Test cleanup", &tel);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_state_a_timeout_after_60s() {
+        let dir = setup_test_dir();
+        let mut tel = Telemetry::default();
+        tel.greenup_state = "B".into();
+        tel.voltage = 230.0;
+
+        start_session("B", &tel);
+        assert!(is_active());
+
+        // Simulate some charge
+        if let Some(ref mut session) = *ACTIVE_SESSION.lock().unwrap() {
+            session.active_charging_duration_secs_f64 = 120.0;
+            session.cumulative_energy_wh = 500.0; // 0.5 kWh
+        }
+
+        // Enter State A
+        tel.greenup_state = "A".into();
+        on_state_change("A", &tel);
+        assert!(is_active());
+
+        // Artificially advance State A timer past 60s
+        if let Some(ref mut session) = *ACTIVE_SESSION.lock().unwrap() {
+            session.pending_state_a_since = Some(Instant::now() - Duration::from_secs(65));
+        }
+
+        // Checking timeout should now terminate session
+        assert!(check_state_a_timeout(&tel));
+        assert!(!is_active(), "Session should be terminated after 60s in State A");
+
+        let entries: Vec<_> = fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).collect();
+        assert_eq!(entries.len(), 2, "Expected 1 CSV and 1 TXT file");
+
+        let txt_entry = entries.iter().find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("txt")).unwrap();
+        let txt_content = fs::read_to_string(txt_entry.path()).unwrap();
+        assert!(txt_content.contains("Vehicle unplugged (State: A confirmed > 60s)"));
 
         let _ = fs::remove_dir_all(&dir);
     }
