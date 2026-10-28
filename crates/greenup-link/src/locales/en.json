@@ -51,7 +51,9 @@
     "unknown": "Unknown",
     "code": "Code",
     "charge_complete": "Charge Complete",
-    "offline": "Offline"
+    "offline": "Offline",
+    "connected_waiting_station": "Connected — Waiting for station",
+    "connected_waiting_car": "Connected — Waiting for vehicle"
   },
   "telemetry": {
     "voltage": "Voltage",
