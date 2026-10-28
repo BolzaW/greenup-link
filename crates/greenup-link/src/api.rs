@@ -19,7 +19,18 @@ use greenup_driver::serial::TicStartError;
 use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
 
 use std::sync::Arc;
+use axum::http::header::{HeaderValue, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
 use crate::auth::{self, SharedApiToken};
+
+/// Axum middleware appending standard defensive HTTP security headers to all responses.
+async fn security_headers_middleware(req: Request, next: Next) -> Response {
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+    headers.insert(X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    response
+}
 
 /// Axum middleware logging API requests at DEBUG level (or TRACE for high-frequency polling).
 async fn api_debug_logger(req: Request, next: Next) -> Response {
@@ -90,6 +101,7 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
         .route("/js/console.js", get(serve_js_console))
         .route("/js/main.js", get(serve_js_main))
         .merge(api_router)
+        .layer(axum::middleware::from_fn(security_headers_middleware))
 }
 
 #[derive(serde::Deserialize)]
@@ -238,19 +250,19 @@ async fn set_log_level_handler(Json(payload): Json<LogLevelPayload>) -> impl Int
 /// GET /api/info
 async fn get_info(State(state): State<SharedState>) -> impl IntoResponse {
     logger::debug("API", "🔍 GET request /api/info");
-    let info = state.info.lock().unwrap().clone();
+    let info = state.info.lock().unwrap_or_else(|e| e.into_inner()).clone();
     Json(info)
 }
 
 /// GET /api/telemetry
 async fn get_telemetry(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("TRACE", "📡 GET request /api/telemetry");
-    let telemetry = state.telemetry.lock().unwrap().clone();
+    let telemetry = state.telemetry.lock().unwrap_or_else(|e| e.into_inner()).clone();
     Json(telemetry)
 }
 
 fn check_serial_connected(state: &SharedState) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
-    let tel = state.telemetry.lock().unwrap();
+    let tel = state.telemetry.lock().unwrap_or_else(|e| e.into_inner());
     if tel.serial.status != greenup_driver::telemetry::SerialStatus::UsbConnected {
         let err_msg = match tel.serial.status {
             greenup_driver::telemetry::SerialStatus::UsbDisconnected => {

@@ -34,6 +34,11 @@ Three standard authentication methods are supported simultaneously against the s
    `POST /api/command` strictly validates input against `^[a-zA-Z0-9:?]{1,20}$`, blocking CRLF injection (`\r`, `\n`), escape sequences, and oversized frames on the ATmega serial bus.
 3. **Daily Log Size Warning**:
    To safeguard Raspberry Pi microSD endurance, the logger monitors active daily log file growth. If a log file exceeds **10 MB** (and each subsequent 10 MB step, typically when `DEBUG` or `TRACE` is active), a `SYS` warning is emitted to alert the administrator. Logging continues without truncation or interruption so that complete diagnostic data is preserved.
+4. **Defensive Security Headers**:
+   All HTTP responses served by Green'Up Link include defensive security headers:
+   - `X-Frame-Options: DENY`: Prevents embedding the Web UI inside external `<iframe>` elements (clickjacking defense).
+   - `X-Content-Type-Options: nosniff`: Prevents MIME-type confusion / sniffing.
+   - `Referrer-Policy: no-referrer`: Prevents local station IP and URL paths from leaking in external requests.
 
 ---
 

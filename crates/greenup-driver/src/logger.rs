@@ -192,7 +192,7 @@ fn get_or_rotate_daily_file() -> String {
     let dir = get_log_dir();
     let path = format!("{}/greenup_{}.log", dir, today);
 
-    let mut guard = CURRENT_LOG_DATE.lock().unwrap();
+    let mut guard = CURRENT_LOG_DATE.lock().unwrap_or_else(|e| e.into_inner());
     let is_new_day = match *guard {
         Some(ref date) => date != &today,
         None => true,

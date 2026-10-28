@@ -93,6 +93,11 @@ add_mock_log("SERIAL", "WARN", "⚠️ Retrying frame sync (mock warning)")
 add_mock_log("SYS", "ERROR", "❌ Simulated minor error check (mock error)")
 
 class MockHandler(http.server.BaseHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        super().end_headers()
     def log_message(self, format, *args):
         # Mute high frequency polling logs
         if self.path in ("/api/telemetry", "/api/logs/stream"):

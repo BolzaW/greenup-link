@@ -328,8 +328,8 @@ pub fn run_serial_loop_with_options(
             }
 
             let (last_rx_opt, current_status) = {
-                let rx_lock = last_rx_time.lock().unwrap();
-                let tel_lock = state.telemetry.lock().unwrap();
+                let rx_lock = last_rx_time.lock().unwrap_or_else(|e| e.into_inner());
+                let tel_lock = state.telemetry.lock().unwrap_or_else(|e| e.into_inner());
                 (*rx_lock, tel_lock.serial.status.clone())
             };
 
@@ -440,7 +440,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
     let rx_category = if let Some(val_str) = line.strip_prefix("CCI:") {
         let first_val = val_str.split(';').next().unwrap_or(val_str).trim();
         if let Ok(current_val) = first_val.parse::<f32>() {
-            let mut last = LAST_LOGGED_CCI.lock().unwrap();
+            let mut last = LAST_LOGGED_CCI.lock().unwrap_or_else(|e| e.into_inner());
             let diff = match *last {
                 Some(prev) => (current_val - prev).abs(),
                 None => 1.0, // First measurement -> log in INFO
