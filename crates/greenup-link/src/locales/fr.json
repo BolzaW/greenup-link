@@ -149,6 +149,8 @@
     "tic_refreshing": "Détection TIC lancée sur l'ATmega...",
     "network_title": "Liaison Matérielle & Réseau",
     "serial_port": "Port Série ATmega",
-    "http_bind": "Interface HTTP"
+    "http_bind": "Interface HTTP",
+    "system_info_title": "Informations Système & Borne",
+    "board_specs": "Carte Borne"
   }
 }

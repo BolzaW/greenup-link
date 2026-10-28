@@ -149,6 +149,8 @@
     "tic_refreshing": "TIC detection triggered on ATmega...",
     "network_title": "Hardware Link & Network",
     "serial_port": "ATmega Serial Port",
-    "http_bind": "HTTP Interface"
+    "http_bind": "HTTP Interface",
+    "system_info_title": "System & Station Information",
+    "board_specs": "Station Board"
   }
 }
