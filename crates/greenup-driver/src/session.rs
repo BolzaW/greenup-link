@@ -241,13 +241,13 @@ pub fn on_state_change(new_state: &str, tel: &Telemetry) {
         if new_state == "A" {
             if session.pending_state_a_since.is_none() {
                 session.pending_state_a_since = Some(now_instant);
-                logger::info("SESSION", "Entered State:A, temporary disconnect countdown (60s grace period) started");
+                logger::info("SESSION", "Entered State:A, waiting up to 60s before stopping session");
             }
         } else if let Some(since) = session.pending_state_a_since.take() {
             let elapsed_secs = since.elapsed().as_secs();
             logger::info(
                 "SESSION",
-                &format!("Temporary State:A canceled after {}s, resumed session in State:{}", elapsed_secs, new_state),
+                &format!("State:A ended after {}s, continuing session in State:{}", elapsed_secs, new_state),
             );
         }
 
@@ -273,7 +273,8 @@ pub fn check_state_a_timeout(tel: &Telemetry) -> bool {
     };
 
     if should_terminate {
-        end_session("Vehicle unplugged (State: A confirmed > 60s)", tel);
+        logger::info("SESSION", "State:A persisted for > 60s, stopping session");
+        end_session("Session stopped (State: A > 60s)", tel);
         true
     } else {
         false
@@ -538,7 +539,7 @@ mod tests {
         start_session("B", &tel);
         assert!(is_active());
 
-        end_session("Unplugged without charge", &tel);
+        end_session("Stopped without charge", &tel);
         assert!(!is_active());
 
         // Both CSV and TXT must NOT exist
@@ -574,7 +575,7 @@ mod tests {
         record_ticket("WT:10:1138:50:CT:2:6:37:EVplug:5546.38:0.00:");
         update_phase("Mono");
 
-        end_session("Vehicle unplugged (State: A)", &tel);
+        end_session("Session stopped (State: A > 60s)", &tel);
         assert!(!is_active());
 
         let entries: Vec<_> = fs::read_dir(&dir).unwrap().filter_map(|e| e.ok()).collect();
@@ -676,7 +677,7 @@ mod tests {
 
         let txt_entry = entries.iter().find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("txt")).unwrap();
         let txt_content = fs::read_to_string(txt_entry.path()).unwrap();
-        assert!(txt_content.contains("Vehicle unplugged (State: A confirmed > 60s)"));
+        assert!(txt_content.contains("Session stopped (State: A > 60s)"));
 
         let _ = fs::remove_dir_all(&dir);
     }
