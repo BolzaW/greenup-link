@@ -259,6 +259,7 @@ pub fn run_serial_loop_with_options(
             }
         });
 
+        reset_serial_filters();
         send_init_sequence_sync(&mut port, &state);
 
         let session_start = Instant::now();
@@ -435,9 +436,23 @@ pub fn update_charge_status(tel: &mut Telemetry) {
 }
 
 static LAST_LOGGED_CCI: std::sync::Mutex<Option<f32>> = std::sync::Mutex::new(None);
+static LAST_LOGGED_CC: std::sync::Mutex<Option<u32>> = std::sync::Mutex::new(None);
+static LAST_LOGGED_CPH: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
-fn parse_incoming_line(line: &str, state: &SharedState) {
-    let rx_category = if let Some(val_str) = line.strip_prefix("CCI:") {
+/// Resets serial logging filter baselines (e.g. on new charge session or connection reset).
+pub fn reset_serial_filters() {
+    *LAST_LOGGED_CCI.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    *LAST_LOGGED_CC.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    *LAST_LOGGED_CPH.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+/// Determines the logging category/level for an incoming serial line:
+/// - `CCI:xx`: logged in INFO (`"SERIAL_RX"`) only if variation >= 1.0A (otherwise `"TRACE"`)
+/// - `CC:xx`: logged in INFO (`"SERIAL_RX"`) only if variation >= 1A (otherwise `"TRACE"`)
+/// - `CPh:xx`: logged in INFO (`"SERIAL_RX"`) on first reception or value change (otherwise `"DEBUG"`)
+/// - Other frames: logged in INFO (`"SERIAL_RX"`)
+pub fn determine_rx_log_category(line: &str) -> &'static str {
+    if let Some(val_str) = line.strip_prefix("CCI:") {
         let first_val = val_str.split(';').next().unwrap_or(val_str).trim();
         if let Ok(current_val) = first_val.parse::<f32>() {
             let mut last = LAST_LOGGED_CCI.lock().unwrap_or_else(|e| e.into_inner());
@@ -454,9 +469,42 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         } else {
             "TRACE"
         }
+    } else if let Some(val_str) = line.strip_prefix("CC:") {
+        if let Ok(current_val) = val_str.trim().parse::<u32>() {
+            let mut last = LAST_LOGGED_CC.lock().unwrap_or_else(|e| e.into_inner());
+            let diff = match *last {
+                Some(prev) => (current_val as i32 - prev as i32).abs(),
+                None => 1, // First measurement -> log in INFO
+            };
+            if diff >= 1 {
+                *last = Some(current_val);
+                "SERIAL_RX" // Logged as INFO on >= 1A change
+            } else {
+                "TRACE" // Identical CC values logged as TRACE
+            }
+        } else {
+            "TRACE"
+        }
+    } else if let Some(val_str) = line.strip_prefix("CPh:").or_else(|| line.strip_prefix("Cph:")) {
+        let current_cph = val_str.trim();
+        let mut last = LAST_LOGGED_CPH.lock().unwrap_or_else(|e| e.into_inner());
+        let has_changed = match *last {
+            Some(ref prev) => prev.as_str() != current_cph,
+            None => true, // First reception -> log in INFO
+        };
+        if has_changed {
+            *last = Some(current_cph.to_string());
+            "SERIAL_RX" // Logged as INFO on first or changed
+        } else {
+            "DEBUG" // Unchanged repetitive CPh announcements logged as DEBUG
+        }
     } else {
         "SERIAL_RX"
-    };
+    }
+}
+
+fn parse_incoming_line(line: &str, state: &SharedState) {
+    let rx_category = determine_rx_log_category(line);
     logger::log(rx_category, line);
 
     let event = parse_line(line);
@@ -508,6 +556,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             }
         }
         ProtocolEvent::Dip1(_) => {}
+        ProtocolEvent::ChargePhases(_) => {}
         ProtocolEvent::StateChange(state_val) => {
             if state_val == "V" {
                 logger::log("SYS", "!!! CRITICAL ALERT: POWER OUTAGE DETECTED (State:V) - IMMINENT SHUTDOWN !!!");
@@ -520,17 +569,13 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                     // Resuming or starting charge: restart power integration timer
                     tel.last_power_update = Some(std::time::Instant::now());
                     tel.charge_complete = false;
-                    if let Ok(mut last_cci) = LAST_LOGGED_CCI.lock() {
-                        *last_cci = None;
-                    }
+                    reset_serial_filters();
                 } else if was_charging && !is_charging {
                     // Contactor opened: instantaneous current and power drop immediately to zero
                     tel.current = 0.0;
                     tel.power = 0.0;
                     tel.last_power_update = None;
-                    if let Ok(mut last_cci) = LAST_LOGGED_CCI.lock() {
-                        *last_cci = None;
-                    }
+                    reset_serial_filters();
                     logger::log("SERIAL", &format!("🔌 Charge interrupted/ended (State {}): current & power set to 0", state_val));
                 }
 
@@ -541,6 +586,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                     tel.energy = 0.0;
                     tel.last_power_update = None;
                     tel.charge_complete = false;
+                    reset_serial_filters();
                 }
 
                 tel.greenup_state = state_val.clone();
@@ -730,4 +776,43 @@ mod tests {
         let clean = String::from_utf8_lossy(&byte_buf).trim().to_string();
         assert!(clean.contains("OK"));
     }
+
+    #[test]
+    fn test_determine_rx_log_category_cc_filtering() {
+        reset_serial_filters();
+
+        // First CC is logged as INFO (SERIAL_RX)
+        assert_eq!(determine_rx_log_category("CC:24"), "SERIAL_RX");
+        // Same CC is filtered to TRACE
+        assert_eq!(determine_rx_log_category("CC:24"), "TRACE");
+        assert_eq!(determine_rx_log_category("CC:24"), "TRACE");
+
+        // Change by 1A is logged as INFO
+        assert_eq!(determine_rx_log_category("CC:23"), "SERIAL_RX");
+        assert_eq!(determine_rx_log_category("CC:23"), "TRACE");
+
+        // Change by >= 1A (e.g. down to 13A) is logged as INFO
+        assert_eq!(determine_rx_log_category("CC:13"), "SERIAL_RX");
+        assert_eq!(determine_rx_log_category("CC:13"), "TRACE");
+
+        // CC with leading zero (CC:09)
+        assert_eq!(determine_rx_log_category("CC:09"), "SERIAL_RX");
+        assert_eq!(determine_rx_log_category("CC:09"), "TRACE");
+    }
+
+    #[test]
+    fn test_determine_rx_log_category_cph_filtering() {
+        reset_serial_filters();
+
+        // First CPh is logged as INFO (SERIAL_RX)
+        assert_eq!(determine_rx_log_category("CPh:Mono"), "SERIAL_RX");
+        // Repetitive identical CPh is demoted to DEBUG
+        assert_eq!(determine_rx_log_category("CPh:Mono"), "DEBUG");
+        assert_eq!(determine_rx_log_category("Cph:Mono"), "DEBUG");
+
+        // Change to Tri is logged as INFO
+        assert_eq!(determine_rx_log_category("CPh:Tri"), "SERIAL_RX");
+        assert_eq!(determine_rx_log_category("CPh:Tri"), "DEBUG");
+    }
+
 }
