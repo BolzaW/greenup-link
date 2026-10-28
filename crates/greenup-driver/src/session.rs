@@ -476,6 +476,7 @@ RAW LEGRAND TICKET
 pub fn is_valid_session_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
+        && !id.eq_ignore_ascii_case("active")
         && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
@@ -664,19 +665,30 @@ pub fn get_active_session_summary(tel: &Telemetry) -> Option<ActiveSessionSummar
 /// Returns `Ok(true)` if files were removed, `Ok(false)` if session didn't exist,
 /// or `Err(...)` if the session is currently active or ID is invalid.
 pub fn delete_session(session_id: &str) -> Result<bool, &'static str> {
-    if !is_valid_session_id(session_id) {
-        return Err("Invalid session ID");
+    if session_id.eq_ignore_ascii_case("active") {
+        return Err("Cannot delete currently active charging session");
     }
 
-    if let Some(active_id) = get_active_session_id() {
-        if active_id == session_id {
-            return Err("Cannot delete currently active charging session");
-        }
+    if !is_valid_session_id(session_id) {
+        return Err("Invalid session ID");
     }
 
     let sessions_dir = get_sessions_dir();
     let csv_path = sessions_dir.join(format!("{}.csv", session_id));
     let txt_path = sessions_dir.join(format!("{}.txt", session_id));
+
+    // Acquire lock on ACTIVE_SESSION to prevent race condition with active recording
+    {
+        let active_lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(ref active) = *active_lock {
+            if active.session_id == session_id {
+                return Err("Cannot delete currently active charging session");
+            }
+            if csv_path == active.csv_path || txt_path == active.txt_path {
+                return Err("Cannot delete currently active charging session");
+            }
+        }
+    }
 
     let mut deleted = false;
     if csv_path.exists() {
@@ -920,6 +932,8 @@ mod tests {
         assert!(is_valid_session_id("session_2026-10-28_18-05-12"));
         assert!(is_valid_session_id("session-123_abc"));
         assert!(!is_valid_session_id(""));
+        assert!(!is_valid_session_id("active"));
+        assert!(!is_valid_session_id("ACTIVE"));
         assert!(!is_valid_session_id("../etc/passwd"));
         assert!(!is_valid_session_id("session/file"));
         assert!(!is_valid_session_id("session\\file"));

@@ -740,6 +740,13 @@ async fn export_session_handler(
 async fn delete_session_handler(
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    if id.trim().is_empty() || id.eq_ignore_ascii_case("active") {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({ "error": "Cannot delete currently active charging session" })),
+        ));
+    }
+
     logger::info("API", &format!("Delete requested for session '{}'", id));
     match greenup_driver::session::delete_session(&id) {
         Ok(true) => Ok(Json(json!({
@@ -750,9 +757,16 @@ async fn delete_session_handler(
             StatusCode::NOT_FOUND,
             Json(json!({ "error": format!("Session '{}' not found", id) })),
         )),
-        Err(err_msg) => Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({ "error": err_msg })),
-        )),
+        Err(err_msg) => {
+            let status = if err_msg.contains("active") {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            Err((
+                status,
+                Json(json!({ "error": err_msg })),
+            ))
+        }
     }
 }
