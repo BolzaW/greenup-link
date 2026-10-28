@@ -141,11 +141,6 @@
   "config": {
     "title": "Configuration",
     "subtitle": "Charging station and Green'Up Link service settings",
-    "auth_title": "Security & Access",
-    "token_placeholder": "Leave empty for open access...",
-    "token_hint": "Leave empty to allow password-less access on your local network.",
-    "toggle_visibility": "Show / Hide",
-    "copy_token": "Copy token",
     "ble_title": "Bluetooth Module (BLE)",
     "ble_desc": "Enable or disable Bluetooth communication on the Legrand board",
     "tic_title": "Customer Tele-Information (TIC)",
@@ -154,9 +149,6 @@
     "tic_refreshing": "TIC detection triggered on ATmega...",
     "network_title": "Hardware Link & Network",
     "serial_port": "ATmega Serial Port",
-    "http_bind": "HTTP Interface",
-    "btn_save": "Save configuration",
-    "save_success": "Configuration saved successfully",
-    "save_error": "Error saving configuration: "
+    "http_bind": "HTTP Interface"
   }
-}
+}

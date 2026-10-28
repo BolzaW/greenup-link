@@ -141,11 +141,6 @@
   "config": {
     "title": "Configuration",
     "subtitle": "Paramètres de la borne et du service Green'Up Link",
-    "auth_title": "Sécurité & Accès",
-    "token_placeholder": "Laisser vide pour accès libre...",
-    "token_hint": "Laisser vide pour autoriser l'accès sans mot de passe sur le réseau local.",
-    "toggle_visibility": "Afficher / Masquer",
-    "copy_token": "Copier le token",
     "ble_title": "Module Bluetooth (BLE)",
     "ble_desc": "Active ou désactive la communication Bluetooth sur la carte Legrand",
     "tic_title": "Télé-Information Client (TIC)",
@@ -154,9 +149,6 @@
     "tic_refreshing": "Détection TIC lancée sur l'ATmega...",
     "network_title": "Liaison Matérielle & Réseau",
     "serial_port": "Port Série ATmega",
-    "http_bind": "Interface HTTP",
-    "btn_save": "Enregistrer la configuration",
-    "save_success": "Configuration enregistrée avec succès",
-    "save_error": "Erreur lors de l'enregistrement : "
+    "http_bind": "Interface HTTP"
   }
-}
+}
