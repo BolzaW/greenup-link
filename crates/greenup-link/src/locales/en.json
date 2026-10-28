@@ -168,6 +168,21 @@
     "service_status": "Service Status",
     "service_active": "Active",
     "btn_init_title": "Restarts synchronization and auto-detection sequence with ATmega",
-    "btn_reset_title": "Sends hardware restart command (Reset) to ATmega board"
+    "btn_reset_title": "Sends hardware restart command (Reset) to ATmega board",
+    "token_title": "Client API Authentication",
+    "token_desc": "API token stored locally in your browser to authenticate requests to Green'Up Link.",
+    "token_placeholder": "Local API token (Bearer token)...",
+    "toggle_token_visibility": "Show / Hide",
+    "btn_save_token": "Apply",
+    "btn_clear_token": "Clear",
+    "btn_clear_token_title": "Clear saved token",
+    "token_status_auth": "Authenticated",
+    "token_status_unauth": "Unauthenticated",
+    "token_status_missing": "Token missing",
+    "token_status_no_auth": "Free access (no auth)",
+    "token_saved_valid": "API token saved & validated",
+    "token_saved_local": "Token saved locally",
+    "token_invalid": "API token rejected by server",
+    "token_cleared": "Token cleared from browser"
   }
 }

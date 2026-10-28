@@ -729,3 +729,19 @@
     background-color: rgba(225, 29, 72, 0.2);
     border-color: rgba(244, 63, 94, 0.6);
 }
+
+.config-input {
+    background-color: #0b1120;
+    border: 1px solid #334155;
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.85rem;
+    color: #f1f5f9;
+    font-size: 0.75rem;
+    outline: none;
+    transition: all 0.15s ease;
+}
+
+.config-input:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 1px #38bdf8;
+}

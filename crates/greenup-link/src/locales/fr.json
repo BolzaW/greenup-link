@@ -168,6 +168,21 @@
     "service_status": "Statut Service",
     "service_active": "Actif",
     "btn_init_title": "Relance la synchronisation et la détection automatique avec l'ATmega",
-    "btn_reset_title": "Envoie une commande de redémarrage matériel (Reset) à la carte ATmega"
+    "btn_reset_title": "Envoie une commande de redémarrage matériel (Reset) à la carte ATmega",
+    "token_title": "Authentification API Client",
+    "token_desc": "Clé API enregistrée localement dans votre navigateur pour authentifier les requêtes vers Green'Up Link.",
+    "token_placeholder": "Clé API locale (Bearer token)...",
+    "toggle_token_visibility": "Afficher / Masquer",
+    "btn_save_token": "Appliquer",
+    "btn_clear_token": "Effacer",
+    "btn_clear_token_title": "Effacer la clé enregistrée",
+    "token_status_auth": "Authentifié",
+    "token_status_unauth": "Non authentifié",
+    "token_status_missing": "Token manquant",
+    "token_status_no_auth": "Accès libre (pas d'auth)",
+    "token_saved_valid": "Clé API enregistrée & validée",
+    "token_saved_local": "Clé enregistrée localement",
+    "token_invalid": "Clé API refusée par le serveur",
+    "token_cleared": "Clé effacée du navigateur"
   }
 }
