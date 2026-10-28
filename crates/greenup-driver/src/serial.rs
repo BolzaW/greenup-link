@@ -391,6 +391,11 @@ pub fn run_serial_loop_with_options(
 
         is_running.store(false, Ordering::Relaxed);
         let _ = reader_thread.join();
+        if let Ok(tel) = state.telemetry.lock() {
+            if crate::session::is_active() {
+                crate::session::end_session("Driver shutdown / Serial disconnected", &tel);
+            }
+        }
         drop(port);
 
         logger::warn("SERIAL", "🔌 Serial session ended. Resuming USB search in 2s...");
@@ -556,7 +561,9 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             }
         }
         ProtocolEvent::Dip1(_) => {}
-        ProtocolEvent::ChargePhases(_) => {}
+        ProtocolEvent::ChargePhases(phase) => {
+            crate::session::update_phase(&phase);
+        }
         ProtocolEvent::StateChange(state_val) => {
             if state_val == "V" {
                 logger::log("SYS", "!!! CRITICAL ALERT: POWER OUTAGE DETECTED (State:V) - IMMINENT SHUTDOWN !!!");
@@ -579,14 +586,24 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                     logger::log("SERIAL", &format!("🔌 Charge interrupted/ended (State {}): current & power set to 0", state_val));
                 }
 
-                if state_val == "A" || state_val == "L" {
-                    // Vehicle unplugged or station idle: reset all session counters
+                let is_unplugged = state_val == "A" || state_val == "L";
+                if is_unplugged {
+                    // Vehicle unplugged or station idle: end session before resetting telemetry
+                    if crate::session::is_active() {
+                        crate::session::end_session(&format!("Vehicle unplugged (State: {})", state_val), &tel);
+                    }
                     tel.current = 0.0;
                     tel.power = 0.0;
                     tel.energy = 0.0;
                     tel.last_power_update = None;
                     tel.charge_complete = false;
                     reset_serial_filters();
+                } else if state_val != "DISCONNECTED" {
+                    if !crate::session::is_active() {
+                        crate::session::start_session(&state_val, &tel);
+                    } else {
+                        crate::session::on_state_change(&state_val, &tel);
+                    }
                 }
 
                 tel.greenup_state = state_val.clone();
@@ -676,6 +693,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                     tel.power = 0.0;
                     tel.last_power_update = None;
                 }
+                crate::session::on_telemetry_tick(&tel);
             }
         }
         ProtocolEvent::LimitAmps(limit) => {
@@ -702,6 +720,10 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::Frequency(f) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.frequency = f; }
+        }
+        ProtocolEvent::SessionTicket(ticket) => {
+            logger::log("SERIAL", &format!("🎫 Legrand session ticket received: {}", ticket));
+            crate::session::record_ticket(&ticket);
         }
         ProtocolEvent::CommandNotUnderstood(cmd) => {
             logger::log("SERIAL", &format!("⚠️ Command not recognized by the charging station: {}", cmd));

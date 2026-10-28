@@ -29,6 +29,7 @@ pub enum ProtocolEvent {
     Side(String),
     Dip1(String),
     ChargePhases(String),
+    SessionTicket(String),
     CommandNotUnderstood(String),
     Unknown(String),
 }
@@ -137,6 +138,8 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         }
     } else if let Some(val) = line.strip_prefix("CPh:").or_else(|| line.strip_prefix("Cph:")) {
         ProtocolEvent::ChargePhases(val.trim().to_string())
+    } else if line.starts_with("WT:") {
+        ProtocolEvent::SessionTicket(line.trim().to_string())
     } else if let Some(cmd) = line.strip_prefix("Default:") {
         ProtocolEvent::CommandNotUnderstood(cmd.trim().to_string())
     } else {

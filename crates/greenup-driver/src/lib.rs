@@ -1,5 +1,6 @@
 pub mod logger;
 pub mod serial;
+pub mod session;
 pub mod state;
 pub mod telemetry;
 pub mod hardware_specs;
