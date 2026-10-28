@@ -6,7 +6,7 @@
     "tab_board": "Borne",
     "tab_sessions": "Sessions",
     "tab_console": "Console",
-    "tab_config": "Config"
+    "tab_system": "Système"
   },
   "auth": {
     "title": "Authentification requise",
@@ -138,19 +138,19 @@
     "time_m": "m",
     "time_s": "s"
   },
-  "config": {
-    "title": "Configuration",
-    "subtitle": "Paramètres de la borne et du service Green'Up Link",
+  "system": {
+    "title": "Système",
+    "subtitle": "Liaisons matérielles, modules et informations borne",
     "ble_title": "Module Bluetooth (BLE)",
     "ble_desc": "Active ou désactive la communication Bluetooth sur la carte Legrand",
     "tic_title": "Télé-Information Client (TIC)",
     "tic_desc": "Détection automatique de la vitesse TIC du compteur Linky",
     "btn_refresh_tic": "Tester / Actualiser détection TIC",
     "tic_refreshing": "Détection TIC lancée sur l'ATmega...",
-    "network_title": "Liaison Matérielle & Réseau",
-    "serial_port": "Port Série ATmega",
-    "http_bind": "Interface HTTP",
     "system_info_title": "Informations Système & Borne",
-    "board_specs": "Carte Borne"
+    "board_specs": "Carte Borne",
+    "usb_link_title": "Liaison Série USB ATmega",
+    "serial_port": "Port Série",
+    "http_bind": "Interface HTTP"
   }
 }

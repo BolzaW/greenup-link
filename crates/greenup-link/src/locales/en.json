@@ -6,7 +6,7 @@
     "tab_board": "Charger",
     "tab_sessions": "Sessions",
     "tab_console": "Console",
-    "tab_config": "Config"
+    "tab_system": "System"
   },
   "auth": {
     "title": "Authentication Required",
@@ -138,19 +138,19 @@
     "time_m": "m",
     "time_s": "s"
   },
-  "config": {
-    "title": "Configuration",
-    "subtitle": "Charging station and Green'Up Link service settings",
+  "system": {
+    "title": "System",
+    "subtitle": "Hardware links, modules and charging station information",
     "ble_title": "Bluetooth Module (BLE)",
     "ble_desc": "Enable or disable Bluetooth communication on the Legrand board",
     "tic_title": "Customer Tele-Information (TIC)",
     "tic_desc": "Automatic Linky meter TIC speed detection",
     "btn_refresh_tic": "Test / Refresh TIC detection",
     "tic_refreshing": "TIC detection triggered on ATmega...",
-    "network_title": "Hardware Link & Network",
-    "serial_port": "ATmega Serial Port",
-    "http_bind": "HTTP Interface",
     "system_info_title": "System & Station Information",
-    "board_specs": "Station Board"
+    "board_specs": "Station Board",
+    "usb_link_title": "ATmega USB Serial Link",
+    "serial_port": "Serial Port",
+    "http_bind": "HTTP Interface"
   }
 }
