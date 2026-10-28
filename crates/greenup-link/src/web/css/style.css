@@ -406,3 +406,179 @@
     border-color: rgba(244, 63, 94, 0.5);
     background-color: rgba(244, 63, 94, 0.12);
 }
+
+/* --- Header Navigation Tabs --- */
+.header-nav-tabs {
+    display: inline-flex;
+    align-items: center;
+    background-color: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 0.75rem;
+    padding: 3px;
+    gap: 3px;
+}
+
+.header-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #94a3b8;
+    border-radius: 0.5rem;
+    border: 1px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.header-tab:hover {
+    color: #f1f5f9;
+    background-color: rgba(30, 41, 59, 0.6);
+}
+
+.header-tab.active {
+    color: #38bdf8;
+    background-color: #0f172a;
+    border-color: #334155;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* --- Sessions Panel Styles --- */
+.sessions-panel {
+    display: flex;
+    flex-direction: column;
+    height: 550px;
+    max-height: 550px;
+    background-color: #0b1120;
+    border: 1px solid #1e293b;
+    border-radius: 1rem;
+    padding: 1rem 1.25rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.session-dropdown {
+    background-color: #020617;
+    border: 1px solid #334155;
+    border-radius: 0.5rem;
+    padding: 0.45rem 0.65rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.75rem;
+    color: #f8fafc;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    max-width: 100%;
+}
+
+.session-dropdown:hover {
+    border-color: #475569;
+}
+
+.session-dropdown:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.3);
+}
+
+.session-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 0.5rem;
+    border: 1px solid #334155;
+    background-color: #1e293b;
+    color: #cbd5e1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.session-btn:hover:not(:disabled) {
+    color: #ffffff;
+    border-color: #475569;
+}
+
+.session-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    border-color: #1e293b;
+    color: #64748b;
+}
+
+.session-btn-zip {
+    background-color: rgba(14, 165, 233, 0.15);
+    border-color: rgba(14, 165, 233, 0.35);
+    color: #38bdf8;
+}
+
+.session-btn-zip:hover:not(:disabled) {
+    background-color: rgba(14, 165, 233, 0.25);
+    border-color: #38bdf8;
+    color: #ffffff;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.3);
+}
+
+.session-btn-delete:hover:not(:disabled) {
+    background-color: rgba(244, 63, 94, 0.15);
+    border-color: rgba(244, 63, 94, 0.4);
+    color: #fb7185;
+}
+
+.session-btn-delete.confirming {
+    background-color: #e11d48;
+    border-color: #f43f5e;
+    color: #ffffff;
+    animation: pulse 1s infinite;
+}
+
+.session-stat-card {
+    background-color: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 0.625rem;
+    padding: 0.5rem 0.65rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+}
+
+.session-chart-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 0.75rem;
+    padding: 0.5rem 0.6rem;
+    overflow: hidden;
+}
+
+.chart-tooltip {
+    position: absolute;
+    display: none;
+    pointer-events: none;
+    background-color: rgba(15, 23, 42, 0.95);
+    border: 1px solid #334155;
+    border-radius: 0.5rem;
+    padding: 0.4rem 0.65rem;
+    font-size: 0.7rem;
+    color: #f8fafc;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    z-index: 30;
+    white-space: nowrap;
+    transform: translate(-50%, -125%);
+    transition: transform 0.05s ease-out;
+}

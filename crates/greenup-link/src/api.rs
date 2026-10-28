@@ -102,6 +102,7 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
         .route("/js/visuals.js", get(serve_js_visuals))
         .route("/js/api.js", get(serve_js_api))
         .route("/js/console.js", get(serve_js_console))
+        .route("/js/sessions.js", get(serve_js_sessions))
         .route("/js/main.js", get(serve_js_main))
         .merge(api_router)
         .layer(axum::middleware::from_fn(security_headers_middleware))
@@ -168,6 +169,11 @@ async fn serve_js_visuals() -> impl IntoResponse {
 /// GET /js/api.js
 async fn serve_js_api() -> impl IntoResponse {
     ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/api.js"))
+}
+
+/// GET /js/sessions.js
+async fn serve_js_sessions() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/sessions.js"))
 }
 
 /// GET /js/main.js
