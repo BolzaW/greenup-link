@@ -9,6 +9,8 @@ window.boardInfoComplete = false;
 window.lastTelemetry = null;
 let consoleInitialized = false;
 let telemetryTimer = null;
+let isOfflineReconnecting = false;
+let offlineProbeTimer = null;
 
 function startTelemetryPolling() {
     if (telemetryTimer) clearInterval(telemetryTimer);
@@ -21,6 +23,54 @@ function stopTelemetryPolling() {
         telemetryTimer = null;
     }
 }
+
+function handleServerOffline() {
+    if (isOfflineReconnecting) return;
+    isOfflineReconnecting = true;
+    stopTelemetryPolling();
+    if (typeof stopLogStream === 'function') {
+        stopLogStream();
+    }
+
+    const lblState = document.getElementById('lblState');
+    if (lblState) {
+        lblState.innerText = (typeof t === 'function' ? t('state.offline') : 'Hors ligne') || 'Hors ligne';
+        lblState.classList.add('text-rose-500');
+    }
+
+    if (offlineProbeTimer) clearInterval(offlineProbeTimer);
+    offlineProbeTimer = setInterval(probeServerReconnection, 2500);
+}
+
+async function probeServerReconnection() {
+    try {
+        const token = getApiToken();
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+        const res = await fetch('/api/auth/status', { headers });
+        if (!res.ok) return;
+        const status = await res.json();
+
+        // Server is reachable again!
+        clearInterval(offlineProbeTimer);
+        offlineProbeTimer = null;
+        isOfflineReconnecting = false;
+
+        window.isAuthResolved = true;
+        window.isAuthRequired = !!status.auth_required;
+        window.isAuthenticated = !!status.authenticated;
+        updateLogoutButton();
+
+        if (window.isAuthRequired && !window.isAuthenticated) {
+            handleUnauthorized();
+        } else {
+            hideAuthModal();
+            await onAuthenticatedStart();
+        }
+    } catch (_) {
+        // Server still unreachable, retry on next interval
+    }
+}
+window.handleServerOffline = handleServerOffline;
 
 function switchChargePoint(side) {
     if (window.currentSide === side) return;
@@ -65,13 +115,15 @@ function buildAuthUrl(url) {
 }
 
 async function apiFetch(url, options = {}) {
-    // If authentication is required and client is not authenticated,
+    // If auth state is not yet resolved, or if authentication is required and client is not authenticated,
     // prevent outgoing calls to protected endpoints that would trigger 401 warnings on server.
-    if (window.isAuthResolved && window.isAuthRequired && !window.isAuthenticated && !url.includes('/api/auth/status')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized: valid API token required' }), {
-            status: 401,
-            headers: { 'Content-Type': 'application/json' }
-        });
+    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) {
+        if (!url.includes('/api/auth/status')) {
+            return new Response(JSON.stringify({ error: 'Unauthorized: valid API token required' }), {
+                status: 401,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
     }
 
     const token = getApiToken();
@@ -529,8 +581,7 @@ async function fetchTelemetry() {
 
     } catch (err) {
         console.error("Erreur polling", err);
-        lblState.innerText = t('state.offline');
-        lblState.classList.add('text-rose-500');
+        handleServerOffline();
     }
 }
 

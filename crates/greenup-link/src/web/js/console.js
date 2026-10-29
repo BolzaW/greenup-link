@@ -81,7 +81,9 @@ function startLogStream() {
         })
         .catch(err => {
             console.warn('Could not fetch /api/logs:', err);
-            connectSse();
+            if (typeof handleServerOffline === 'function') {
+                handleServerOffline();
+            }
         });
 }
 
@@ -99,7 +101,11 @@ function connectSse() {
             }
         };
         logEventSource.onerror = function() {
-            // EventSource automatically retries
+            // Server disconnected or error: close stream to prevent blind browser C++ retries
+            stopLogStream();
+            if (typeof handleServerOffline === 'function') {
+                handleServerOffline();
+            }
         };
     } catch (e) {
         console.warn('SSE not supported or connection error:', e);
