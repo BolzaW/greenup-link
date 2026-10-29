@@ -166,18 +166,10 @@ pub async fn require_auth(
     if is_request_authorized(req.headers(), req.uri().query(), expected.as_str()) {
         next.run(req).await
     } else {
-        let path = req.uri().path();
-        if path == "/api/telemetry" || path == "/api/logs/stream" {
-            logger::debug(
-                "API",
-                &format!("🔒 Unauthorized request rejected (401): {} {}", req.method(), path),
-            );
-        } else {
-            logger::warn(
-                "API",
-                &format!("⚠️ 🔒 Unauthorized request rejected (401): {} {}", req.method(), path),
-            );
-        }
+        logger::warn(
+            "API",
+            &format!("⚠️ 🔒 Unauthorized request rejected (401): {} {}", req.method(), req.uri().path()),
+        );
         (
             StatusCode::UNAUTHORIZED,
             Json(json!({
