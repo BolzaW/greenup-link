@@ -39,7 +39,7 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
     let trimmed = line.trim();
     if trimmed.starts_with("RaspberryPi?") {
         ProtocolEvent::Ping
-    } else if trimmed == "pong" || trimmed == "ping" {
+    } else if trimmed == "pong" {
         ProtocolEvent::Pong
     } else if line.starts_with("SoftwareVersion:") {
         ProtocolEvent::SoftwareVersion(line.replace("SoftwareVersion:", ""))
@@ -189,5 +189,8 @@ mod tests {
             parse_line("Cph:Tri"),
             ProtocolEvent::ChargePhases("Tri".into())
         );
+        assert_eq!(parse_line("pong"), ProtocolEvent::Pong);
+        assert_eq!(parse_line("pong\r"), ProtocolEvent::Pong);
+        assert_eq!(parse_line("ping"), ProtocolEvent::Unknown("ping".into()));
     }
 }

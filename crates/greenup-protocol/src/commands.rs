@@ -339,7 +339,7 @@ impl Command {
         match self {
             Command::Ping => {
                 let trimmed = rx_line.trim();
-                trimmed.starts_with("pong") || trimmed.starts_with("ping")
+                trimmed.starts_with("pong")
             }
             Command::SetStartButton(true) => {
                 rx_line.starts_with("SB:") || rx_line.starts_with("SBF:")
@@ -460,11 +460,11 @@ mod tests {
     }
 
     #[test]
-    fn ping_matches_pong_and_ping() {
+    fn ping_matches_pong_strictly() {
         let cmd = Command::Ping;
         assert!(cmd.matches_response("pong"));
         assert!(cmd.matches_response("pong\r"));
-        assert!(cmd.matches_response("ping"));
+        assert!(!cmd.matches_response("ping"));
         assert!(!cmd.matches_response("State:A"));
     }
 }

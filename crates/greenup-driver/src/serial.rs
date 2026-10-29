@@ -530,7 +530,7 @@ pub fn determine_rx_log_category(line: &str) -> &'static str {
         } else {
             "DEBUG" // Unchanged repetitive CPh announcements logged as DEBUG
         }
-    } else if line == "pong" || line == "ping" {
+    } else if line == "pong" {
         "TRACE"
     } else {
         "SERIAL_RX"
@@ -934,6 +934,6 @@ mod tests {
     #[test]
     fn test_determine_rx_log_category_ping_pong_trace() {
         assert_eq!(determine_rx_log_category("pong"), "TRACE");
-        assert_eq!(determine_rx_log_category("ping"), "TRACE");
+        assert_eq!(determine_rx_log_category("ping"), "SERIAL_RX");
     }
 }
