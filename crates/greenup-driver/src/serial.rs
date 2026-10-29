@@ -77,16 +77,89 @@ pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartErro
 }
 
 
-pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, state: &SharedState) {
-    let hello = Command::RaspberryPiModeOk;
-    let _ = port.write_all(hello.encode().as_bytes());
-    logger::log_side("SERIAL_TX", state.side(), &hello.as_frame());
-    std::thread::sleep(Duration::from_millis(200));
+/// Sends a command synchronously to the serial port, logging TX, and waiting
+/// for the matching acknowledgment response from the ATmega if the command expects one.
+///
+/// Returns `true` if the command was successfully acknowledged (or if no response was expected).
+pub fn send_command_sync(
+    port: &mut Box<dyn serialport::SerialPort>,
+    state: &SharedState,
+    internal_rx: &std::sync::mpsc::Receiver<String>,
+    is_running: &AtomicBool,
+    cmd: Command,
+) -> bool {
+    let encoded = cmd.encode();
+    let expects_response = cmd.expects_response();
+    let mut retries = if cmd == Command::Ping { 0 } else { 1 };
+    let mut success = false;
+
+    while retries >= 0 && !success && is_running.load(Ordering::Relaxed) {
+        // Drain any stale/unrelated lines accumulated in internal_rx
+        while let Ok(_) = internal_rx.try_recv() {}
+
+        let tx_level = if cmd == Command::Ping {
+            logger::LogLevel::Trace
+        } else {
+            logger::LogLevel::Info
+        };
+        logger::log_with_level_side("SERIAL_TX", Some(state.side()), tx_level, encoded.trim());
+
+        if let Err(e) = port.write_all(encoded.as_bytes()) {
+            logger::error("SERIAL", &format!("❌ Serial write error on port: {}", e));
+            is_running.store(false, Ordering::Relaxed);
+            return false;
+        }
+
+        if expects_response {
+            let start_wait = Instant::now();
+            let mut matched = false;
+            let mut got_default = false;
+
+            while start_wait.elapsed() < Duration::from_millis(1000) && is_running.load(Ordering::Relaxed) {
+                if let Ok(rx_line) = internal_rx.recv_timeout(Duration::from_millis(50)) {
+                    if cmd.matches_response(&rx_line) {
+                        matched = true;
+                        break;
+                    } else if rx_line.starts_with("Default:") {
+                        got_default = true;
+                        break;
+                    }
+                }
+            }
+
+            if matched {
+                success = true;
+            } else {
+                if got_default {
+                    logger::warn("SERIAL", &format!("❌ Command {} rejected by station (Default), retry: {}", cmd.as_frame(), retries));
+                } else {
+                    logger::warn("SERIAL", &format!("⏳ Command {} timeout, retry: {}", cmd.as_frame(), retries));
+                }
+                retries -= 1;
+            }
+        } else {
+            success = true;
+        }
+    }
+
+    success
+}
+
+pub fn send_init_sequence_sync(
+    port: &mut Box<dyn serialport::SerialPort>,
+    state: &SharedState,
+    internal_rx: &std::sync::mpsc::Receiver<String>,
+    is_running: &AtomicBool,
+) {
+    send_command_sync(port, state, internal_rx, is_running, Command::RaspberryPiModeOk);
+    std::thread::sleep(Duration::from_millis(50));
 
     for cmd in Command::startup_queries() {
-        let _ = port.write_all(cmd.encode().as_bytes());
-        logger::log_side("SERIAL_TX", state.side(), &cmd.as_frame());
-        std::thread::sleep(Duration::from_millis(150));
+        if !is_running.load(Ordering::Relaxed) {
+            break;
+        }
+        send_command_sync(port, state, internal_rx, is_running, cmd);
+        std::thread::sleep(Duration::from_millis(30));
     }
 }
 
@@ -258,7 +331,7 @@ pub fn run_serial_loop_with_options(
         });
 
         reset_serial_filters();
-        send_init_sequence_sync(&mut port, &state);
+        send_init_sequence_sync(&mut port, &state, &internal_rx, &is_running);
 
         let session_start = Instant::now();
         let mut last_watchdog_probe = Instant::now();
@@ -276,57 +349,7 @@ pub fn run_serial_loop_with_options(
             };
 
             if let Some(cmd) = cmd_opt {
-                let encoded = cmd.encode();
-                let expects_response = cmd.expects_response();
-                let mut retries = 1;
-                let mut success = false;
-
-                while retries >= 0 && !success && is_running.load(Ordering::Relaxed) {
-                    while let Ok(_) = internal_rx.try_recv() {}
-
-                    let tx_level = if cmd == Command::Ping {
-                        logger::LogLevel::Trace
-                    } else {
-                        logger::LogLevel::Info
-                    };
-                    logger::log_with_level_side("SERIAL_TX", Some(state.side()), tx_level, encoded.trim());
-                    if let Err(e) = port.write_all(encoded.as_bytes()) {
-                        logger::error("SERIAL", &format!("❌ Serial write error on {} : {}", port_name, e));
-                        is_running.store(false, Ordering::Relaxed);
-                        break;
-                    }
-
-                    if expects_response {
-                        let start_wait = Instant::now();
-                        let mut matched = false;
-                        let mut got_default = false;
-
-                        while start_wait.elapsed() < Duration::from_millis(1000) && is_running.load(Ordering::Relaxed) {
-                            if let Ok(rx_line) = internal_rx.recv_timeout(Duration::from_millis(50)) {
-                                if cmd.matches_response(&rx_line) {
-                                    matched = true;
-                                    break;
-                                } else if rx_line.starts_with("Default:") {
-                                    got_default = true;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if matched {
-                            success = true;
-                        } else {
-                            if got_default {
-                                logger::warn("SERIAL", &format!("❌ Command {} rejected by station (Default), retry: {}", cmd.as_frame(), retries));
-                            } else {
-                                logger::warn("SERIAL", &format!("⏳ Command {} timeout, retry: {}", cmd.as_frame(), retries));
-                            }
-                            retries -= 1;
-                        }
-                    } else {
-                        success = true;
-                    }
-                }
+                send_command_sync(&mut port, &state, &internal_rx, &is_running, cmd);
             } else {
                 std::thread::sleep(Duration::from_millis(50));
             }
@@ -360,13 +383,7 @@ pub fn run_serial_loop_with_options(
                 // Preventive probe: send lightweight 'ping' every 7s to verify ATmega is alive
                 if last_watchdog_probe.elapsed() >= Duration::from_secs(7) {
                     last_watchdog_probe = Instant::now();
-                    let ping_cmd = Command::Ping;
-                    let encoded = ping_cmd.encode();
-                    logger::log_with_level_side("SERIAL_TX", Some(state.side()), logger::LogLevel::Trace, encoded.trim());
-                    if let Err(e) = port.write_all(encoded.as_bytes()) {
-                        logger::error("SERIAL", &format!("❌ Write error on {} during ping probe: {}", port_name, e));
-                        is_running.store(false, Ordering::Relaxed);
-                    }
+                    send_command_sync(&mut port, &state, &internal_rx, &is_running, Command::Ping);
                 }
             } else if elapsed_since_rx >= watchdog_timeout {
                 if current_status == SerialStatus::UsbConnected {
@@ -406,12 +423,8 @@ pub fn run_serial_loop_with_options(
                 // Emergency rescue attempt: try sending RaspberryPiModeOK every 15s to unfreeze UART state
                 if last_watchdog_probe.elapsed() >= Duration::from_secs(15) {
                     last_watchdog_probe = Instant::now();
-                    let hello = Command::RaspberryPiModeOk;
                     logger::warn("SERIAL", &format!("🚨 Attempting emergency ATmega interface reset (RaspberryPiModeOK) on {}...", port_name));
-                    if let Err(e) = port.write_all(hello.encode().as_bytes()) {
-                        logger::error("SERIAL", &format!("❌ Write error on {} during rescue probe: {}", port_name, e));
-                        is_running.store(false, Ordering::Relaxed);
-                    }
+                    send_command_sync(&mut port, &state, &internal_rx, &is_running, Command::RaspberryPiModeOk);
                 }
             }
         }

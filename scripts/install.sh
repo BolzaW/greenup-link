@@ -498,14 +498,7 @@ else
     chmod 664 "$CONFIG_FILE" 2>/dev/null || true
 fi
 
-# Write token into installation and daily logs if set
-if [ -n "$TOKEN_SET" ]; then
-    TIMESTAMP=$(date +"%Y-%m-%d %H:%M:%S")
-    TODAY_LOG="$TARGET_DIR/logs/greenup_$(date +%Y-%m-%d).log"
-    INSTALL_LOG="$TARGET_DIR/logs/install.log"
-    echo "[$TIMESTAMP] [INFO] [SYS] 🔑 Configured API token: $TOKEN_SET (saved in $CONFIG_FILE)" >> "$TODAY_LOG" 2>/dev/null || true
-    echo "[$TIMESTAMP] Configured API token: $TOKEN_SET (saved in $CONFIG_FILE)" >> "$INSTALL_LOG" 2>/dev/null || true
-fi
+
 
 # 5. Configure and start Systemd service
 echo ""
