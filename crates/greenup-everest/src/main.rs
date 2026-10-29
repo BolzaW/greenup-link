@@ -17,14 +17,6 @@ async fn main() {
         greenup_driver::serial::run_serial_loop(state_for_serial, serial_rx);
     });
 
-    // Launch the init sequence after 1 second
-    let state_for_init = driver_state.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        logger::log("EVEREST", "🔄 Sending Legrand initialization sequence...");
-        greenup_driver::serial::trigger_init_sequence(&state_for_init).await;
-    });
-
     // 2. Initialize the EVerest Adapter
     let adapter = Arc::new(EverestAdapter::new(driver_state.clone()));
     

@@ -22,7 +22,7 @@ impl Default for SerialOptions {
                 .unwrap_or_else(|_| "/dev/ttyUSB0".to_string()),
             baud_rate: 115_200,
             timeout_ms: 100,
-            watchdog_timeout_secs: 6,
+            watchdog_timeout_secs: 60,
         }
     }
 }
@@ -284,7 +284,12 @@ pub fn run_serial_loop_with_options(
                 while retries >= 0 && !success && is_running.load(Ordering::Relaxed) {
                     while let Ok(_) = internal_rx.try_recv() {}
 
-                    logger::log_side("SERIAL_TX", state.side(), encoded.trim());
+                    let tx_level = if cmd == Command::Ping {
+                        logger::LogLevel::Trace
+                    } else {
+                        logger::LogLevel::Info
+                    };
+                    logger::log_with_level_side("SERIAL_TX", Some(state.side()), tx_level, encoded.trim());
                     if let Err(e) = port.write_all(encoded.as_bytes()) {
                         logger::error("SERIAL", &format!("❌ Serial write error on {} : {}", port_name, e));
                         is_running.store(false, Ordering::Relaxed);
@@ -349,17 +354,31 @@ pub fn run_serial_loop_with_options(
                 }
             }
 
-            if elapsed_since_rx > watchdog_timeout {
+            let probe_threshold = Duration::from_secs(options.watchdog_timeout_secs.saturating_sub(15).max(5));
+
+            if elapsed_since_rx >= probe_threshold && elapsed_since_rx < watchdog_timeout {
+                // Preventive probe: send lightweight 'ping' every 7s to verify ATmega is alive
+                if last_watchdog_probe.elapsed() >= Duration::from_secs(7) {
+                    last_watchdog_probe = Instant::now();
+                    let ping_cmd = Command::Ping;
+                    let encoded = ping_cmd.encode();
+                    logger::log_with_level_side("SERIAL_TX", Some(state.side()), logger::LogLevel::Trace, encoded.trim());
+                    if let Err(e) = port.write_all(encoded.as_bytes()) {
+                        logger::error("SERIAL", &format!("❌ Write error on {} during ping probe: {}", port_name, e));
+                        is_running.store(false, Ordering::Relaxed);
+                    }
+                }
+            } else if elapsed_since_rx >= watchdog_timeout {
                 if current_status == SerialStatus::UsbConnected {
                     if let Ok(mut tel) = state.telemetry.lock() {
                         tel.serial.status = SerialStatus::UsbNoResponse;
                         tel.serial.message = "No response from station board (station powered off or ATmega frozen)".to_string();
                     }
-                    if last_watchdog_warn.elapsed() >= Duration::from_secs(10) {
+                    if last_watchdog_warn.elapsed() >= Duration::from_secs(15) {
                         logger::warn(
                             "SERIAL",
                             &format!(
-                                "⚠️ No response from station board on {} for {}s. Check station power or power-cycle station if ATmega is frozen.",
+                                "⚠️ No response from station board on {} for {}s (ping probes unanswered). Check station power or power-cycle station if ATmega is frozen.",
                                 port_name,
                                 elapsed_since_rx.as_secs()
                             ),
@@ -371,7 +390,7 @@ pub fn run_serial_loop_with_options(
                         tel.serial.status = SerialStatus::UsbNoResponse;
                         tel.serial.message = "No response from station board (station powered off or ATmega frozen)".to_string();
                     }
-                    if last_watchdog_warn.elapsed() >= Duration::from_secs(10) {
+                    if last_watchdog_warn.elapsed() >= Duration::from_secs(15) {
                         logger::warn(
                             "SERIAL",
                             &format!(
@@ -384,11 +403,13 @@ pub fn run_serial_loop_with_options(
                     }
                 }
 
-                if last_watchdog_probe.elapsed() >= Duration::from_secs(5) {
+                // Emergency rescue attempt: try sending RaspberryPiModeOK every 15s to unfreeze UART state
+                if last_watchdog_probe.elapsed() >= Duration::from_secs(15) {
                     last_watchdog_probe = Instant::now();
                     let hello = Command::RaspberryPiModeOk;
+                    logger::warn("SERIAL", &format!("🚨 Attempting emergency ATmega interface reset (RaspberryPiModeOK) on {}...", port_name));
                     if let Err(e) = port.write_all(hello.encode().as_bytes()) {
-                        logger::error("SERIAL", &format!("❌ Write error on {} during probe: {}", port_name, e));
+                        logger::error("SERIAL", &format!("❌ Write error on {} during rescue probe: {}", port_name, e));
                         is_running.store(false, Ordering::Relaxed);
                     }
                 }
@@ -509,6 +530,8 @@ pub fn determine_rx_log_category(line: &str) -> &'static str {
         } else {
             "DEBUG" // Unchanged repetitive CPh announcements logged as DEBUG
         }
+    } else if line == "pong" || line == "ping" {
+        "TRACE"
     } else {
         "SERIAL_RX"
     }
@@ -528,7 +551,12 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
     }
 
     let rx_category = determine_rx_log_category(line);
-    logger::log_side(rx_category, side, line);
+    let level = match rx_category {
+        "TRACE" => logger::LogLevel::Trace,
+        "DEBUG" => logger::LogLevel::Debug,
+        _ => logger::LogLevel::Info,
+    };
+    logger::log_with_level_side("SERIAL_RX", Some(side), level, line);
 
     let event = parse_line(line);
 
@@ -536,6 +564,9 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::Ping => {
             logger::log("SERIAL", "🤝 Hardware ping detected, sending RaspberryPiModeOK");
             let _ = state.serial_tx.try_send(Command::RaspberryPiModeOk);
+        }
+        ProtocolEvent::Pong => {
+            // Heartbeat response acknowledged (last_rx timestamp already updated)
         }
         ProtocolEvent::SoftwareVersion(v) => {
             if let Ok(mut info) = state.info.lock() { info.software_version = v; }
@@ -898,5 +929,11 @@ mod tests {
 
         // Variation >= 0.5A down (16.55 -> 15.90, diff 0.65) is logged as INFO
         assert_eq!(determine_rx_log_category("CCI:15.90"), "SERIAL_RX");
+    }
+
+    #[test]
+    fn test_determine_rx_log_category_ping_pong_trace() {
+        assert_eq!(determine_rx_log_category("pong"), "TRACE");
+        assert_eq!(determine_rx_log_category("ping"), "TRACE");
     }
 }

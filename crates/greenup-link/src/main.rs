@@ -81,13 +81,6 @@ fn spawn_serial_worker(
         greenup_driver::run_serial_loop_with_options(state_for_serial, rx, serial_options);
     });
 
-    let state_for_init = app_state.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(if side == 2 { 1500 } else { 1000 })).await;
-        greenup_driver::logger::log("SYS", &format!("🔄 Sending Point {} initialization sequence...", side));
-        greenup_driver::serial::trigger_init_sequence(&state_for_init).await;
-    });
-
     (app_state, tx)
 }
 
