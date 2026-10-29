@@ -47,14 +47,16 @@ for arg in "$@"; do
     esac
 done
 
-# Identify host interactive user (e.g. 'pi') who invoked sudo
-CALLING_USER="${SUDO_USER:-$USER}"
+# Identify host interactive user who invoked sudo
+CALLING_USER="${SUDO_USER:-}"
 if [ "$CALLING_USER" = "root" ] || [ -z "$CALLING_USER" ]; then
-    if id -u pi >/dev/null 2>&1; then
-        CALLING_USER="pi"
-    else
-        CALLING_USER=""
-    fi
+    CALLING_USER=$(logname 2>/dev/null || true)
+fi
+if [ "$CALLING_USER" = "root" ] || [ -z "$CALLING_USER" ]; then
+    CALLING_USER=$(awk -F: '$3 >= 1000 && $3 < 60000 && $1 != "nobody" && $1 != "greenup" {print $1; exit}' /etc/passwd 2>/dev/null || true)
+fi
+if [ -n "$CALLING_USER" ] && ! id -u "$CALLING_USER" >/dev/null 2>&1; then
+    CALLING_USER=""
 fi
 
 # Create dedicated unprivileged system user 'greenup' if it does not exist
@@ -87,9 +89,15 @@ fi
 echo ""
 echo "[1/4] Checking system environment..."
 IS_LEGRAND_STACK=false
-if [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -f "/home/pi/Desktop/DeletAll.sh" ] || [ -d "/var/lib/tomcat9" ]; then
+if [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -d "/var/lib/tomcat9" ]; then
     IS_LEGRAND_STACK=true
 fi
+for del_cand in /home/*/Desktop/DeletAll.sh /home/*/Desktop/DeletAll.sh.old; do
+    if [ -f "$del_cand" ]; then
+        IS_LEGRAND_STACK=true
+        break
+    fi
+done
 
 if [ "$IS_LEGRAND_STACK" = true ]; then
     echo "  -> Official Legrand software stack detected."
@@ -119,21 +127,22 @@ EOF
         echo "  -> Neutralized $INIT_SCRIPT with 'exit 0'"
     fi
 
-    # C. Neutralize emergency DeletAll.sh script
-    DELETE_SCRIPT="/home/pi/Desktop/DeletAll.sh"
-    if [ -f "$DELETE_SCRIPT" ]; then
-        if [ ! -f "$DELETE_SCRIPT.old" ]; then
-            cp -p "$DELETE_SCRIPT" "$DELETE_SCRIPT.old"
-            echo "  -> Backup created: $DELETE_SCRIPT.old"
-        fi
-        cat << 'EOF' > "$DELETE_SCRIPT"
+    # C. Neutralize emergency DeletAll.sh script across user desktops
+    for del_file in /home/*/Desktop/DeletAll.sh; do
+        if [ -f "$del_file" ]; then
+            if [ ! -f "$del_file.old" ]; then
+                cp -p "$del_file" "$del_file.old"
+                echo "  -> Backup created: $del_file.old"
+            fi
+            cat << 'EOF' > "$del_file"
 #!/bin/bash
 # Neutralized by GreenUp Link installer
 exit 0
 EOF
-        chmod -x "$DELETE_SCRIPT"
-        echo "  -> Neutralized: $DELETE_SCRIPT (chmod -x applied)"
-    fi
+            chmod -x "$del_file"
+            echo "  -> Neutralized: $del_file (chmod -x applied)"
+        fi
+    done
 else
     echo "  -> Standard/clean OS detected (no Legrand stack found, skipping legacy neutralization)."
 fi
@@ -480,7 +489,7 @@ fi
 mkdir -p "$TARGET_DIR/logs" "$TARGET_DIR/sessions"
 chown -R greenup:greenup "$TARGET_DIR"
 
-# Directory permissions: 755 allows local users (such as 'pi') to cd and browse /opt/greenup-link
+# Directory permissions: 755 allows local users to cd and browse /opt/greenup-link
 chmod 755 "$TARGET_DIR"
 chmod 775 "$TARGET_DIR/logs" "$TARGET_DIR/sessions"
 chmod -R 664 "$TARGET_DIR/logs"/* 2>/dev/null || true
@@ -488,7 +497,7 @@ chmod -R 664 "$TARGET_DIR/sessions"/* 2>/dev/null || true
 chmod 755 "$TARGET_BIN"
 [ -f "$UNINSTALL_TARGET" ] && chmod 755 "$UNINSTALL_TARGET"
 
-# Allow the host interactive user (e.g. 'pi') to directly edit greenup.toml without sudo
+# Allow the host interactive user to directly edit greenup.toml without sudo
 if [ -n "$CALLING_USER" ] && [ "$CALLING_USER" != "root" ] && id -u "$CALLING_USER" >/dev/null 2>&1; then
     chown "$CALLING_USER:greenup" "$CONFIG_FILE"
     chmod 664 "$CONFIG_FILE"
@@ -540,7 +549,7 @@ echo ""
 echo "================================================="
 sleep 1
 if systemctl is-active --quiet greenup-link.service; then
-    IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "your-pi-ip")
+    IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "your-ip")
     echo "🎉 Success: Green'Up Link is active and running!"
     echo "   Web Interface:   http://${IP_ADDR}:8080"
     echo "   Directory:       /opt/greenup-link"
