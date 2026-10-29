@@ -1,0 +1,16 @@
+[package]
+name = "greenup-simulator"
+version.workspace = true
+edition = "2021"
+authors = ["BolzaW <bolzaw.dev@gmail.com>"]
+description = "High-fidelity hardware simulator for Legrand Green'Up Premium charging stations (ATmega2560)"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+greenup-protocol = { path = "../greenup-protocol" }
+chrono = "0.4"
+rand = "0.8"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
