@@ -286,6 +286,9 @@ pub fn run_serial_loop_with_options(
                                     if tel.serial.status != SerialStatus::UsbConnected {
                                         tel.serial.status = SerialStatus::UsbConnected;
                                         tel.serial.message = "USB serial link active - Station connected".to_string();
+                                        if tel.voltage == 0.0 {
+                                            tel.voltage = 230.0;
+                                        }
                                         logger::info(
                                             "SERIAL",
                                             &format!("✅ USB serial communication established on {} (ATmega link active)", port_name_reader),
@@ -763,6 +766,9 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::Current(c) => {
             if let Ok(mut tel) = state.telemetry.lock() {
                 if tel.greenup_state == "D" || tel.greenup_state == "E" {
+                    if tel.voltage == 0.0 {
+                        tel.voltage = 230.0;
+                    }
                     let previous_power = tel.power;
                     tel.current = c;
                     tel.power = tel.voltage * tel.current;

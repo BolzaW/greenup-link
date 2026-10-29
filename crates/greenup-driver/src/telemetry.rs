@@ -71,7 +71,7 @@ impl Default for Telemetry {
         Self {
             side: 1,
             serial: SerialConnection::default(),
-            voltage: 0.0,
+            voltage: 230.0,
             current: 0.0,
             power: 0.0,
             energy: 0.0,

@@ -133,6 +133,14 @@ impl ActiveSession {
     pub fn record_sample(&mut self, tel: &Telemetry, now_instant: Instant, now_local: DateTime<Local>) {
         let elapsed_s = now_instant.duration_since(self.start_instant).as_secs();
         let energy_kwh = self.get_total_energy_kwh(tel);
+        let effective_voltage = if tel.voltage > 50.0 { tel.voltage } else { 230.0 };
+        let sample_power = if tel.power > 0.0 {
+            tel.power
+        } else if tel.greenup_state == "D" || tel.greenup_state == "E" {
+            effective_voltage * tel.current
+        } else {
+            0.0
+        };
 
         if let Some(ref mut writer) = self.csv_writer {
             let line = format!(
@@ -142,8 +150,8 @@ impl ActiveSession {
                 tel.greenup_state,
                 tel.current,
                 tel.limit_amps,
-                tel.voltage,
-                tel.power,
+                effective_voltage,
+                sample_power,
                 energy_kwh
             );
             if let Err(e) = writer.write_all(line.as_bytes()) {
@@ -347,9 +355,18 @@ pub fn on_telemetry_tick_for_side(side: u8, tel: &Telemetry) {
         session.last_tick_instant = now_instant;
 
         let is_charging = tel.greenup_state == "D" || tel.greenup_state == "E";
+        let effective_voltage = if tel.voltage > 50.0 { tel.voltage } else { 230.0 };
+        let live_power = if tel.power > 0.0 {
+            tel.power
+        } else if is_charging {
+            effective_voltage * tel.current
+        } else {
+            0.0
+        };
+
         if is_charging && tel.current > 0.05 {
             session.active_charging_duration_secs_f64 += dt;
-            let wh = (tel.power as f64) * (dt / 3600.0);
+            let wh = (live_power as f64) * (dt / 3600.0);
             session.cumulative_energy_wh += wh;
         }
 
@@ -357,8 +374,8 @@ pub fn on_telemetry_tick_for_side(side: u8, tel: &Telemetry) {
         if tel.current > session.max_current {
             session.max_current = tel.current;
         }
-        if tel.power > session.max_power {
-            session.max_power = tel.power;
+        if live_power > session.max_power {
+            session.max_power = live_power;
         }
 
         // 3. Adaptive sampling check
@@ -747,6 +764,15 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
         let charging = s.active_charging_duration_secs_f64.round() as u64;
         let energy_kwh = s.get_total_energy_kwh(tel);
 
+        let effective_voltage = if tel.voltage > 50.0 { tel.voltage } else { 230.0 };
+        let live_power = if tel.power > 0.0 {
+            tel.power
+        } else if tel.greenup_state == "D" || tel.greenup_state == "E" {
+            effective_voltage * tel.current
+        } else {
+            0.0
+        };
+
         ActiveSessionSummary {
             session_id: s.session_id.clone(),
             side: s.side,
@@ -755,7 +781,7 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
             charging_duration_seconds: charging,
             total_energy_kwh: energy_kwh,
             current_a: tel.current,
-            power_w: tel.power,
+            power_w: live_power,
             max_current_a: s.max_current,
             max_power_w: s.max_power,
             state: tel.greenup_state.clone(),

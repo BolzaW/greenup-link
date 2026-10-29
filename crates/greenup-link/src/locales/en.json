@@ -136,7 +136,7 @@
     "stat_energy": "Energy",
     "stat_power_max": "Peak power",
     "stat_power_avg": "Avg power",
-    "stat_reason": "End reason",
+    "stat_reason": "Status",
     "chart_power_curve": "Power curve",
     "chart_loading": "Loading...",
     "chart_no_data": "No curve data available",
