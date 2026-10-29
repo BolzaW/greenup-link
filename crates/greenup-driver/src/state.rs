@@ -123,8 +123,8 @@ pub type SharedStation = Arc<StationManager>;
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_single_point_station_manager() {
+    #[tokio::test]
+    async fn test_single_point_station_manager() {
         let (tx1, _rx1) = tokio::sync::mpsc::channel(1);
         let p1 = Arc::new(AppState::new_with_side(1, tx1));
         let manager = StationManager::new(p1.clone(), None);
@@ -136,8 +136,8 @@ mod tests {
         assert_eq!(manager.get_point(Some(2)).side(), 1); // fallback
     }
 
-    #[test]
-    fn test_dual_point_station_manager_dynamic_routing() {
+    #[tokio::test]
+    async fn test_dual_point_station_manager_dynamic_routing() {
         let (tx1, _rx1) = tokio::sync::mpsc::channel(1);
         let (tx2, _rx2) = tokio::sync::mpsc::channel(1);
         let p1 = Arc::new(AppState::new_with_side(1, tx1));
