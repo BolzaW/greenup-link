@@ -147,6 +147,8 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             self.handle_sse_stream()
         elif url == "/api/logs/export":
             self.handle_logs_export()
+        elif url == "/api/sessions":
+            self.send_json({"active_session": None, "sessions": []})
         elif url == "/api/logs/level":
             add_mock_log("API", "DEBUG", f"🎚️ GET /api/logs/level → {state.get('log_level', 'INFO')}")
             self.send_json({"level": state.get("log_level", "INFO")})

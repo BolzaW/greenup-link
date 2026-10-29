@@ -199,8 +199,8 @@
         <!-- Sessions History Panel (Replaces visualizer in Sessions mode) -->
         <div id="sessionsPanel" class="hidden sessions-panel">
             <!-- Top Toolbar: Selector + Download ZIP + Delete (All on single row) -->
-            <div class="flex items-center justify-between gap-2.5 pb-4 mb-4 border-b border-slate-800">
-                <div class="flex-1 min-w-0 flex items-center space-x-2">
+            <div class="session-toolbar">
+                <div class="session-toolbar-selector">
                     <svg class="w-4 h-4 text-sky-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                     </svg>
@@ -208,7 +208,7 @@
                         <option value="" disabled selected data-i18n="sessions.loading">Chargement des sessions...</option>
                     </select>
                 </div>
-                <div class="flex items-center space-x-1.5 flex-shrink-0">
+                <div class="session-toolbar-actions">
                     <!-- Download ZIP button (sober down arrow into tray, like console export) -->
                     <button id="btnSessionDownloadZip" class="session-btn-tool session-btn-export" title="Télécharger l'archive ZIP (CSV + fiche résumé)" data-i18n-title="sessions.download_zip_title" disabled>
                         <svg id="iconSessionDownloadZip" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -229,7 +229,7 @@
             </div>
 
             <!-- Session Summary Stat Cards (4 cards) -->
-            <div id="sessionSummaryCards" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div id="sessionSummaryCards" class="session-summary-grid">
                 <!-- Duration -->
                 <div class="session-stat-card">
                     <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
@@ -259,7 +259,7 @@
                     <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
                         <span>🛑</span> <span data-i18n="sessions.stat_reason">Fin</span>
                     </span>
-                    <span id="sessionValReason" class="text-xs sm:text-sm font-semibold text-slate-300 truncate mt-1" title="">--</span>
+                    <span id="sessionValReason" class="text-xs sm:text-sm font-semibold text-slate-300 truncate mt-1" title="" data-i18n="sessions.no_sessions">Aucune session enregistrée</span>
                     <span id="sessionValEndTime" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
                 </div>
             </div>

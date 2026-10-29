@@ -6,10 +6,16 @@ if (langSelector) langSelector.value = savedLang;
 
 setupAuthModalListeners();
 
-// Initialize i18n and check authentication status concurrently
-Promise.all([
-    setLanguage(savedLang),
-    checkAuthAndStart()
-]).catch(err => {
-    console.error('Initialization error:', err);
-});
+// Initialize i18n first so all translations are ready, then check authentication and start
+(async () => {
+    try {
+        await setLanguage(savedLang);
+    } catch (err) {
+        console.error('Language initialization error:', err);
+    }
+    try {
+        await checkAuthAndStart();
+    } catch (err) {
+        console.error('Initialization error:', err);
+    }
+})();

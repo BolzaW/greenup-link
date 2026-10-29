@@ -126,6 +126,7 @@ function updateSessionsDropdown(isDefaultSelectionRequested) {
         opt.value = '';
         opt.disabled = true;
         opt.selected = true;
+        opt.setAttribute('data-i18n', 'sessions.no_sessions');
         opt.innerText = t('sessions.no_sessions') || 'Aucune session enregistrée';
         select.appendChild(opt);
         renderEmptySessionView();
@@ -196,7 +197,12 @@ function renderEmptySessionView() {
     setElemText('sessionValPhase', '--');
     setElemText('sessionValMaxPower', '--');
     setElemText('sessionValAvgPower', '--');
-    setElemText('sessionValReason', t('sessions.no_sessions') || 'Aucune session');
+    const reasonEl = document.getElementById('sessionValReason');
+    if (reasonEl) {
+        reasonEl.setAttribute('data-i18n', 'sessions.no_sessions');
+        reasonEl.innerText = t('sessions.no_sessions') || 'Aucune session enregistrée';
+        reasonEl.title = '';
+    }
     setElemText('sessionValEndTime', '--');
 
     drawChart([]);
@@ -220,13 +226,18 @@ function onSessionSelected(id) {
         setElemText('sessionValPhase', act.phase || 'Mono');
         setElemText('sessionValMaxPower', `${(act.max_power_w / 1000).toFixed(2)} kW`);
         setElemText('sessionValAvgPower', `Max: ${act.max_current_a.toFixed(1)} A`);
-        setElemText('sessionValReason', `${t('sessions.active_reason') || 'En cours'} (État ${act.state})`);
+        const reasonEl = document.getElementById('sessionValReason');
+        if (reasonEl) {
+            reasonEl.removeAttribute('data-i18n');
+            reasonEl.innerText = `${t('sessions.active_reason') || 'En cours'} (État ${act.state})`;
+            reasonEl.title = '';
+        }
         setElemText('sessionValEndTime', `Inst: ${(act.power_w / 1000).toFixed(2)} kW (${act.current_a.toFixed(1)} A)`);
 
         if (btnZip) btnZip.disabled = false;
         if (btnDel) {
             btnDel.disabled = true;
-            btnDel.title = "Cannot delete currently active charging session";
+            btnDel.title = t('sessions.delete_disabled_active') || "Impossible de supprimer la session en cours de charge";
         }
 
         // Fetch active CSV data for live chart
@@ -242,11 +253,13 @@ function onSessionSelected(id) {
         setElemText('sessionValPhase', s.phase || 'Mono');
         setElemText('sessionValMaxPower', `${(s.max_power_w / 1000).toFixed(2)} kW`);
         setElemText('sessionValAvgPower', `Moy: ${(s.avg_power_w / 1000).toFixed(2)} kW`);
-        setElemText('sessionValReason', s.termination_reason || '--');
-        setElemText('sessionValEndTime', s.end_time || '--');
-
         const reasonElem = document.getElementById('sessionValReason');
-        if (reasonElem) reasonElem.title = s.termination_reason || '';
+        if (reasonElem) {
+            reasonElem.removeAttribute('data-i18n');
+            reasonElem.innerText = s.termination_reason || '--';
+            reasonElem.title = s.termination_reason || '';
+        }
+        setElemText('sessionValEndTime', s.end_time || '--');
 
         if (btnZip) btnZip.disabled = !s.has_csv && !s.has_txt;
         if (btnDel) {
@@ -729,3 +742,6 @@ function initSessions() {
     const savedTab = localStorage.getItem('greenup_active_tab') || 'board';
     switchMainTab(savedTab);
 }
+
+// Expose updateSessionsDropdown to global scope so i18n can trigger re-renders on language changes
+window.updateSessionsDropdown = updateSessionsDropdown;

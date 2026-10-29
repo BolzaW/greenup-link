@@ -129,6 +129,7 @@
     "downloading": "Downloading...",
     "delete_title": "Delete session",
     "delete_confirm": "Confirm?",
+    "delete_disabled_active": "Cannot delete currently active charging session",
     "delete_failed": "Failed to delete session: ",
     "stat_charge_duration": "Charge time",
     "stat_total_duration": "Total time",

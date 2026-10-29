@@ -129,6 +129,7 @@
     "downloading": "Téléchargement...",
     "delete_title": "Supprimer la session",
     "delete_confirm": "Confirmer ?",
+    "delete_disabled_active": "Impossible de supprimer la session en cours de charge",
     "delete_failed": "Échec de la suppression : ",
     "stat_charge_duration": "Durée charge",
     "stat_total_duration": "Durée totale",
