@@ -17,10 +17,9 @@
     "logout_title": "Authenticated session (click to lock)",
     "open_lan_title": "Open LAN Access",
     "open_lan_tooltip": "Open LAN access: REST APIs are not protected by an API token.",
-    "open_lan_desc": "API token authentication is currently disabled in configuration (greenup.toml). The Web GUI and REST APIs are freely accessible on the local network.",
-    "open_lan_hint": "To secure access, set an api_token in greenup.toml or from the System tab.",
-    "open_lan_btn_configure": "Configure",
-    "open_lan_btn_close": "Close"
+    "open_lan_desc": "API token authentication is not enabled. The Web GUI and REST APIs are freely accessible without a password on the local network in accordance with configuration.",
+    "open_lan_hint": "To secure access, set the api_token parameter in the greenup.toml configuration file on the host machine, then restart the greenup-link service.",
+    "open_lan_btn_close": "Got it"
   },
   "console": {
     "title": "Live Console",

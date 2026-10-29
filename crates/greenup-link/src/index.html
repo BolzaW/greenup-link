@@ -680,19 +680,14 @@
         </div>
         <h3 class="text-base font-bold text-white text-center mb-1.5" data-i18n="auth.open_lan_title">Accès libre (mode LAN)</h3>
         <p class="text-xs text-slate-300 leading-relaxed text-center mb-4" data-i18n="auth.open_lan_desc">
-            L'authentification par clé API n'est pas activée dans la configuration. L'interface Web et les API REST sont actuellement accessibles sans mot de passe sur le réseau local.
+            L'authentification par clé API n'est pas activée. L'interface Web et les API REST sont actuellement accessibles sans mot de passe sur le réseau local conformément à la configuration.
         </p>
-        <div class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 mb-4 font-mono">
-            <span class="text-amber-400 font-bold">ℹ️ Info :</span> <span data-i18n="auth.open_lan_hint">Pour sécuriser l'accès, définissez un <code class="text-sky-300 font-semibold">api_token</code> dans <code class="text-slate-300">greenup.toml</code> ou depuis l'onglet Système.</span>
+        <div class="p-3 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 mb-4 font-mono leading-relaxed">
+            <span class="text-amber-400 font-bold">ℹ️ Info :</span> <span data-i18n="auth.open_lan_hint">Pour sécuriser l'accès, définissez le paramètre api_token dans le fichier de configuration greenup.toml sur la machine hôte puis redémarrez le service greenup-link.</span>
         </div>
-        <div class="flex gap-2 w-full">
-            <button id="btnOpenLanConfigure" class="flex-1 py-2 px-3 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition-all text-center" data-i18n="auth.open_lan_btn_configure">
-                Configurer
-            </button>
-            <button id="btnOpenLanClose" class="py-2 px-4 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center" data-i18n="auth.open_lan_btn_close">
-                Fermer
-            </button>
-        </div>
+        <button id="btnOpenLanClose" class="w-full py-2.5 px-4 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all text-center" data-i18n="auth.open_lan_btn_close">
+            J'ai compris
+        </button>
     </div>
 </div>
 

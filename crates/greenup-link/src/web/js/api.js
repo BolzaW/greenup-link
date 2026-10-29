@@ -175,26 +175,10 @@ function hideOpenLanModal() {
 
 function setupOpenLanModalListeners() {
     const btnClose = document.getElementById('btnOpenLanClose');
-    const btnConfig = document.getElementById('btnOpenLanConfigure');
     const modal = document.getElementById('openLanModal');
 
     if (btnClose) {
         btnClose.addEventListener('click', hideOpenLanModal);
-    }
-    if (btnConfig) {
-        btnConfig.addEventListener('click', () => {
-            hideOpenLanModal();
-            if (typeof switchMainTab === 'function') {
-                switchMainTab('system');
-                setTimeout(() => {
-                    const tokenInput = document.getElementById('cfgClientToken');
-                    if (tokenInput) {
-                        tokenInput.focus();
-                        tokenInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                }, 150);
-            }
-        });
     }
     if (modal) {
         modal.addEventListener('click', (e) => {
