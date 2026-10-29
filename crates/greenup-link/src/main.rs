@@ -95,8 +95,11 @@ async fn main() {
     greenup_driver::logger::log("SYS", "===================================================");
 
     let app_config = config::AppConfig::load();
-    if app_config.http.api_token.is_some() {
-        greenup_driver::logger::log("SYS", "🔒 API authentication: ENABLED (Bearer token / Basic Auth)");
+    if let Some(ref token) = app_config.http.api_token {
+        greenup_driver::logger::log(
+            "SYS",
+            &format!("🔒 API authentication: ENABLED (token: {})", token),
+        );
     } else {
         greenup_driver::logger::log(
             "SYS",
