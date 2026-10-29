@@ -21,15 +21,9 @@ SERVICE_FILE="/etc/systemd/system/greenup-link.service"
 
 # Detect whether this system has an official Legrand software stack
 IS_LEGRAND_STACK=false
-if [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -d "/var/lib/tomcat9" ]; then
+if [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -f "/home/pi/Desktop/DeletAll.sh.old" ] || [ -f "/home/pi/Desktop/DeletAll.sh" ] || [ -d "/var/lib/tomcat9" ]; then
     IS_LEGRAND_STACK=true
 fi
-for del_cand in /home/*/Desktop/DeletAll.sh /home/*/Desktop/DeletAll.sh.old; do
-    if [ -f "$del_cand" ]; then
-        IS_LEGRAND_STACK=true
-        break
-    fi
-done
 
 # Parse CLI flags or ask user interactively
 PURGE_FILES=false
@@ -114,15 +108,13 @@ if [ "$IS_LEGRAND_STACK" = true ]; then
         echo "  -> Notice: $INIT_SCRIPT.old backup not found; leaving existing $INIT_SCRIPT."
     fi
 
-    # Restore emergency DeletAll.sh script across user desktops
-    for del_old in /home/*/Desktop/DeletAll.sh.old; do
-        if [ -f "$del_old" ]; then
-            del_orig="${del_old%.old}"
-            mv -f "$del_old" "$del_orig"
-            chmod +x "$del_orig"
-            echo "  -> Restored $del_orig from backup."
-        fi
-    done
+    # Restore emergency DeletAll.sh script on factory Legrand desktop
+    DELETE_SCRIPT="/home/pi/Desktop/DeletAll.sh"
+    if [ -f "$DELETE_SCRIPT.old" ]; then
+        mv -f "$DELETE_SCRIPT.old" "$DELETE_SCRIPT"
+        chmod +x "$DELETE_SCRIPT"
+        echo "  -> Restored $DELETE_SCRIPT from backup."
+    fi
 
     # Re-enable and restart Legrand services
     if systemctl list-unit-files tomcat9.service 2>/dev/null | grep -q tomcat9; then

@@ -47,18 +47,6 @@ for arg in "$@"; do
     esac
 done
 
-# Identify host interactive user who invoked sudo
-CALLING_USER="${SUDO_USER:-}"
-if [ "$CALLING_USER" = "root" ] || [ -z "$CALLING_USER" ]; then
-    CALLING_USER=$(logname 2>/dev/null || true)
-fi
-if [ "$CALLING_USER" = "root" ] || [ -z "$CALLING_USER" ]; then
-    CALLING_USER=$(awk -F: '$3 >= 1000 && $3 < 60000 && $1 != "nobody" && $1 != "greenup" {print $1; exit}' /etc/passwd 2>/dev/null || true)
-fi
-if [ -n "$CALLING_USER" ] && ! id -u "$CALLING_USER" >/dev/null 2>&1; then
-    CALLING_USER=""
-fi
-
 # Create dedicated unprivileged system user 'greenup' if it does not exist
 echo "  -> Setting up dedicated unprivileged system user 'greenup'..."
 if ! id -u greenup >/dev/null 2>&1; then
@@ -79,25 +67,19 @@ if getent group gpio >/dev/null 2>&1; then
     usermod -a -G gpio greenup 2>/dev/null || true
 fi
 
-# Add the interactive host user to the 'greenup' group so they have group permissions
-if [ -n "$CALLING_USER" ] && [ "$CALLING_USER" != "root" ] && id -u "$CALLING_USER" >/dev/null 2>&1; then
-    usermod -a -G greenup "$CALLING_USER" 2>/dev/null || true
-    echo "  -> Added '$CALLING_USER' to group 'greenup' (configuration and log access)"
+# Add the user who invoked sudo to the 'greenup' group for convenient access
+if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    usermod -a -G greenup "$SUDO_USER" 2>/dev/null || true
+    echo "  -> Added '$SUDO_USER' to group 'greenup' (configuration and log access)"
 fi
 
 # 2. Environment check: Detect official Legrand software stack
 echo ""
 echo "[1/4] Checking system environment..."
 IS_LEGRAND_STACK=false
-if [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -d "/var/lib/tomcat9" ]; then
+if [ -f "/etc/init.d/CommunicationArduinoRasp" ] || [ -f "/etc/init.d/CommunicationArduinoRasp.old" ] || [ -f "/home/pi/Desktop/DeletAll.sh" ] || [ -d "/var/lib/tomcat9" ]; then
     IS_LEGRAND_STACK=true
 fi
-for del_cand in /home/*/Desktop/DeletAll.sh /home/*/Desktop/DeletAll.sh.old; do
-    if [ -f "$del_cand" ]; then
-        IS_LEGRAND_STACK=true
-        break
-    fi
-done
 
 if [ "$IS_LEGRAND_STACK" = true ]; then
     echo "  -> Official Legrand software stack detected."
@@ -127,22 +109,21 @@ EOF
         echo "  -> Neutralized $INIT_SCRIPT with 'exit 0'"
     fi
 
-    # C. Neutralize emergency DeletAll.sh script across user desktops
-    for del_file in /home/*/Desktop/DeletAll.sh; do
-        if [ -f "$del_file" ]; then
-            if [ ! -f "$del_file.old" ]; then
-                cp -p "$del_file" "$del_file.old"
-                echo "  -> Backup created: $del_file.old"
-            fi
-            cat << 'EOF' > "$del_file"
+    # C. Neutralize emergency DeletAll.sh script on factory Legrand desktop
+    DELETE_SCRIPT="/home/pi/Desktop/DeletAll.sh"
+    if [ -f "$DELETE_SCRIPT" ]; then
+        if [ ! -f "$DELETE_SCRIPT.old" ]; then
+            cp -p "$DELETE_SCRIPT" "$DELETE_SCRIPT.old"
+            echo "  -> Backup created: $DELETE_SCRIPT.old"
+        fi
+        cat << 'EOF' > "$DELETE_SCRIPT"
 #!/bin/bash
 # Neutralized by GreenUp Link installer
 exit 0
 EOF
-            chmod -x "$del_file"
-            echo "  -> Neutralized: $del_file (chmod -x applied)"
-        fi
-    done
+        chmod -x "$DELETE_SCRIPT"
+        echo "  -> Neutralized: $DELETE_SCRIPT (chmod -x applied)"
+    fi
 else
     echo "  -> Standard/clean OS detected (no Legrand stack found, skipping legacy neutralization)."
 fi
@@ -485,26 +466,18 @@ elif [ "$DO_SET_TOKEN" = true ]; then
     echo "  -> Updated configuration file at $CONFIG_FILE with api_token"
 fi
 
-# Ensure proper ownership and permissions for the dedicated user & local user
+# Ensure proper ownership and standard permissions for the service
 mkdir -p "$TARGET_DIR/logs" "$TARGET_DIR/sessions"
 chown -R greenup:greenup "$TARGET_DIR"
 
-# Directory permissions: 755 allows local users to cd and browse /opt/greenup-link
+# Standard Linux directory & file permissions
 chmod 755 "$TARGET_DIR"
 chmod 775 "$TARGET_DIR/logs" "$TARGET_DIR/sessions"
 chmod -R 664 "$TARGET_DIR/logs"/* 2>/dev/null || true
 chmod -R 664 "$TARGET_DIR/sessions"/* 2>/dev/null || true
 chmod 755 "$TARGET_BIN"
 [ -f "$UNINSTALL_TARGET" ] && chmod 755 "$UNINSTALL_TARGET"
-
-# Allow the host interactive user to directly edit greenup.toml without sudo
-if [ -n "$CALLING_USER" ] && [ "$CALLING_USER" != "root" ] && id -u "$CALLING_USER" >/dev/null 2>&1; then
-    chown "$CALLING_USER:greenup" "$CONFIG_FILE"
-    chmod 664 "$CONFIG_FILE"
-    echo "  -> Configuration file $CONFIG_FILE owned by '$CALLING_USER:greenup' (mode 664 - directly editable by $CALLING_USER)"
-else
-    chmod 664 "$CONFIG_FILE" 2>/dev/null || true
-fi
+chmod 664 "$CONFIG_FILE"
 
 
 
@@ -563,9 +536,7 @@ if systemctl is-active --quiet greenup-link.service; then
     fi
     echo "   Logs:            /opt/greenup-link/logs/"
     echo "   Service User:    greenup (dialout group)"
-    if [ -n "$CALLING_USER" ] && [ "$CALLING_USER" != "root" ]; then
-        echo "   Config Owner:    $CALLING_USER (directly editable without sudo)"
-    fi
+    echo "   Edit Config:     sudo nano /opt/greenup-link/greenup.toml"
     echo "   Service Status:  sudo systemctl status greenup-link"
     echo "   Live Logs:       sudo journalctl -u greenup-link -f"
     echo "   Rollback/Remove: sudo /opt/greenup-link/uninstall.sh"
