@@ -577,11 +577,12 @@ async function downloadSelectedSessionZip() {
     if (!actualId) return;
 
     const btnZip = document.getElementById('btnSessionDownloadZip');
-    const lblZip = document.getElementById('lblSessionDownloadZip');
-    const origText = lblZip ? lblZip.innerText : 'ZIP';
+    const iconZip = document.getElementById('iconSessionDownloadZip');
+    const iconSpinner = document.getElementById('iconSessionDownloadSpinner');
 
     try {
-        if (lblZip) lblZip.innerText = '...';
+        if (iconZip) iconZip.classList.add('hidden');
+        if (iconSpinner) iconSpinner.classList.remove('hidden');
         if (btnZip) btnZip.disabled = true;
 
         const res = await apiFetch(`/api/sessions/${encodeURIComponent(actualId)}/export`, {
@@ -614,7 +615,8 @@ async function downloadSelectedSessionZip() {
         console.error('Download error:', e);
         alert('Download error: ' + e);
     } finally {
-        if (lblZip) lblZip.innerText = origText;
+        if (iconSpinner) iconSpinner.classList.add('hidden');
+        if (iconZip) iconZip.classList.remove('hidden');
         if (btnZip) btnZip.disabled = false;
     }
 }
@@ -631,7 +633,10 @@ function resetDeleteButton() {
     const btnDel = document.getElementById('btnSessionDelete');
     const lblDel = document.getElementById('lblSessionDelete');
     if (btnDel) btnDel.classList.remove('confirming');
-    if (lblDel) lblDel.innerText = '';
+    if (lblDel) {
+        lblDel.innerText = '';
+        lblDel.classList.add('hidden');
+    }
 }
 
 async function handleDeleteSessionClick() {
@@ -643,7 +648,10 @@ async function handleDeleteSessionClick() {
     if (!btnDel.classList.contains('confirming')) {
         // First click: ask for confirmation
         btnDel.classList.add('confirming');
-        if (lblDel) lblDel.innerText = t('sessions.delete_confirm') || 'Confirmer ?';
+        if (lblDel) {
+            lblDel.innerText = (typeof t === 'function' ? t('sessions.delete_confirm') : 'Confirmer ?') || 'Confirmer ?';
+            lblDel.classList.remove('hidden');
+        }
 
         deleteConfirmTimer = setTimeout(() => {
             resetDeleteButton();

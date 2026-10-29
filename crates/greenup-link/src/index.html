@@ -198,8 +198,8 @@
 
         <!-- Sessions History Panel (Replaces visualizer in Sessions mode) -->
         <div id="sessionsPanel" class="hidden sessions-panel">
-            <!-- Top Toolbar: Selector + Download ZIP + Delete -->
-            <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800">
+            <!-- Top Toolbar: Selector + Download ZIP + Delete (All on single row) -->
+            <div class="flex items-center justify-between gap-2.5 pb-4 mb-4 border-b border-slate-800">
                 <div class="flex-1 min-w-0 flex items-center space-x-2">
                     <svg class="w-4 h-4 text-sky-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -208,64 +208,66 @@
                         <option value="" disabled selected data-i18n="sessions.loading">Chargement des sessions...</option>
                     </select>
                 </div>
-                <div class="flex items-center space-x-2 flex-shrink-0 justify-end">
-                    <!-- Download ZIP button -->
-                    <button id="btnSessionDownloadZip" class="session-btn session-btn-zip" title="Télécharger l'archive ZIP (CSV + fiche résumé)" data-i18n-title="sessions.download_zip_title">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="flex items-center space-x-1.5 flex-shrink-0">
+                    <!-- Download ZIP button (sober down arrow into tray, like console export) -->
+                    <button id="btnSessionDownloadZip" class="session-btn-tool session-btn-export" title="Télécharger l'archive ZIP (CSV + fiche résumé)" data-i18n-title="sessions.download_zip_title" disabled>
+                        <svg id="iconSessionDownloadZip" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                         </svg>
-                        <span id="lblSessionDownloadZip" data-i18n="sessions.download_zip">ZIP</span>
+                        <svg id="iconSessionDownloadSpinner" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="hidden animate-spin text-sky-400">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
                     </button>
-                    <!-- Delete button -->
-                    <button id="btnSessionDelete" class="session-btn session-btn-delete" title="Supprimer la session sélectionnée" data-i18n-title="sessions.delete_title">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <!-- Delete button (sober trash icon) -->
+                    <button id="btnSessionDelete" class="session-btn-tool session-btn-delete" title="Supprimer la session sélectionnée" data-i18n-title="sessions.delete_title" disabled>
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                         </svg>
-                        <span id="lblSessionDelete"></span>
+                        <span id="lblSessionDelete" class="hidden text-[10px] font-semibold"></span>
                     </button>
                 </div>
             </div>
 
             <!-- Session Summary Stat Cards (4 cards) -->
-            <div id="sessionSummaryCards" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+            <div id="sessionSummaryCards" class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                 <!-- Duration -->
                 <div class="session-stat-card">
-                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                    <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
                         <span>⏱️</span> <span data-i18n="sessions.stat_charge_duration">Durée charge</span>
                     </span>
-                    <span id="sessionValChargingDuration" class="text-sm font-bold text-slate-200 font-mono mt-0.5">--</span>
-                    <span id="sessionValTotalDuration" class="text-[9px] text-slate-500 font-mono">--</span>
+                    <span id="sessionValChargingDuration" class="text-sm sm:text-base font-bold text-slate-100 font-mono mt-1">--</span>
+                    <span id="sessionValTotalDuration" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
                 </div>
                 <!-- Energy -->
                 <div class="session-stat-card">
-                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                    <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
                         <span>⚡</span> <span data-i18n="sessions.stat_energy">Énergie</span>
                     </span>
-                    <span id="sessionValEnergy" class="text-sm font-bold text-sky-400 font-mono mt-0.5">--</span>
-                    <span id="sessionValPhase" class="text-[9px] text-slate-500 font-mono">--</span>
+                    <span id="sessionValEnergy" class="text-sm sm:text-base font-bold text-sky-400 font-mono mt-1">--</span>
+                    <span id="sessionValPhase" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
                 </div>
                 <!-- Power Peak / Avg -->
                 <div class="session-stat-card">
-                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                    <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
                         <span>📈</span> <span data-i18n="sessions.stat_power_max">P. Crête</span>
                     </span>
-                    <span id="sessionValMaxPower" class="text-sm font-bold text-emerald-400 font-mono mt-0.5">--</span>
-                    <span id="sessionValAvgPower" class="text-[9px] text-slate-500 font-mono">--</span>
+                    <span id="sessionValMaxPower" class="text-sm sm:text-base font-bold text-emerald-400 font-mono mt-1">--</span>
+                    <span id="sessionValAvgPower" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
                 </div>
                 <!-- Reason / Status -->
                 <div class="session-stat-card">
-                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                    <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
                         <span>🛑</span> <span data-i18n="sessions.stat_reason">Fin</span>
                     </span>
-                    <span id="sessionValReason" class="text-xs font-semibold text-slate-300 truncate mt-0.5" title="">--</span>
-                    <span id="sessionValEndTime" class="text-[9px] text-slate-500 font-mono">--</span>
+                    <span id="sessionValReason" class="text-xs sm:text-sm font-semibold text-slate-300 truncate mt-1" title="">--</span>
+                    <span id="sessionValEndTime" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
                 </div>
             </div>
 
             <!-- Chart Container -->
             <div class="session-chart-wrap">
                 <!-- Header inside chart container -->
-                <div class="flex items-center justify-between px-2 pt-1 pb-1">
+                <div class="flex items-center justify-between px-3 pt-2 pb-2 mb-1 border-b border-slate-900/80">
                     <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
                         <span data-i18n="sessions.chart_power_curve">Courbe de puissance</span>
@@ -274,7 +276,7 @@
                 </div>
 
                 <!-- Canvas -->
-                <div class="relative flex-1 w-full min-h-[200px] overflow-hidden">
+                <div class="relative flex-1 w-full min-h-[200px] overflow-hidden p-1">
                     <canvas id="sessionChartCanvas" class="w-full h-full block"></canvas>
                     <div id="sessionChartTooltip" class="chart-tooltip"></div>
                     <div id="sessionChartEmpty" class="absolute inset-0 flex items-center justify-center text-slate-500 text-xs hidden">
