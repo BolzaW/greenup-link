@@ -23,7 +23,8 @@ It communicates with the charging station's power board via an internal USB cabl
 - A clean, responsive **local Web GUI** with live visualizer, charging controls (7A–32A), Linky TIC status, and an integrated real-time debug console (SSE log streaming).
 - A comprehensive and documented **REST API**, perfect for home automation integration (Home Assistant, Jeedom, Node-RED, etc.).
 - Complete **log management** with daily rolling files (`greenup_YYYY-MM-DD.log`), 7-day automatic retention, and hot-reloadable log levels (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
-- Full compatibility with **EVCC** for smart solar charging (see the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md)).
+- **Dual charge point support** with automatic USB discovery, dynamic serial workers, and independent loadpoint controls (see the [Hardware Compatibility Matrix](docs/COMPATIBLE_HARDWARE.md)).
+- Full compatibility with **EVCC** for single or multi-loadpoint solar smart charging (see the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md)).
 
 *(Experimental / PoC)*: A standalone `greenup-everest` module is included as an experimental proof of concept to interface with the open-source EVerest framework via MQTT (not the core focus of this project; see also [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
 

@@ -23,7 +23,8 @@ Il communique avec la carte de puissance de la borne via un câble USB interne e
 - Une **interface Web locale** épurée et réactive avec visualiseur animé, contrôle de charge (7A à 32A), statut Linky TIC et console live intégrée (flux de logs temps réel SSE).
 - Une **API REST** complète et documentée, idéale pour l'intégration domotique (Home Assistant, Jeedom, Node-RED, etc.).
 - Une **gestion complète des logs** avec fichiers journaliers tournants (`greenup_YYYY-MM-DD.log`), rétention automatique de 7 jours et modification à chaud des niveaux (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
-- Une compatibilité totale avec **EVCC** pour la charge solaire dynamique (voir le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md)).
+- Le **support des bornes à double point de charge** avec auto-détection dynamique du second port USB et contrôle indépendant des deux côtés (voir la [Matrice de compatibilité matériel](docs/COMPATIBLE_HARDWARE.md)).
+- Une compatibilité totale avec **EVCC** pour la charge solaire dynamique monosite ou multisite (voir le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md)).
 
 *(Expérimental / Démonstrateur)* : Un module `greenup-everest` autonome est également proposé à titre de démonstrateur expérimental pour interfacer la borne avec le framework open-source EVerest via MQTT (il ne constitue pas le cœur du projet ; voir également le projet [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
 
