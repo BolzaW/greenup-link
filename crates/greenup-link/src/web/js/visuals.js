@@ -25,9 +25,9 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
 
     // Reset base styles
     chargerBox.className = 'w-16 h-24 md:w-20 md:h-28 rounded-2xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center relative z-10 transition-all duration-500 shadow-2xl';
-    chargerIcon.className = 'w-8 h-8 md:w-10 md:h-10 text-slate-600 transition-colors duration-500';
+    chargerIcon.setAttribute('class', 'w-8 h-8 md:w-10 md:h-10 text-slate-600 transition-colors duration-500');
     chargerLed.className = 'w-6 h-1 md:w-8 md:h-1.5 rounded-full bg-slate-700 mt-4 transition-all duration-500';
-    carIcon.className = 'w-full h-full text-slate-700 transition-all duration-500 drop-shadow-2xl';
+    carIcon.setAttribute('class', 'w-full h-full text-slate-700 transition-all duration-500 drop-shadow-2xl');
     carBox.classList.remove('scale-105');
 
     const animWire1 = document.getElementById('animWire1');
@@ -89,7 +89,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
 
         // Green charger with gentle breathing pulse
         chargerBox.classList.add('border-emerald-500/50', 'pulse-charger-green');
-        chargerIcon.classList.replace('text-slate-600', 'text-emerald-400');
+        chargerIcon.classList.replace('text-slate-600', 'text-sky-400');
         chargerLed.classList.replace('bg-slate-700', 'bg-emerald-400');
         chargerLed.classList.add('pulse-led-green');
 
@@ -131,7 +131,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
 
         // Charger is solid green (ready & authorized)
         chargerBox.classList.add('border-emerald-500/50', 'shadow-[0_0_30px_rgba(16,185,129,0.15)]');
-        chargerIcon.classList.replace('text-slate-600', 'text-emerald-400');
+        chargerIcon.classList.replace('text-slate-600', 'text-sky-400');
         chargerLed.classList.replace('bg-slate-700', 'bg-emerald-400');
         chargerLed.classList.add('shadow-[0_0_10px_rgba(16,185,129,0.8)]');
 
