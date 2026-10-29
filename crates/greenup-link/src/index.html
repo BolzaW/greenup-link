@@ -10,10 +10,10 @@
 <body class="min-h-screen flex flex-col p-4 md:p-8 selection:bg-sky-500/30">
 
 <!-- Top Header -->
-<header class="max-w-6xl mx-auto w-full grid grid-cols-2 md:flex md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-4 gap-4 md:gap-0">
+<header class="app-header max-w-6xl mx-auto w-full mb-8 border-b border-slate-800 pb-4">
     
     <!-- Logo (Top Left on Mobile, Left on Desktop) -->
-    <div class="col-span-1 flex items-center space-x-2 md:space-x-3">
+    <div class="header-logo flex items-center space-x-2 md:space-x-3">
         <div class="p-1.5 md:p-2 bg-slate-800 rounded-lg shadow-inner">
             <svg class="w-5 h-5 md:w-6 md:h-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
         </div>
@@ -26,7 +26,7 @@
     </div>
 
     <!-- Navigation Tabs (Center on Desktop, Full-width Row on Mobile) -->
-    <div class="col-span-2 md:col-span-1 flex justify-center order-3 md:order-2 my-1 md:my-0">
+    <div class="header-nav flex justify-center">
         <div class="header-nav-tabs">
             <button id="tabBoard" class="header-tab active" data-tab="board">
                 <svg class="w-3.5 h-3.5" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
@@ -53,7 +53,7 @@
     </div>
 
     <!-- Controls: Language & Auth Status (Top Right on Mobile, Right on Desktop) -->
-    <div class="col-span-1 flex items-center justify-end space-x-2 md:space-x-2.5 order-2 md:order-3">
+    <div class="header-controls flex items-center justify-end space-x-2 md:space-x-2.5">
         <!-- Language Selector -->
         <select id="langSelector" class="header-control-select">
             <option value="fr">FR</option>
