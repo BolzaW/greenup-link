@@ -17,7 +17,9 @@ const controlsPanel = document.getElementById('controlsPanel');
 // Visualizer Elements
 const chargerBox = document.getElementById('chargerBox');
 const chargerIcon = document.getElementById('chargerIcon');
-const chargerLed = document.getElementById('chargerLed');
+const chargerLed1 = document.getElementById('chargerLed1');
+const chargerLed2 = document.getElementById('chargerLed2');
+const chargerLed3 = document.getElementById('chargerLed3');
 const carIcon = document.getElementById('carIcon');
 const carBox = document.getElementById('carBox');
 const cableLabel = document.getElementById('cableLabel');

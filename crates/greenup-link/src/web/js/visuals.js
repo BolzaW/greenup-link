@@ -1,10 +1,41 @@
-// Charging visualizer: charger box, cables, car, state label and action buttons appearance.
+// Charging visualizer: charger box, 3-LED indicator bar, cables, car, state label and action buttons appearance.
 // Accurately reflects Legrand firmware states (A, B, C, D, E, L, R, V, X...):
-// - State B: Charger pulses slowly in blue (waiting for station authorization)
-// - State C: Charger solid green, Car pulses slowly in blue (waiting for vehicle request)
-// - State D/E: Active charging with animated green wave car, flowing cable, and subtle green breathing pulse on charger
-// - State A/L: Idle disconnected
-// - Fault states: Red warning styling
+// - 3 LEDs bar: independent hardware indicator simulation
+//   * State A & idle: 3 static white LEDs (matching Green'Up brand text)
+//   * State B & C: White LED chase (left solid ON, middle ON, right ON, then mid+right OFF, repeat)
+//   * State D & E (active charging): Green LED chase with same pattern
+//   * Fault states: 3 solid red LEDs
+// - State B: Charger box pulses slowly in blue (waiting for station authorization)
+// - State C: Charger box solid green, Car pulses slowly in blue (waiting for vehicle request)
+// - State D/E: Active charging with animated green wave car, flowing cable, subtle green breathing pulse on charger box, and electric blue lightning bolt
+// - Fault states: Red warning styling on charger box and car
+
+function updateChargerLeds(mode) {
+    if (!chargerLed1 || !chargerLed2 || !chargerLed3) return;
+    switch (mode) {
+        case 'chase-white':
+            chargerLed1.className = 'charger-led led-white';
+            chargerLed2.className = 'charger-led led-white led-chase-mid';
+            chargerLed3.className = 'charger-led led-white led-chase-right';
+            break;
+        case 'chase-green':
+            chargerLed1.className = 'charger-led led-green';
+            chargerLed2.className = 'charger-led led-green led-chase-mid';
+            chargerLed3.className = 'charger-led led-green led-chase-right';
+            break;
+        case 'static-red':
+            chargerLed1.className = 'charger-led led-red';
+            chargerLed2.className = 'charger-led led-red';
+            chargerLed3.className = 'charger-led led-red';
+            break;
+        case 'static-white':
+        default:
+            chargerLed1.className = 'charger-led led-white';
+            chargerLed2.className = 'charger-led led-white';
+            chargerLed3.className = 'charger-led led-white';
+            break;
+    }
+}
 
 function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, charge_paused, charge_authorized) {
     if (greenup_state === window.lastVisualState &&
@@ -23,10 +54,9 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     window.lastChargePaused = charge_paused;
     window.lastChargeAuthorized = charge_authorized;
 
-    // Reset base styles
+    // Reset base styles (use setAttribute for SVG elements whose className is SVGAnimatedString)
     chargerBox.className = 'w-16 h-24 md:w-20 md:h-28 rounded-2xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center relative z-10 transition-all duration-500 shadow-2xl';
     chargerIcon.setAttribute('class', 'w-8 h-8 md:w-10 md:h-10 text-slate-600 transition-colors duration-500');
-    chargerLed.className = 'w-6 h-1 md:w-8 md:h-1.5 rounded-full bg-slate-700 mt-4 transition-all duration-500';
     carIcon.setAttribute('class', 'w-full h-full text-slate-700 transition-all duration-500 drop-shadow-2xl');
     carBox.classList.remove('scale-105');
 
@@ -43,7 +73,6 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     carIcon.style.fill = '';
     carIcon.classList.remove('animate-pulse', 'pulse-car-blue');
     chargerBox.classList.remove('animate-pulse', 'pulse-charger-blue', 'pulse-charger-green');
-    chargerLed.classList.remove('pulse-led-blue', 'pulse-led-green');
 
     let stateLabel = iec_state || greenup_state;
 
@@ -52,7 +81,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
         stateLabel = `${t('state.fault')} (${iec_state || greenup_state}) - ${t('state.code')}: ${error_code || t('state.unknown')}`;
         chargerBox.classList.add('border-rose-500/50', 'shadow-[0_0_30px_rgba(244,63,94,0.15)]');
         chargerIcon.classList.replace('text-slate-600', 'text-rose-500');
-        chargerLed.classList.replace('bg-slate-700', 'bg-rose-500');
+        updateChargerLeds('static-red');
 
         carIcon.classList.replace('text-slate-700', 'text-rose-500');
 
@@ -66,6 +95,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     // 2. Disconnected states (Legrand A or L, or IEC A)
     else if (greenup_state === 'A' || greenup_state === 'L' || iec_state === 'A') {
         stateLabel = t('state.disconnected') + " (" + greenup_state + ")";
+        updateChargerLeds('static-white');
     }
     // 3. Active charging states (Legrand D or E, or IEC C)
     else if (greenup_state === 'D' || greenup_state === 'E' || iec_state === 'C') {
@@ -87,11 +117,10 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
             cableLabel.classList.add('text-emerald-400');
         }
 
-        // Green charger with gentle breathing pulse
+        // Green charger with gentle breathing pulse and electric blue lightning bolt
         chargerBox.classList.add('border-emerald-500/50', 'pulse-charger-green');
         chargerIcon.classList.replace('text-slate-600', 'text-sky-400');
-        chargerLed.classList.replace('bg-slate-700', 'bg-emerald-400');
-        chargerLed.classList.add('pulse-led-green');
+        updateChargerLeds('chase-green');
 
         // Animated green wave car
         carBox.classList.add('scale-105');
@@ -112,8 +141,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
         // Charger pulses slowly in blue
         chargerBox.classList.add('border-sky-500/60', 'pulse-charger-blue');
         chargerIcon.classList.replace('text-slate-600', 'text-sky-400');
-        chargerLed.classList.replace('bg-slate-700', 'bg-sky-400');
-        chargerLed.classList.add('pulse-led-blue');
+        updateChargerLeds('chase-white');
 
         // Car remains idle slate (ready)
     }
@@ -132,8 +160,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
         // Charger is solid green (ready & authorized)
         chargerBox.classList.add('border-emerald-500/50', 'shadow-[0_0_30px_rgba(16,185,129,0.15)]');
         chargerIcon.classList.replace('text-slate-600', 'text-sky-400');
-        chargerLed.classList.replace('bg-slate-700', 'bg-emerald-400');
-        chargerLed.classList.add('shadow-[0_0_10px_rgba(16,185,129,0.8)]');
+        updateChargerLeds('chase-white');
 
         // Car pulses slowly in blue
         carIcon.style.fill = '#38bdf8';
@@ -148,6 +175,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
             cableLabel.classList.remove('opacity-0', 'text-rose-500');
             cableLabel.classList.add('text-emerald-400');
         }
+        updateChargerLeds('static-white');
     }
 
     // Special case: charge physically completed (battery full)

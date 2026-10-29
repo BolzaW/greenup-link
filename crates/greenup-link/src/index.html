@@ -132,7 +132,11 @@
                     <div class="col-span-3 flex flex-col items-center relative z-20">
                         <div class="w-16 h-24 md:w-20 md:h-28 rounded-2xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center relative transition-all duration-500 shadow-2xl" id="chargerBox">
                             <svg class="w-8 h-8 md:w-10 md:h-10 text-slate-600 transition-colors duration-500" id="chargerIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                            <div class="w-6 h-1 md:w-8 md:h-1.5 rounded-full bg-slate-700 mt-4 transition-all duration-500" id="chargerLed"></div>
+                            <div class="charger-led-bar" id="chargerLedBar">
+                                <div class="charger-led led-white" id="chargerLed1"></div>
+                                <div class="charger-led led-white" id="chargerLed2"></div>
+                                <div class="charger-led led-white" id="chargerLed3"></div>
+                            </div>
                         </div>
                         <span class="mt-4 text-[10px] font-bold tracking-wide text-slate-300 uppercase text-center w-full">Green'Up</span>
                     </div>

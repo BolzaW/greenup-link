@@ -786,18 +786,80 @@
     animation: pulseChargerBlue 2.5s ease-in-out infinite;
 }
 
-@keyframes pulseLedBlue {
-    0%, 100% {
-        opacity: 0.5;
-        box-shadow: 0 0 4px rgba(56, 189, 248, 0.4);
-    }
-    50% {
-        opacity: 1;
-        box-shadow: 0 0 14px rgba(56, 189, 248, 1);
+/* --- Legrand 3-LED Indicator Bar --- */
+.charger-led-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    margin-top: 1rem;
+}
+@media (min-width: 768px) {
+    .charger-led-bar {
+        gap: 4px;
     }
 }
-.pulse-led-blue {
-    animation: pulseLedBlue 2.5s ease-in-out infinite;
+
+.charger-led {
+    width: 7px;
+    height: 3.5px;
+    border-radius: 9999px;
+    transition: background-color 0.3s ease, box-shadow 0.3s ease, opacity 0.3s ease;
+}
+@media (min-width: 768px) {
+    .charger-led {
+        width: 9px;
+        height: 4.5px;
+    }
+}
+
+/* LED Colors */
+.charger-led.led-white {
+    background-color: #cbd5e1; /* slate-300 matching 'Green'Up' text */
+    box-shadow: 0 0 6px rgba(203, 213, 225, 0.6);
+}
+
+.charger-led.led-green {
+    background-color: #10b981; /* emerald-500 */
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.7);
+}
+
+.charger-led.led-red {
+    background-color: #f43f5e; /* rose-500 */
+    box-shadow: 0 0 8px rgba(244, 63, 94, 0.75);
+}
+
+/* Chase animations for Middle and Right LEDs */
+.charger-led.led-chase-mid {
+    animation: legrandLedMidChase 1.2s ease-in-out infinite;
+}
+
+.charger-led.led-chase-right {
+    animation: legrandLedRightChase 1.2s ease-in-out infinite;
+}
+
+@keyframes legrandLedMidChase {
+    0%, 25% {
+        opacity: 0.18;
+    }
+    32%, 80% {
+        opacity: 1;
+    }
+    86%, 100% {
+        opacity: 0.18;
+    }
+}
+
+@keyframes legrandLedRightChase {
+    0%, 50% {
+        opacity: 0.18;
+    }
+    57%, 80% {
+        opacity: 1;
+    }
+    86%, 100% {
+        opacity: 0.18;
+    }
 }
 
 @keyframes pulseCarBlue {
@@ -828,19 +890,7 @@
     animation: pulseChargerGreen 2.5s ease-in-out infinite;
 }
 
-@keyframes pulseLedGreen {
-    0%, 100% {
-        opacity: 0.75;
-        box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
-    }
-    50% {
-        opacity: 1;
-        box-shadow: 0 0 16px rgba(16, 185, 129, 1);
-    }
-}
-.pulse-led-green {
-    animation: pulseLedGreen 2.5s ease-in-out infinite;
-}
+
 
 
 /* --- Config Panel Styles --- */
