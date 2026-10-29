@@ -781,8 +781,8 @@
 .config-panel {
     display: flex;
     flex-direction: column;
-    height: 550px;
-    max-height: 550px;
+    height: 570px;
+    max-height: 590px;
     background-color: #0b1120;
     border: 1px solid #1e293b;
     border-radius: 1rem;
@@ -791,6 +791,26 @@
     position: relative;
     overflow-y: auto;
     box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: #334155 #0b1120;
+}
+
+.config-panel::-webkit-scrollbar {
+    width: 6px;
+}
+
+.config-panel::-webkit-scrollbar-track {
+    background: #0b1120;
+    border-radius: 4px;
+}
+
+.config-panel::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 4px;
+}
+
+.config-panel::-webkit-scrollbar-thumb:hover {
+    background: #475569;
 }
 
 .config-btn {
@@ -814,7 +834,12 @@
 
 /* --- System Panel Action Buttons --- */
 .btn-system-action {
-    padding: 0.55rem 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    min-height: 36px;
     border-radius: 0.5rem;
     border: 1px solid #334155;
     background-color: #1e293b;
@@ -823,6 +848,34 @@
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
+}
+
+.btn-system-action svg {
+    width: 14px !important;
+    height: 14px !important;
+    min-width: 14px !important;
+    min-height: 14px !important;
+    flex-shrink: 0 !important;
+}
+
+.header-tab svg {
+    width: 14px !important;
+    height: 14px !important;
+    min-width: 14px !important;
+    min-height: 14px !important;
+    flex-shrink: 0 !important;
+}
+
+.w-3\.5 {
+    width: 0.875rem !important;
+}
+
+.h-3\.5 {
+    height: 0.875rem !important;
+}
+
+.config-panel svg {
+    flex-shrink: 0;
 }
 
 .btn-system-action:hover:not(:disabled) {
