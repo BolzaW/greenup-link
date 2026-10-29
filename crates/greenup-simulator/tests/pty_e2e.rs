@@ -82,6 +82,23 @@ async fn test_pty_e2e_communication() {
     }
     assert!(got_side, "Expected Side:49 response for side 1");
 
+    // Ping heartbeat probe test
+    port.write_all(b"ping\r").expect("Write failed");
+    port.flush().expect("Flush failed");
+
+    let mut got_pong = false;
+    for _ in 0..5 {
+        line.clear();
+        if reader.read_line(&mut line).is_ok() {
+            let trimmed = line.trim();
+            if trimmed == "pong" {
+                got_pong = true;
+                break;
+            }
+        }
+    }
+    assert!(got_pong, "Expected pong response to ping heartbeat");
+
     // Trigger vehicle plug-in
     worker.trigger(UserEvent::Plug).await.expect("Trigger plug failed");
 
