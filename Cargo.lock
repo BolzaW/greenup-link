@@ -461,6 +461,7 @@ dependencies = [
  "greenup-protocol",
  "libc",
  "rand",
+ "serialport",
  "tokio",
 ]
 

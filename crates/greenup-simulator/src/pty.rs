@@ -76,6 +76,10 @@ impl PtyPair {
             symlink_path,
         })
     }
+
+    pub fn try_clone_master(&self) -> std::io::Result<OwnedFd> {
+        self.master.try_clone()
+    }
 }
 
 #[cfg(unix)]
