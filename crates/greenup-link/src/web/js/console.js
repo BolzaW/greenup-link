@@ -192,8 +192,8 @@ function appendLogDom(entry) {
 }
 
 function getCategoryBadgeClass(cat) {
-    if (cat === 'SERIAL_RX') return 'console-badge-rx';
-    if (cat === 'SERIAL_TX') return 'console-badge-tx';
+    if (cat === 'RX1' || cat === 'TX1' || cat === 'SERIAL_RX' || cat === 'SERIAL_TX') return 'console-badge-side1';
+    if (cat === 'RX2' || cat === 'TX2') return 'console-badge-side2';
     if (cat === 'API') return 'console-badge-api';
     if (cat === 'DEBUG' || cat === 'TRACE') return 'console-badge-dbg';
     if (cat === 'WARN') return 'console-badge-warn';
@@ -204,8 +204,8 @@ function getCategoryBadgeClass(cat) {
 function getMessageClass(entry) {
     if (entry.level === 'ERROR') return 'console-msg-err';
     if (entry.level === 'WARN') return 'console-msg-warn';
-    if (entry.category === 'SERIAL_RX') return 'console-msg-rx';
-    if (entry.category === 'SERIAL_TX') return 'console-msg-tx';
+    if (entry.category === 'RX1' || entry.category === 'TX1' || entry.category === 'SERIAL_RX' || entry.category === 'SERIAL_TX') return 'console-msg-side1';
+    if (entry.category === 'RX2' || entry.category === 'TX2') return 'console-msg-side2';
     if (entry.category === 'API') return 'console-msg-api';
     if (entry.level === 'DEBUG') return 'console-msg-dbg';
     return 'console-msg';

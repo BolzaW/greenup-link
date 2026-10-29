@@ -24,9 +24,13 @@ bind = "0.0.0.0:8080"
 api_token = ""
 
 [serial]
-# Serial port connected to the charging station microcontroller.
+# Serial port connected to the charging station microcontroller (Point 1 / Right).
 # Default: "/dev/ttyUSB0"
 port = "/dev/ttyUSB0"
+
+# Optional second serial port for dual-socket charging stations (Point 2 / Left).
+# If commented or unset, Green'Up Link runs in single-point mode.
+# port2 = "/dev/ttyUSB1"
 
 # Baud rate for communication with the ATmega2560 board.
 # Default: 115200
@@ -55,6 +59,7 @@ impl Default for HttpConfig {
 #[derive(Debug, Clone)]
 pub struct SerialConfig {
     pub port: String,
+    pub port2: Option<String>,
     pub baud_rate: u32,
     pub watchdog_timeout_secs: u64,
 }
@@ -63,6 +68,7 @@ impl Default for SerialConfig {
     fn default() -> Self {
         Self {
             port: "/dev/ttyUSB0".to_string(),
+            port2: None,
             baud_rate: 115_200,
             watchdog_timeout_secs: 6,
         }
@@ -142,6 +148,13 @@ impl AppConfig {
             }
         }
 
+        if let Ok(env_port2) = env::var("GREENUP_SERIAL_PORT2") {
+            let trimmed = env_port2.trim();
+            if !trimmed.is_empty() {
+                config.serial.port2 = Some(trimmed.to_string());
+            }
+        }
+
         config
     }
 
@@ -187,6 +200,14 @@ impl AppConfig {
                         "port" => {
                             if !val.is_empty() {
                                 config.serial.port = val;
+                            }
+                        }
+                        "port2" => {
+                            let trimmed = val.trim();
+                            if trimmed.is_empty() {
+                                config.serial.port2 = None;
+                            } else {
+                                config.serial.port2 = Some(trimmed.to_string());
                             }
                         }
                         "baud_rate" => {
@@ -278,5 +299,17 @@ mod tests {
         "#;
         let cfg = AppConfig::parse_toml(toml);
         assert_eq!(cfg.http.api_token, None);
+    }
+
+    #[test]
+    fn test_dual_port_config_parsing() {
+        let toml = r#"
+        [serial]
+        port = "/dev/ttyUSB0"
+        port2 = "/dev/ttyUSB1"
+        "#;
+        let cfg = AppConfig::parse_toml(toml);
+        assert_eq!(cfg.serial.port, "/dev/ttyUSB0");
+        assert_eq!(cfg.serial.port2.as_deref(), Some("/dev/ttyUSB1"));
     }
 }

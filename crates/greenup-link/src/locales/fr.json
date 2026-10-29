@@ -184,5 +184,12 @@
     "token_saved_local": "Clé enregistrée localement",
     "token_invalid": "Clé API refusée par le serveur",
     "token_cleared": "Clé effacée du navigateur"
+  },
+  "dual": {
+    "selector_title": "Point de charge actif",
+    "point_1": "Point 1 (Droit)",
+    "point_2": "Point 2 (Gauche)",
+    "badge_side_1": "Point 1",
+    "badge_side_2": "Point 2"
   }
-}
+}

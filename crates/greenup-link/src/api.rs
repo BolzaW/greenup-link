@@ -13,8 +13,9 @@ use std::convert::Infallible;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 use serde_json::json;
+use axum::extract::Query;
 use greenup_driver::logger;
-use greenup_driver::SharedState;
+use greenup_driver::{SharedState, SharedStation};
 use greenup_driver::serial::TicStartError;
 use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
 
@@ -53,7 +54,12 @@ async fn api_debug_logger(req: Request, next: Next) -> Response {
     response
 }
 
-pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
+#[derive(serde::Deserialize, Debug, Clone, Default)]
+pub struct SideQuery {
+    pub side: Option<u8>,
+}
+
+pub fn build_router(station: SharedStation, api_token: Option<String>) -> Router {
     let token_state: SharedApiToken = api_token.map(Arc::new);
 
     let protected_api = Router::new()
@@ -73,7 +79,7 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
         .route("/api/tic/refresh", post(refresh_tic))
         .route("/api/bluetooth", post(set_bluetooth))
         .route("/api/command", post(send_raw_command))
-        .with_state(state)
+        .with_state(station)
         .route_layer(axum::middleware::from_fn_with_state(
             token_state.clone(),
             auth::require_auth,
@@ -263,16 +269,28 @@ async fn set_log_level_handler(Json(payload): Json<LogLevelPayload>) -> impl Int
 }
 
 /// GET /api/info
-async fn get_info(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::debug("API", "🔍 GET request /api/info");
-    let info = state.info.lock().unwrap_or_else(|e| e.into_inner()).clone();
+async fn get_info(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side);
+    logger::debug("API", &format!("🔍 GET request /api/info (side: {})", state.side()));
+    let mut info = state.info.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    info.is_dual = station.is_dual();
+    info.available_sides = station.available_points();
+    info.side = Some(state.side());
     Json(info)
 }
 
 /// GET /api/telemetry
-async fn get_telemetry(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("TRACE", "📡 GET request /api/telemetry");
-    let telemetry = state.telemetry.lock().unwrap_or_else(|e| e.into_inner()).clone();
+async fn get_telemetry(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side);
+    logger::log("TRACE", &format!("📡 GET request /api/telemetry (side: {})", state.side()));
+    let mut telemetry = state.telemetry.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    telemetry.side = state.side();
     Json(telemetry)
 }
 
@@ -304,8 +322,13 @@ fn check_serial_connected(state: &SharedState) -> Result<(), (StatusCode, Json<s
 }
 
 /// POST /api/current/:amps
-async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) -> impl IntoResponse {
-    if let Err(res) = check_serial_connected(&state) {
+async fn set_current(
+    State(station): State<SharedStation>,
+    Path(amps): Path<u32>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side);
+    if let Err(res) = check_serial_connected(state) {
         return res;
     }
     let cmd = match u8::try_from(amps).ok().map(Command::set_current_limit) {
@@ -347,11 +370,15 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
 /// POST /api/t2/enable
 
 /// POST /api/init
-async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
+async fn init_sequence(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side).clone();
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
-    logger::log("API", "🔄 Starting initialization sequence");
+    logger::log("API", &format!("🔄 Starting initialization sequence (Side {})", state.side()));
     tokio::spawn(async move {
         // TIC detection is never started automatically:
         // it must be explicitly requested via POST /api/tic/refresh.
@@ -363,11 +390,15 @@ async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
 
 
 /// POST /api/reset
-async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
-    if let Err(res) = check_serial_connected(&state) {
+async fn reset_board(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side);
+    if let Err(res) = check_serial_connected(state) {
         return res;
     }
-    logger::log("API", "⚠️ Hardware restart request (Reset)");
+    logger::log("API", &format!("⚠️ Hardware restart request (Reset) on Side {}", state.side()));
     if state.serial_tx.send(Command::Reset).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "ATmega board restart requested"})))
     } else {
@@ -393,8 +424,13 @@ fn is_valid_raw_command(cmd: &str) -> bool {
 }
 
 /// POST /api/command
-async fn send_raw_command(State(state): State<SharedState>, body: String) -> impl IntoResponse {
-    if let Err(res) = check_serial_connected(&state) {
+async fn send_raw_command(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+    body: String,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side);
+    if let Err(res) = check_serial_connected(state) {
         return res;
     }
     let cmd = body.trim();
@@ -423,12 +459,16 @@ async fn send_raw_command(State(state): State<SharedState>, body: String) -> imp
 }
 
 /// POST /api/tic/refresh
-async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
-    if let Err(res) = check_serial_connected(&state) {
+async fn refresh_tic(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side);
+    if let Err(res) = check_serial_connected(state) {
         return res;
     }
-    logger::log("API", "🔄 Manual TIC detection request (TICTM:1)");
-    match greenup_driver::serial::start_tic_detection(&state).await {
+    logger::log("API", &format!("🔄 Manual TIC detection request (TICTM:1) on Side {}", state.side()));
+    match greenup_driver::serial::start_tic_detection(state).await {
         Ok(()) => (StatusCode::OK, Json(json!({"status": "success", "message": "TIC detection started"}))),
         Err(TicStartError::NotInStateA(current)) => (
             StatusCode::BAD_REQUEST,
@@ -442,8 +482,13 @@ async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
 }
 
 /// POST /api/bluetooth
-async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<BluetoothPayload>) -> impl IntoResponse {
-    if let Err(res) = check_serial_connected(&state) {
+async fn set_bluetooth(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+    Json(payload): Json<BluetoothPayload>,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side);
+    if let Err(res) = check_serial_connected(state) {
         return res;
     }
     let cmd = Command::SetBluetooth(payload.enabled);
@@ -470,8 +515,13 @@ async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<Blu
 pub struct ChargeActionPayload { action: String }
 
 /// POST /api/charge
-async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<ChargeActionPayload>) -> impl IntoResponse {
-    if let Err(res) = check_serial_connected(&state) {
+async fn set_charge_state(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+    Json(payload): Json<ChargeActionPayload>,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side);
+    if let Err(res) = check_serial_connected(state) {
         return res;
     }
     match payload.action.as_str() {
@@ -551,19 +601,25 @@ mod tests {
 
 /// GET /api/sessions
 /// Returns the list of all saved sessions and the live summary of the currently active session (if any).
-async fn list_sessions_handler(State(state): State<SharedState>) -> impl IntoResponse {
+async fn list_sessions_handler(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
+    let target_side = query.side.unwrap_or(1);
+    let state = station.get_point(Some(target_side));
     let active_summary = if let Ok(tel) = state.telemetry.lock() {
-        greenup_driver::session::get_active_session_summary(&tel)
+        greenup_driver::session::get_active_session_summary_for_side(target_side, &tel)
     } else {
         None
     };
 
-    let saved_sessions = greenup_driver::session::list_saved_sessions();
+    let saved_sessions = greenup_driver::session::list_saved_sessions_filtered(query.side);
     logger::debug(
         "API",
         &format!(
-            "Listed {} saved sessions (active session: {})",
+            "Listed {} saved sessions (active session for side {}: {})",
             saved_sessions.len(),
+            target_side,
             active_summary.is_some()
         ),
     );

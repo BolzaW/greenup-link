@@ -77,19 +77,18 @@ pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartErro
 }
 
 
-pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, _state: &SharedState) {
+pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, state: &SharedState) {
+    let tx_cat = if state.side() == 2 { "TX2" } else { "TX1" };
     let hello = Command::RaspberryPiModeOk;
     let _ = port.write_all(hello.encode().as_bytes());
-    logger::log("SERIAL_TX", &hello.as_frame());
+    logger::log(tx_cat, &hello.as_frame());
     std::thread::sleep(Duration::from_millis(200));
 
     for cmd in Command::startup_queries() {
         let _ = port.write_all(cmd.encode().as_bytes());
-        logger::log("SERIAL_TX", &cmd.as_frame());
+        logger::log(tx_cat, &cmd.as_frame());
         std::thread::sleep(Duration::from_millis(150));
     }
-
-
 }
 
 pub fn run_serial_loop(state: SharedState, rx_channel: tokio::sync::mpsc::Receiver<Command>) {
@@ -286,7 +285,8 @@ pub fn run_serial_loop_with_options(
                 while retries >= 0 && !success && is_running.load(Ordering::Relaxed) {
                     while let Ok(_) = internal_rx.try_recv() {}
 
-                    logger::log("SERIAL_TX", encoded.trim());
+                    let tx_cat = if state.side() == 2 { "TX2" } else { "TX1" };
+                    logger::log(tx_cat, encoded.trim());
                     if let Err(e) = port.write_all(encoded.as_bytes()) {
                         logger::error("SERIAL", &format!("❌ Serial write error on {} : {}", port_name, e));
                         is_running.store(false, Ordering::Relaxed);
@@ -400,8 +400,8 @@ pub fn run_serial_loop_with_options(
         is_running.store(false, Ordering::Relaxed);
         let _ = reader_thread.join();
         if let Ok(tel) = state.telemetry.lock() {
-            if crate::session::is_active() {
-                crate::session::end_session("Driver shutdown / Serial disconnected", &tel);
+            if crate::session::is_active_for_side(state.side()) {
+                crate::session::end_session_for_side(state.side(), "Driver shutdown / Serial disconnected", &tel);
             }
         }
         drop(port);
@@ -517,8 +517,9 @@ pub fn determine_rx_log_category(line: &str) -> &'static str {
 }
 
 fn parse_incoming_line(line: &str, state: &SharedState) {
+    let side = state.side();
     if let Ok(mut tel) = state.telemetry.lock() {
-        if crate::session::check_state_a_timeout(&tel) {
+        if crate::session::check_state_a_timeout_for_side(side, &tel) {
             tel.energy = 0.0;
             tel.current = 0.0;
             tel.power = 0.0;
@@ -528,7 +529,11 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
     }
 
-    let rx_category = determine_rx_log_category(line);
+    let rx_base_category = determine_rx_log_category(line);
+    let rx_category = match rx_base_category {
+        "SERIAL_RX" => if side == 2 { "RX2" } else { "RX1" },
+        other => other,
+    };
     logger::log(rx_category, line);
 
     let event = parse_line(line);
@@ -571,17 +576,23 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::Side(val) => {
             let side_num = match val.as_str() {
                 "49" | "1" => Some(1),
-                "50" | "2" => Some(2),
+                "48" | "50" | "2" | "0" => Some(2),
                 _ => val.parse::<u8>().ok(),
             };
             logger::log("SERIAL", &format!("ℹ️ Active socket side = {} (raw: {})", side_num.map(|s| s.to_string()).unwrap_or_else(|| "Unknown".to_string()), val));
+            if let Some(s) = side_num {
+                state.set_side(s);
+                if let Ok(mut tel) = state.telemetry.lock() {
+                    tel.side = s;
+                }
+            }
             if let Ok(mut info) = state.info.lock() {
                 info.side = side_num;
             }
         }
         ProtocolEvent::Dip1(_) => {}
         ProtocolEvent::ChargePhases(phase) => {
-            crate::session::update_phase(&phase);
+            crate::session::update_phase_for_side(side, &phase);
         }
         ProtocolEvent::StateChange(state_val) => {
             if state_val == "V" {
@@ -607,12 +618,12 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
 
                 if crate::session::is_immediate_termination_state(&state_val) {
                     // Immediate absolute termination (State L, or safety/fault states R, ST, U, V, W, X, Y, Z)
-                    if crate::session::is_active() {
+                    if crate::session::is_active_for_side(side) {
                         let reason = match state_val.as_str() {
                             "L" => "Cable unlocked / unlatched (State: L)".to_string(),
                             _ => format!("Safety / fault termination (State: {})", state_val),
                         };
-                        crate::session::end_session(&reason, &tel);
+                        crate::session::end_session_for_side(side, &reason, &tel);
                     }
                     tel.current = 0.0;
                     tel.power = 0.0;
@@ -627,18 +638,18 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                     tel.power = 0.0;
                     tel.last_power_update = None;
 
-                    if crate::session::is_active() {
-                        crate::session::on_state_change(&state_val, &tel);
+                    if crate::session::is_active_for_side(side) {
+                        crate::session::on_state_change_for_side(side, &state_val, &tel);
                         // Note: tel.energy is preserved during the 60s grace period
                     } else {
                         tel.energy = 0.0;
                         tel.charge_complete = false;
                     }
                 } else if crate::session::is_connected_state(&state_val) {
-                    if !crate::session::is_active() {
-                        crate::session::start_session(&state_val, &tel);
+                    if !crate::session::is_active_for_side(side) {
+                        crate::session::start_session_for_side(side, &state_val, &tel);
                     } else {
-                        crate::session::on_state_change(&state_val, &tel);
+                        crate::session::on_state_change_for_side(side, &state_val, &tel);
                     }
                 }
 
@@ -729,7 +740,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                     tel.power = 0.0;
                     tel.last_power_update = None;
                 }
-                crate::session::on_telemetry_tick(&tel);
+                crate::session::on_telemetry_tick_for_side(side, &tel);
             }
         }
         ProtocolEvent::LimitAmps(limit) => {
@@ -759,7 +770,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::SessionTicket(ticket) => {
             logger::log("SERIAL", &format!("🎫 Legrand session ticket received: {}", ticket));
-            crate::session::record_ticket(&ticket);
+            crate::session::record_ticket_for_side(side, &ticket);
         }
         ProtocolEvent::CommandNotUnderstood(cmd) => {
             logger::log("SERIAL", &format!("⚠️ Command not recognized by the charging station: {}", cmd));

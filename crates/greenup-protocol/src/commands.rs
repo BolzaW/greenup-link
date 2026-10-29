@@ -351,14 +351,15 @@ impl Command {
     }
 
     /// Recommended query sequence at startup (excluding `RaspberryPiModeOK` and TIC).
+    /// `GetSide` is prioritized first to identify the physical charge point side immediately.
     pub fn startup_queries() -> Vec<Command> {
         vec![
+            Command::GetSide,
             Command::GetSoftwareVersion,
             Command::GetHardwareVersion,
             Command::GetSerialNumber,
             Command::GetReference,
             Command::GetWeekYearProduction,
-            Command::GetSide,
             Command::GetMacAddress,
             Command::GetState,
             Command::GetFunctioningMode,

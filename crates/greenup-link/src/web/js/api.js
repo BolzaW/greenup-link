@@ -2,7 +2,32 @@
 
 window.isAuthRequired = false;
 window.isAuthenticated = false;
+window.isDualStation = false;
+window.currentSide = 1;
 let consoleInitialized = false;
+
+function switchChargePoint(side) {
+    if (window.currentSide === side) return;
+    window.currentSide = side;
+
+    const btn1 = document.getElementById('btnSide1');
+    const btn2 = document.getElementById('btnSide2');
+    if (btn1 && btn2) {
+        if (side === 1) {
+            btn1.classList.add('active');
+            btn2.classList.remove('active');
+        } else {
+            btn2.classList.add('active');
+            btn1.classList.remove('active');
+        }
+    }
+
+    fetchInfo();
+    fetchTelemetry();
+    if (typeof loadSessionsData === 'function') {
+        loadSessionsData();
+    }
+}
 
 function getApiToken() {
     return localStorage.getItem('greenup_api_token') || '';
@@ -179,9 +204,20 @@ function onAuthenticatedStart() {
 async function fetchInfo() {
     if (window.isAuthRequired && !window.isAuthenticated) return;
     try {
-        const response = await apiFetch('/api/info');
+        const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
+        const response = await apiFetch(`/api/info${sideQuery}`);
         if (!response.ok) return;
         const info = await response.json();
+
+        // Dual charge point banner visibility
+        const pointBanner = document.getElementById('pointSelectorBanner');
+        if (info.is_dual) {
+            window.isDualStation = true;
+            if (pointBanner) pointBanner.classList.remove('hidden');
+        } else {
+            window.isDualStation = false;
+            if (pointBanner) pointBanner.classList.add('hidden');
+        }
 
         if (info.bluetooth_enabled !== null) {
             btToggle.checked = info.bluetooth_enabled;
@@ -339,7 +375,8 @@ function updateUsbStatus(serial) {
 async function fetchTelemetry() {
     if (window.isAuthRequired && !window.isAuthenticated) return;
     try {
-        const response = await apiFetch('/api/telemetry');
+        const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
+        const response = await apiFetch(`/api/telemetry${sideQuery}`);
         if (!response.ok) return;
         const data = await response.json();
 
@@ -398,7 +435,8 @@ async function toggleBluetooth() {
         btFeedback.className = 'text-[10px] font-medium text-sky-400 min-h-[14px] mt-2 animate-pulse';
     }
     try {
-        const response = await apiFetch('/api/bluetooth', {
+        const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
+        const response = await apiFetch(`/api/bluetooth${sideQuery}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ enabled: desiredState })
@@ -430,7 +468,8 @@ async function refreshTic() {
         return;
     }
     try {
-        await apiFetch('/api/tic/refresh', { method: 'POST' });
+        const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
+        await apiFetch(`/api/tic/refresh${sideQuery}`, { method: 'POST' });
     } catch (err) {
         console.error(err);
     }
@@ -443,9 +482,14 @@ async function sendPostAction(url, bodyObj = null) {
     }
     lockControls();
     try {
+        let reqUrl = url;
+        if (window.currentSide && !reqUrl.includes('side=')) {
+            const sep = reqUrl.includes('?') ? '&' : '?';
+            reqUrl = `${reqUrl}${sep}side=${window.currentSide}`;
+        }
         let opts = { method: 'POST' };
         if (bodyObj) { opts.headers = {'Content-Type': 'application/json'}; opts.body = JSON.stringify(bodyObj); }
-        await apiFetch(url, opts);
+        await apiFetch(reqUrl, opts);
     } catch (err) {
         console.error(err);
     }

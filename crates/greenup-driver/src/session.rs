@@ -59,8 +59,21 @@ pub fn get_sessions_dir() -> PathBuf {
     PathBuf::from("sessions")
 }
 
+fn side_to_idx(side: u8) -> usize {
+    if side == 2 {
+        1
+    } else {
+        0
+    }
+}
+
+fn default_side() -> u8 {
+    1
+}
+
 /// Tracks the active charging session and manages adaptive CSV logging.
 pub struct ActiveSession {
+    pub side: u8,
     pub session_id: String,
     pub start_time: DateTime<Local>,
     pub start_instant: Instant,
@@ -147,33 +160,48 @@ impl ActiveSession {
     }
 }
 
-static ACTIVE_SESSION: Mutex<Option<ActiveSession>> = Mutex::new(None);
-static LAST_CLOSED_SESSION: Mutex<Option<(PathBuf, Instant)>> = Mutex::new(None);
+static ACTIVE_SESSIONS: Mutex<[Option<ActiveSession>; 2]> = Mutex::new([None, None]);
+static LAST_CLOSED_SESSIONS: Mutex<[Option<(PathBuf, Instant)>; 2]> = Mutex::new([None, None]);
 
-/// Returns true if a charging session is currently active.
-pub fn is_active() -> bool {
-    ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+/// Returns true if a charging session is currently active for the given side (1 or 2).
+pub fn is_active_for_side(side: u8) -> bool {
+    let idx = side_to_idx(side);
+    ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner())[idx].is_some()
 }
 
-/// Returns the current active session ID, if any.
-pub fn get_active_session_id() -> Option<String> {
-    ACTIVE_SESSION
+/// Returns true if a charging session is currently active on Side 1 (backward compatible).
+pub fn is_active() -> bool {
+    is_active_for_side(1)
+}
+
+/// Returns the current active session ID for the given side, if any.
+pub fn get_active_session_id_for_side(side: u8) -> Option<String> {
+    let idx = side_to_idx(side);
+    ACTIVE_SESSIONS
         .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .unwrap_or_else(|e| e.into_inner())[idx]
         .as_ref()
         .map(|s| s.session_id.clone())
 }
 
-/// Starts a new session when vehicle is plugged in.
-pub fn start_session(initial_state: &str, tel: &Telemetry) {
-    let mut lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
+/// Returns the current active session ID on Side 1, if any.
+pub fn get_active_session_id() -> Option<String> {
+    get_active_session_id_for_side(1)
+}
 
-    // If an existing session is somehow still active, finalize it first
-    if lock.is_some() {
-        logger::warn("SESSION", "Previous session was still open, closing it before starting new session");
+/// Starts a new session on the specified side when vehicle is plugged in.
+pub fn start_session_for_side(side: u8, initial_state: &str, tel: &Telemetry) {
+    let idx = side_to_idx(side);
+    let mut lock = ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+
+    if lock[idx].is_some() {
+        logger::warn(
+            "SESSION",
+            &format!("Previous session for Side {} was still open, closing it before starting new session", side),
+        );
         drop(lock);
-        end_session("Previous session superseded by new plug event", tel);
-        lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
+        end_session_for_side(side, "Previous session superseded by new plug event", tel);
+        lock = ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
     }
 
     let sessions_dir = get_sessions_dir();
@@ -184,7 +212,7 @@ pub fn start_session(initial_state: &str, tel: &Telemetry) {
 
     let now_local = Local::now();
     let now_instant = Instant::now();
-    let session_id = format!("session_{}", now_local.format("%Y-%m-%d_%H-%M-%S"));
+    let session_id = format!("session_side{}_{}", side, now_local.format("%Y-%m-%d_%H-%M-%S"));
     let csv_path = sessions_dir.join(format!("{}.csv", session_id));
     let txt_path = sessions_dir.join(format!("{}.txt", session_id));
 
@@ -196,16 +224,20 @@ pub fn start_session(initial_state: &str, tel: &Telemetry) {
         }
     };
 
-    // Write standard CSV header
+    // Write standard CSV header (strictly numerical and time data, no metadata header)
     if let Some(ref mut f) = writer {
         let header = "timestamp,elapsed_s,state,current_a,limit_a,voltage_v,power_w,energy_kwh\n";
         let _ = f.write_all(header.as_bytes());
         let _ = f.flush();
     }
 
-    logger::info("SESSION", &format!("Started charging session {} (initial state: {})", session_id, initial_state));
+    logger::info(
+        "SESSION",
+        &format!("Started charging session {} on Side {} (initial state: {})", session_id, side, initial_state),
+    );
 
     let mut session = ActiveSession {
+        side,
         session_id,
         start_time: now_local,
         start_instant: now_instant,
@@ -229,26 +261,32 @@ pub fn start_session(initial_state: &str, tel: &Telemetry) {
     // Record initial point (t = 0)
     session.record_sample(tel, now_instant, now_local);
 
-    *lock = Some(session);
+    lock[idx] = Some(session);
 }
 
-/// Called when `State:` changes while session is active.
-pub fn on_state_change(new_state: &str, tel: &Telemetry) {
-    let mut lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(ref mut session) = *lock {
+/// Starts a new session on Side 1 (backward compatible).
+pub fn start_session(initial_state: &str, tel: &Telemetry) {
+    start_session_for_side(1, initial_state, tel);
+}
+
+/// Called when `State:` changes for the given side while session is active.
+pub fn on_state_change_for_side(side: u8, new_state: &str, tel: &Telemetry) {
+    let idx = side_to_idx(side);
+    let mut lock = ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(ref mut session) = lock[idx] {
         let now_instant = Instant::now();
         let now_local = Local::now();
 
         if new_state == "A" {
             if session.pending_state_a_since.is_none() {
                 session.pending_state_a_since = Some(now_instant);
-                logger::info("SESSION", "Entered State:A, waiting up to 60s before stopping session");
+                logger::info("SESSION", &format!("Side {}: Entered State:A, waiting up to 60s before stopping session", side));
             }
         } else if let Some(since) = session.pending_state_a_since.take() {
             let elapsed_secs = since.elapsed().as_secs();
             logger::info(
                 "SESSION",
-                &format!("State:A ended after {}s, continuing session in State:{}", elapsed_secs, new_state),
+                &format!("Side {}: State:A ended after {}s, continuing session in State:{}", side, elapsed_secs, new_state),
             );
         }
 
@@ -257,12 +295,17 @@ pub fn on_state_change(new_state: &str, tel: &Telemetry) {
     }
 }
 
-/// Checks if an active session has been in State A for more than 60 seconds.
-/// If so, the session is formally terminated and returns true.
-pub fn check_state_a_timeout(tel: &Telemetry) -> bool {
+/// Called when `State:` changes on Side 1 (backward compatible).
+pub fn on_state_change(new_state: &str, tel: &Telemetry) {
+    on_state_change_for_side(1, new_state, tel);
+}
+
+/// Checks if an active session on the given side has been in State A for more than 60 seconds.
+pub fn check_state_a_timeout_for_side(side: u8, tel: &Telemetry) -> bool {
+    let idx = side_to_idx(side);
     let should_terminate = {
-        let lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(ref session) = *lock {
+        let lock = ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(ref session) = lock[idx] {
             if let Some(since) = session.pending_state_a_since {
                 since.elapsed() >= Duration::from_secs(60)
             } else {
@@ -274,22 +317,28 @@ pub fn check_state_a_timeout(tel: &Telemetry) -> bool {
     };
 
     if should_terminate {
-        logger::info("SESSION", "State:A persisted for > 60s, stopping session");
-        end_session("Session stopped (State: A > 60s)", tel);
+        logger::info("SESSION", &format!("Side {}: State:A persisted for > 60s, stopping session", side));
+        end_session_for_side(side, "Session stopped (State: A > 60s)", tel);
         true
     } else {
         false
     }
 }
 
-/// Called on every telemetry tick (e.g. `CCI:` reading) to update metrics and write samples adaptively.
-pub fn on_telemetry_tick(tel: &Telemetry) {
-    if check_state_a_timeout(tel) {
+/// Checks if an active session on Side 1 has been in State A for > 60s (backward compatible).
+pub fn check_state_a_timeout(tel: &Telemetry) -> bool {
+    check_state_a_timeout_for_side(1, tel)
+}
+
+/// Called on every telemetry tick for the given side to update metrics and write samples adaptively.
+pub fn on_telemetry_tick_for_side(side: u8, tel: &Telemetry) {
+    if check_state_a_timeout_for_side(side, tel) {
         return;
     }
 
-    let mut lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(ref mut session) = *lock {
+    let idx = side_to_idx(side);
+    let mut lock = ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(ref mut session) = lock[idx] {
         let now_instant = Instant::now();
         let now_local = Local::now();
 
@@ -319,23 +368,35 @@ pub fn on_telemetry_tick(tel: &Telemetry) {
     }
 }
 
-/// Updates the detected electrical phase ("Mono" or "Tri").
-pub fn update_phase(phase: &str) {
-    let mut lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(ref mut session) = *lock {
+/// Called on every telemetry tick on Side 1 (backward compatible).
+pub fn on_telemetry_tick(tel: &Telemetry) {
+    on_telemetry_tick_for_side(1, tel);
+}
+
+/// Updates the detected electrical phase ("Mono" or "Tri") for the given side.
+pub fn update_phase_for_side(side: u8, phase: &str) {
+    let idx = side_to_idx(side);
+    let mut lock = ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(ref mut session) = lock[idx] {
         session.phase = phase.to_string();
     }
 }
 
-/// Records a raw Legrand session ticket (`WT:...:CT:...:EVplug:...`).
-pub fn record_ticket(ticket: &str) {
-    let mut lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(ref mut session) = *lock {
+/// Updates the detected electrical phase on Side 1 (backward compatible).
+pub fn update_phase(phase: &str) {
+    update_phase_for_side(1, phase);
+}
+
+/// Records a raw Legrand session ticket for the given side (`WT:...:CT:...:EVplug:...`).
+pub fn record_ticket_for_side(side: u8, ticket: &str) {
+    let idx = side_to_idx(side);
+    let mut lock = ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(ref mut session) = lock[idx] {
         session.legrand_ticket = Some(ticket.to_string());
     } else {
-        // Late arrival tolerance: check if a session closed in the last 10 seconds
-        let closed = LAST_CLOSED_SESSION.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some((ref path, instant)) = *closed {
+        // Late arrival tolerance: check if a session closed on this side in the last 10 seconds
+        let closed = LAST_CLOSED_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((ref path, instant)) = closed[idx] {
             if instant.elapsed() < Duration::from_secs(10) && path.exists() {
                 if let Ok(content) = fs::read_to_string(path) {
                     if content.contains("N/A (Ticket not emitted)") {
@@ -349,10 +410,16 @@ pub fn record_ticket(ticket: &str) {
     }
 }
 
-/// Ends the active session and creates the companion TXT summary.
+/// Records a raw Legrand session ticket on Side 1 (backward compatible).
+pub fn record_ticket(ticket: &str) {
+    record_ticket_for_side(1, ticket);
+}
+
+/// Ends the active session on the specified side and creates the companion TXT summary.
 /// If no charge actually took place (< 0.02 kWh and < 15s charge), discards the session files.
-pub fn end_session(reason: &str, tel: &Telemetry) {
-    let mut session = match ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner()).take() {
+pub fn end_session_for_side(side: u8, reason: &str, tel: &Telemetry) {
+    let idx = side_to_idx(side);
+    let mut session = match ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner())[idx].take() {
         Some(s) => s,
         None => return,
     };
@@ -405,12 +472,18 @@ pub fn end_session(reason: &str, tel: &Telemetry) {
     };
 
     let ticket_str = session.legrand_ticket.as_deref().unwrap_or("N/A (Ticket not emitted)");
+    let side_label = if session.side == 2 {
+        "Side 2 (Left / Gauche)"
+    } else {
+        "Side 1 (Right / Droit)"
+    };
 
     let summary_content = format!(
 "================================================================================
 GREENUP-LINK CHARGING SESSION SUMMARY
 ================================================================================
 Session ID:           {}
+Charge Point:         {}
 Start Time:           {}
 End Time:             {}
 Termination Reason:   {}
@@ -438,6 +511,7 @@ RAW LEGRAND TICKET
 ================================================================================
 ",
         session.session_id,
+        side_label,
         session.start_time.format("%Y-%m-%d %H:%M:%S"),
         now_local.format("%Y-%m-%d %H:%M:%S"),
         reason,
@@ -467,10 +541,15 @@ RAW LEGRAND TICKET
                 format_duration(total_duration_secs)
             ),
         );
-        *LAST_CLOSED_SESSION.lock().unwrap_or_else(|e| e.into_inner()) = Some((session.txt_path.clone(), Instant::now()));
+        LAST_CLOSED_SESSIONS.lock().unwrap_or_else(|e| e.into_inner())[idx] =
+            Some((session.txt_path.clone(), Instant::now()));
     }
 }
 
+/// Ends the active session on Side 1 (backward compatible).
+pub fn end_session(reason: &str, tel: &Telemetry) {
+    end_session_for_side(1, reason, tel);
+}
 
 /// Validates session identifier to prevent path traversal or malformed requests.
 pub fn is_valid_session_id(id: &str) -> bool {
@@ -484,6 +563,8 @@ pub fn is_valid_session_id(id: &str) -> bool {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionSummary {
     pub id: String,
+    #[serde(default = "default_side")]
+    pub side: u8,
     pub start_time: String,
     pub end_time: String,
     pub termination_reason: String,
@@ -504,6 +585,8 @@ pub struct SessionSummary {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ActiveSessionSummary {
     pub session_id: String,
+    #[serde(default = "default_side")]
+    pub side: u8,
     pub start_time: String,
     pub elapsed_seconds: u64,
     pub charging_duration_seconds: u64,
@@ -542,6 +625,7 @@ fn extract_first_float(s: &str) -> f64 {
 pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary> {
     let content = fs::read_to_string(txt_path).ok()?;
     let mut id = String::new();
+    let mut side = 1u8;
     let mut start_time = String::new();
     let mut end_time = String::new();
     let mut termination_reason = String::new();
@@ -560,6 +644,13 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
             let val = val.trim();
             match key {
                 "Session ID" => id = val.to_string(),
+                "Charge Point" | "Point de charge" => {
+                    if val.contains('2') {
+                        side = 2;
+                    } else {
+                        side = 1;
+                    }
+                }
                 "Start Time" => start_time = val.to_string(),
                 "End Time" => end_time = val.to_string(),
                 "Termination Reason" => termination_reason = val.to_string(),
@@ -582,6 +673,11 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
         }
     }
 
+    // Secondary fallback for side detection if not parsed from TXT
+    if side == 1 && (id.contains("_side2_") || id.starts_with("session_side2_")) {
+        side = 2;
+    }
+
     let parent = txt_path.parent().unwrap_or_else(|| Path::new("."));
     let csv_path = parent.join(format!("{}.csv", id));
     let has_csv = csv_path.exists();
@@ -593,6 +689,7 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
 
     Some(SessionSummary {
         id,
+        side,
         start_time,
         end_time,
         termination_reason,
@@ -608,6 +705,15 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
         has_txt: true,
         csv_size_bytes,
     })
+}
+
+/// Lists all saved sessions from disk, optionally filtered by side.
+pub fn list_saved_sessions_filtered(side_filter: Option<u8>) -> Vec<SessionSummary> {
+    let mut summaries = list_saved_sessions();
+    if let Some(filter) = side_filter {
+        summaries.retain(|s| s.side == filter);
+    }
+    summaries
 }
 
 /// Lists all saved sessions from disk, sorted in reverse chronological order (newest first).
@@ -632,16 +738,18 @@ pub fn list_saved_sessions() -> Vec<SessionSummary> {
     summaries
 }
 
-/// Returns live summary metrics of the currently active session, if any.
-pub fn get_active_session_summary(tel: &Telemetry) -> Option<ActiveSessionSummary> {
-    let lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
-    lock.as_ref().map(|s| {
+/// Returns live summary metrics of the currently active session on the given side, if any.
+pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<ActiveSessionSummary> {
+    let idx = side_to_idx(side);
+    let lock = ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+    lock[idx].as_ref().map(|s| {
         let elapsed = s.start_instant.elapsed().as_secs();
         let charging = s.active_charging_duration_secs_f64.round() as u64;
         let energy_kwh = s.get_total_energy_kwh(tel);
 
         ActiveSessionSummary {
             session_id: s.session_id.clone(),
+            side: s.side,
             start_time: s.start_time.format("%Y-%m-%d %H:%M:%S").to_string(),
             elapsed_seconds: elapsed,
             charging_duration_seconds: charging,
@@ -661,6 +769,11 @@ pub fn get_active_session_summary(tel: &Telemetry) -> Option<ActiveSessionSummar
     })
 }
 
+/// Returns live summary metrics of the currently active session on Side 1 (backward compatible).
+pub fn get_active_session_summary(tel: &Telemetry) -> Option<ActiveSessionSummary> {
+    get_active_session_summary_for_side(1, tel)
+}
+
 /// Deletes the session files (`.csv` and `.txt`) for the given session ID.
 /// Returns `Ok(true)` if files were removed, `Ok(false)` if session didn't exist,
 /// or `Err(...)` if the session is currently active or ID is invalid.
@@ -677,15 +790,17 @@ pub fn delete_session(session_id: &str) -> Result<bool, &'static str> {
     let csv_path = sessions_dir.join(format!("{}.csv", session_id));
     let txt_path = sessions_dir.join(format!("{}.txt", session_id));
 
-    // Acquire lock on ACTIVE_SESSION to prevent race condition with active recording
+    // Acquire lock on ACTIVE_SESSIONS to prevent race condition with active recording
     {
-        let active_lock = ACTIVE_SESSION.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(ref active) = *active_lock {
-            if active.session_id == session_id {
-                return Err("Cannot delete currently active charging session");
-            }
-            if csv_path == active.csv_path || txt_path == active.txt_path {
-                return Err("Cannot delete currently active charging session");
+        let active_lock = ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+        for active_opt in active_lock.iter() {
+            if let Some(ref active) = *active_opt {
+                if active.session_id == session_id {
+                    return Err("Cannot delete currently active charging session");
+                }
+                if csv_path == active.csv_path || txt_path == active.txt_path {
+                    return Err("Cannot delete currently active charging session");
+                }
             }
         }
     }
@@ -742,6 +857,7 @@ mod tests {
     fn test_adaptive_sampling_logic() {
         let now = Instant::now();
         let session = ActiveSession {
+            side: 1,
             session_id: "test".into(),
             start_time: Local::now(),
             start_instant: now,
@@ -812,7 +928,7 @@ mod tests {
         on_state_change("D", &tel);
 
         // Advance charging time and energy
-        if let Some(ref mut session) = *ACTIVE_SESSION.lock().unwrap() {
+        if let Some(ref mut session) = ACTIVE_SESSIONS.lock().unwrap()[0] {
             session.active_charging_duration_secs_f64 = 120.0;
             session.cumulative_energy_wh = 125.0; // 0.125 kWh > 0.02 kWh
         }
@@ -835,9 +951,57 @@ mod tests {
 
         let txt_content = fs::read_to_string(txt_entry.path()).unwrap();
         assert!(txt_content.contains("GREENUP-LINK CHARGING SESSION SUMMARY"));
+        assert!(txt_content.contains("Side 1 (Right / Droit)"));
         assert!(txt_content.contains("0.125 kWh"));
         assert!(txt_content.contains("Mono (1-Phase)"));
         assert!(txt_content.contains("WT:10:1138:50:CT:2:6:37:EVplug:5546.38:0.00:"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_dual_side_sessions() {
+        let dir = setup_test_dir();
+        let mut tel1 = Telemetry::default();
+        tel1.greenup_state = "B".into();
+        tel1.voltage = 230.0;
+
+        let mut tel2 = Telemetry::default();
+        tel2.greenup_state = "B".into();
+        tel2.voltage = 230.0;
+
+        // Start session on both sides simultaneously
+        start_session_for_side(1, "B", &tel1);
+        start_session_for_side(2, "B", &tel2);
+
+        assert!(is_active_for_side(1));
+        assert!(is_active_for_side(2));
+
+        // Advance charging on both sides
+        if let Some(ref mut s1) = ACTIVE_SESSIONS.lock().unwrap()[0] {
+            s1.active_charging_duration_secs_f64 = 60.0;
+            s1.cumulative_energy_wh = 100.0;
+        }
+        if let Some(ref mut s2) = ACTIVE_SESSIONS.lock().unwrap()[1] {
+            s2.active_charging_duration_secs_f64 = 90.0;
+            s2.cumulative_energy_wh = 200.0;
+        }
+
+        end_session_for_side(1, "Stopped 1", &tel1);
+        end_session_for_side(2, "Stopped 2", &tel2);
+
+        assert!(!is_active_for_side(1));
+        assert!(!is_active_for_side(2));
+
+        let sessions = list_saved_sessions();
+        assert_eq!(sessions.len(), 2);
+
+        let side1_sessions = list_saved_sessions_filtered(Some(1));
+        let side2_sessions = list_saved_sessions_filtered(Some(2));
+        assert_eq!(side1_sessions.len(), 1);
+        assert_eq!(side2_sessions.len(), 1);
+        assert_eq!(side1_sessions[0].side, 1);
+        assert_eq!(side2_sessions[0].side, 2);
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -870,7 +1034,7 @@ mod tests {
         on_state_change("A", &tel);
         assert!(is_active(), "Session must remain active during State A grace period");
 
-        if let Some(ref session) = *ACTIVE_SESSION.lock().unwrap() {
+        if let Some(ref session) = ACTIVE_SESSIONS.lock().unwrap()[0] {
             assert!(session.pending_state_a_since.is_some(), "State A grace timer should be running");
         }
 
@@ -879,7 +1043,7 @@ mod tests {
         on_state_change("B", &tel);
         assert!(is_active(), "Session must remain active after resuming");
 
-        if let Some(ref session) = *ACTIVE_SESSION.lock().unwrap() {
+        if let Some(ref session) = ACTIVE_SESSIONS.lock().unwrap()[0] {
             assert!(session.pending_state_a_since.is_none(), "State A grace timer should be canceled");
         }
 
@@ -898,7 +1062,7 @@ mod tests {
         assert!(is_active());
 
         // Simulate some charge
-        if let Some(ref mut session) = *ACTIVE_SESSION.lock().unwrap() {
+        if let Some(ref mut session) = ACTIVE_SESSIONS.lock().unwrap()[0] {
             session.active_charging_duration_secs_f64 = 120.0;
             session.cumulative_energy_wh = 500.0; // 0.5 kWh
         }
@@ -909,7 +1073,7 @@ mod tests {
         assert!(is_active());
 
         // Artificially advance State A timer past 60s
-        if let Some(ref mut session) = *ACTIVE_SESSION.lock().unwrap() {
+        if let Some(ref mut session) = ACTIVE_SESSIONS.lock().unwrap()[0] {
             session.pending_state_a_since = Some(Instant::now() - Duration::from_secs(65));
         }
 
@@ -930,6 +1094,8 @@ mod tests {
     #[test]
     fn test_is_valid_session_id() {
         assert!(is_valid_session_id("session_2026-10-28_18-05-12"));
+        assert!(is_valid_session_id("session_side1_2026-10-28_18-05-12"));
+        assert!(is_valid_session_id("session_side2_2026-10-28_18-05-12"));
         assert!(is_valid_session_id("session-123_abc"));
         assert!(!is_valid_session_id(""));
         assert!(!is_valid_session_id("active"));
@@ -956,7 +1122,7 @@ mod tests {
         assert!(delete_session(&active_id).is_err());
 
         // Accumulate charge and complete session
-        if let Some(ref mut session) = *ACTIVE_SESSION.lock().unwrap() {
+        if let Some(ref mut session) = ACTIVE_SESSIONS.lock().unwrap()[0] {
             session.active_charging_duration_secs_f64 = 60.0;
             session.cumulative_energy_wh = 100.0;
         }
