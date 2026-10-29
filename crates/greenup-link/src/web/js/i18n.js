@@ -26,6 +26,7 @@ async function setLanguage(lang) {
 
         if (lastReportedTicMode) updateLinky(lastReportedTicMode);
         window.lastVisualState = null; // force visual update on next poll
+        if (typeof updateLogoutButton === 'function') updateLogoutButton();
     } catch(err) { console.error('Failed to load translations', err); }
 }
 

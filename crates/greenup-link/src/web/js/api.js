@@ -126,12 +126,84 @@ function hideAuthModal() {
 
 function updateLogoutButton() {
     const btn = document.getElementById('btnLogout');
+    const iconLockClosed = document.getElementById('iconLockClosed');
+    const iconLockOpen = document.getElementById('iconLockOpen');
     if (!btn) return;
-    if (window.isAuthRequired && window.isAuthenticated) {
-        btn.classList.remove('hidden');
+
+    btn.classList.remove('hidden');
+
+    if (!window.isAuthRequired) {
+        // 🔓 Mode Open LAN: open padlock in amber/orange
+        btn.className = 'header-auth-btn auth-open';
+        btn.title = (typeof t === 'function' ? t('auth.open_lan_tooltip') : "Accès libre (LAN) : les API REST ne sont pas protégées par un mot de passe.") || "Accès libre (LAN) : les API REST ne sont pas protégées par un mot de passe.";
+        if (iconLockClosed) iconLockClosed.classList.add('hidden');
+        if (iconLockOpen) iconLockOpen.classList.remove('hidden');
+    } else if (window.isAuthenticated) {
+        // 🔒 Mode Authenticated: closed padlock in emerald
+        btn.className = 'header-auth-btn auth-locked-ok';
+        btn.title = (typeof t === 'function' ? t('auth.logout_title') : "Session authentifiée (cliquer pour verrouiller)") || "Session authentifiée (cliquer pour verrouiller)";
+        if (iconLockClosed) iconLockClosed.classList.remove('hidden');
+        if (iconLockOpen) iconLockOpen.classList.add('hidden');
     } else {
-        btn.classList.add('hidden');
+        // 🔒 Mode Locked / Unauthorized: closed padlock in rose
+        btn.className = 'header-auth-btn auth-unauthorized';
+        btn.title = (typeof t === 'function' ? t('auth.title') : "Authentification requise") || "Authentification requise";
+        if (iconLockClosed) iconLockClosed.classList.remove('hidden');
+        if (iconLockOpen) iconLockOpen.classList.add('hidden');
     }
+}
+
+function handleAuthButtonClick() {
+    if (!window.isAuthRequired) {
+        showOpenLanModal();
+    } else if (window.isAuthenticated) {
+        logoutApiToken();
+    } else {
+        showAuthModal(false);
+    }
+}
+
+function showOpenLanModal() {
+    const modal = document.getElementById('openLanModal');
+    if (modal) modal.classList.remove('hidden');
+}
+
+function hideOpenLanModal() {
+    const modal = document.getElementById('openLanModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function setupOpenLanModalListeners() {
+    const btnClose = document.getElementById('btnOpenLanClose');
+    const btnConfig = document.getElementById('btnOpenLanConfigure');
+    const modal = document.getElementById('openLanModal');
+
+    if (btnClose) {
+        btnClose.addEventListener('click', hideOpenLanModal);
+    }
+    if (btnConfig) {
+        btnConfig.addEventListener('click', () => {
+            hideOpenLanModal();
+            if (typeof switchMainTab === 'function') {
+                switchMainTab('system');
+                setTimeout(() => {
+                    const tokenInput = document.getElementById('cfgClientToken');
+                    if (tokenInput) {
+                        tokenInput.focus();
+                        tokenInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 150);
+            }
+        });
+    }
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) hideOpenLanModal();
+        });
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') hideOpenLanModal();
+    });
 }
 
 function logoutApiToken() {
@@ -161,6 +233,7 @@ function setupAuthModalListeners() {
             }
         });
     }
+    setupOpenLanModalListeners();
 }
 
 async function submitAuthToken() {

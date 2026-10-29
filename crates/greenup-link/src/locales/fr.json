@@ -14,7 +14,13 @@
     "placeholder": "Clé API / Token...",
     "submit": "Déverrouiller",
     "invalid": "Clé API invalide. Veuillez réessayer.",
-    "logout_title": "Verrouiller la session (déconnexion)"
+    "logout_title": "Session authentifiée (cliquer pour verrouiller)",
+    "open_lan_title": "Accès libre (mode LAN)",
+    "open_lan_tooltip": "Accès libre (LAN) : les API REST ne sont pas protégées par un mot de passe.",
+    "open_lan_desc": "L'authentification par clé API est actuellement désactivée dans la configuration (greenup.toml). L'interface Web et les API REST sont librement accessibles sur le réseau local.",
+    "open_lan_hint": "Pour sécuriser l'accès, définissez un api_token dans greenup.toml ou depuis l'onglet Système.",
+    "open_lan_btn_configure": "Configurer",
+    "open_lan_btn_close": "Fermer"
   },
   "console": {
     "title": "Console Live",

@@ -52,18 +52,21 @@
         </div>
     </div>
 
-    <!-- Controls: Language & Auth (Top Right on Mobile, Right on Desktop) -->
-    <div class="col-span-1 flex items-center justify-end space-x-2 md:space-x-3 order-2 md:order-3">
+    <!-- Controls: Language & Auth Status (Top Right on Mobile, Right on Desktop) -->
+    <div class="col-span-1 flex items-center justify-end space-x-2 md:space-x-2.5 order-2 md:order-3">
         <!-- Language Selector -->
-        <select id="langSelector" class="bg-slate-800 text-[10px] md:text-xs text-slate-300 border border-slate-700 rounded px-2 py-1 outline-none cursor-pointer">
-            <option value="fr">🇫🇷 FR</option>
-            <option value="en">🇬🇧 EN</option>
+        <select id="langSelector" class="header-control-select">
+            <option value="fr">FR</option>
+            <option value="en">EN</option>
         </select>
 
-        <!-- Lock / Logout Button (shown only when API auth is enabled) -->
-        <button id="btnLogout" onclick="logoutApiToken()" class="header-btn-logout hidden" title="Verrouiller la session" data-i18n-title="auth.logout_title">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <!-- Lock / Auth Status Button -->
+        <button id="btnLogout" onclick="handleAuthButtonClick()" class="header-auth-btn hidden" title="Statut sécurité" data-i18n-title="auth.logout_title">
+            <svg id="iconLockClosed" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+            </svg>
+            <svg id="iconLockOpen" class="w-3.5 h-3.5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path>
             </svg>
         </button>
     </div>
@@ -664,6 +667,32 @@
         <input type="password" id="authTokenInput" class="auth-input" placeholder="Clé API / Token..." data-i18n-placeholder="auth.placeholder" autocomplete="current-password" />
         <div id="authErrorMsg" class="text-rose-500 text-xs font-medium mt-2 hidden" data-i18n="auth.invalid">Clé API invalide. Veuillez réessayer.</div>
         <button id="btnAuthSubmit" class="auth-btn-submit" data-i18n="auth.submit">Déverrouiller</button>
+    </div>
+</div>
+
+<!-- Open LAN Notice Modal (shown when clicking the open lock in unauthenticated LAN mode) -->
+<div id="openLanModal" class="auth-overlay hidden">
+    <div class="auth-card max-w-sm text-left">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-3 mx-auto">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path>
+            </svg>
+        </div>
+        <h3 class="text-base font-bold text-white text-center mb-1.5" data-i18n="auth.open_lan_title">Accès libre (mode LAN)</h3>
+        <p class="text-xs text-slate-300 leading-relaxed text-center mb-4" data-i18n="auth.open_lan_desc">
+            L'authentification par clé API n'est pas activée dans la configuration. L'interface Web et les API REST sont actuellement accessibles sans mot de passe sur le réseau local.
+        </p>
+        <div class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 mb-4 font-mono">
+            <span class="text-amber-400 font-bold">ℹ️ Info :</span> <span data-i18n="auth.open_lan_hint">Pour sécuriser l'accès, définissez un <code class="text-sky-300 font-semibold">api_token</code> dans <code class="text-slate-300">greenup.toml</code> ou depuis l'onglet Système.</span>
+        </div>
+        <div class="flex gap-2 w-full">
+            <button id="btnOpenLanConfigure" class="flex-1 py-2 px-3 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white transition-all text-center" data-i18n="auth.open_lan_btn_configure">
+                Configurer
+            </button>
+            <button id="btnOpenLanClose" class="py-2 px-4 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition-all text-center" data-i18n="auth.open_lan_btn_close">
+                Fermer
+            </button>
+        </div>
     </div>
 </div>
 

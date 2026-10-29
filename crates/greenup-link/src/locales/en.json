@@ -14,7 +14,13 @@
     "placeholder": "API Key / Token...",
     "submit": "Unlock",
     "invalid": "Invalid API token. Please try again.",
-    "logout_title": "Lock session (logout)"
+    "logout_title": "Authenticated session (click to lock)",
+    "open_lan_title": "Open LAN Access",
+    "open_lan_tooltip": "Open LAN access: REST APIs are not protected by an API token.",
+    "open_lan_desc": "API token authentication is currently disabled in configuration (greenup.toml). The Web GUI and REST APIs are freely accessible on the local network.",
+    "open_lan_hint": "To secure access, set an api_token in greenup.toml or from the System tab.",
+    "open_lan_btn_configure": "Configure",
+    "open_lan_btn_close": "Close"
   },
   "console": {
     "title": "Live Console",
