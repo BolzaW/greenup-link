@@ -328,7 +328,7 @@ async fn set_current(
     Query(query): Query<SideQuery>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
-    if let Err(res) = check_serial_connected(state) {
+    if let Err(res) = check_serial_connected(&state) {
         return res;
     }
     let cmd = match u8::try_from(amps).ok().map(Command::set_current_limit) {
@@ -395,7 +395,7 @@ async fn reset_board(
     Query(query): Query<SideQuery>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
-    if let Err(res) = check_serial_connected(state) {
+    if let Err(res) = check_serial_connected(&state) {
         return res;
     }
     logger::log("API", &format!("⚠️ Hardware restart request (Reset) on Side {}", state.side()));
@@ -430,7 +430,7 @@ async fn send_raw_command(
     body: String,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
-    if let Err(res) = check_serial_connected(state) {
+    if let Err(res) = check_serial_connected(&state) {
         return res;
     }
     let cmd = body.trim();
@@ -464,11 +464,11 @@ async fn refresh_tic(
     Query(query): Query<SideQuery>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
-    if let Err(res) = check_serial_connected(state) {
+    if let Err(res) = check_serial_connected(&state) {
         return res;
     }
     logger::log("API", &format!("🔄 Manual TIC detection request (TICTM:1) on Side {}", state.side()));
-    match greenup_driver::serial::start_tic_detection(state).await {
+    match greenup_driver::serial::start_tic_detection(&state).await {
         Ok(()) => (StatusCode::OK, Json(json!({"status": "success", "message": "TIC detection started"}))),
         Err(TicStartError::NotInStateA(current)) => (
             StatusCode::BAD_REQUEST,
@@ -488,7 +488,7 @@ async fn set_bluetooth(
     Json(payload): Json<BluetoothPayload>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
-    if let Err(res) = check_serial_connected(state) {
+    if let Err(res) = check_serial_connected(&state) {
         return res;
     }
     let cmd = Command::SetBluetooth(payload.enabled);
@@ -521,7 +521,7 @@ async fn set_charge_state(
     Json(payload): Json<ChargeActionPayload>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
-    if let Err(res) = check_serial_connected(state) {
+    if let Err(res) = check_serial_connected(&state) {
         return res;
     }
     match payload.action.as_str() {

@@ -165,20 +165,31 @@ function createLogLineElement(entry) {
     const timeSpan = document.createElement('span');
     timeSpan.className = 'console-time';
     timeSpan.textContent = entry.timestamp;
+    line.appendChild(timeSpan);
 
     // Badge category
     const catSpan = document.createElement('span');
-    catSpan.className = getCategoryBadgeClass(entry.category);
-    catSpan.textContent = `[${entry.category}]`;
+    catSpan.className = getCategoryBadgeClass(entry);
+    let catDisplay = entry.category;
+    if (catDisplay === 'SERIAL_TX' || catDisplay === 'TX1' || catDisplay === 'TX2') catDisplay = 'TX';
+    else if (catDisplay === 'SERIAL_RX' || catDisplay === 'RX1' || catDisplay === 'RX2') catDisplay = 'RX';
+    catSpan.textContent = `[${catDisplay}]`;
+    line.appendChild(catSpan);
+
+    // Side badge if dual station
+    if (window.isDualStation && (entry.side === 1 || entry.side === 2)) {
+        const sideSpan = document.createElement('span');
+        sideSpan.className = entry.side === 2 ? 'console-badge-side2' : 'console-badge-side1';
+        sideSpan.textContent = `[SIDE${entry.side}]`;
+        line.appendChild(sideSpan);
+    }
 
     // Message
     const msgSpan = document.createElement('span');
     msgSpan.className = getMessageClass(entry);
     msgSpan.textContent = entry.message;
-
-    line.appendChild(timeSpan);
-    line.appendChild(catSpan);
     line.appendChild(msgSpan);
+
     return line;
 }
 
@@ -191,9 +202,16 @@ function appendLogDom(entry) {
     }
 }
 
-function getCategoryBadgeClass(cat) {
-    if (cat === 'RX1' || cat === 'TX1' || cat === 'SERIAL_RX' || cat === 'SERIAL_TX') return 'console-badge-side1';
-    if (cat === 'RX2' || cat === 'TX2') return 'console-badge-side2';
+function getCategoryBadgeClass(entry) {
+    const cat = entry.category;
+    const isSerial = cat === 'SERIAL_TX' || cat === 'SERIAL_RX' || cat === 'TX' || cat === 'RX' || cat === 'TX1' || cat === 'RX1' || cat === 'TX2' || cat === 'RX2';
+    if (isSerial) {
+        if (window.isDualStation) {
+            return entry.side === 2 ? 'console-badge-side2' : 'console-badge-side1';
+        } else {
+            return (cat === 'SERIAL_TX' || cat === 'TX' || cat === 'TX1') ? 'console-badge-tx' : 'console-badge-rx';
+        }
+    }
     if (cat === 'API') return 'console-badge-api';
     if (cat === 'DEBUG' || cat === 'TRACE') return 'console-badge-dbg';
     if (cat === 'WARN') return 'console-badge-warn';
@@ -204,9 +222,16 @@ function getCategoryBadgeClass(cat) {
 function getMessageClass(entry) {
     if (entry.level === 'ERROR') return 'console-msg-err';
     if (entry.level === 'WARN') return 'console-msg-warn';
-    if (entry.category === 'RX1' || entry.category === 'TX1' || entry.category === 'SERIAL_RX' || entry.category === 'SERIAL_TX') return 'console-msg-side1';
-    if (entry.category === 'RX2' || entry.category === 'TX2') return 'console-msg-side2';
-    if (entry.category === 'API') return 'console-msg-api';
+    const cat = entry.category;
+    const isSerial = cat === 'SERIAL_TX' || cat === 'SERIAL_RX' || cat === 'TX' || cat === 'RX' || cat === 'TX1' || cat === 'RX1' || cat === 'TX2' || cat === 'RX2';
+    if (isSerial) {
+        if (window.isDualStation) {
+            return entry.side === 2 ? 'console-msg-side2' : 'console-msg-side1';
+        } else {
+            return (cat === 'SERIAL_TX' || cat === 'TX' || cat === 'TX1') ? 'console-msg-tx' : 'console-msg-rx';
+        }
+    }
+    if (cat === 'API') return 'console-msg-api';
     if (entry.level === 'DEBUG') return 'console-msg-dbg';
     return 'console-msg';
 }
@@ -367,7 +392,12 @@ function sendCommandRaw(cmd) {
         feedback.className = 'text-[10px] font-mono text-sky-400';
     }
 
-    apiFetch('/api/command', {
+    let cmdUrl = '/api/command';
+    if (window.isDualStation && window.currentSide) {
+        cmdUrl += `?side=${window.currentSide}`;
+    }
+
+    apiFetch(cmdUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: cmd
@@ -429,7 +459,13 @@ function copyVisibleLogs() {
         showCopyFeedback(false);
         return;
     }
-    const textToCopy = visibleEntries.map(e => `[${e.timestamp}] [${e.level}] [${e.category}] ${e.message}`).join('\n');
+    const textToCopy = visibleEntries.map(e => {
+        let catDisplay = e.category;
+        if (catDisplay === 'SERIAL_TX' || catDisplay === 'TX1' || catDisplay === 'TX2') catDisplay = 'TX';
+        else if (catDisplay === 'SERIAL_RX' || catDisplay === 'RX1' || catDisplay === 'RX2') catDisplay = 'RX';
+        const sideTag = (window.isDualStation && (e.side === 1 || e.side === 2)) ? ` [SIDE${e.side}]` : '';
+        return `[${e.timestamp}] [${e.level}] [${catDisplay}${sideTag}] ${e.message}`;
+    }).join('\n');
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(textToCopy)

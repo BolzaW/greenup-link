@@ -16,6 +16,8 @@ pub struct LogEntry {
     pub id: u64,
     pub timestamp: String,
     pub category: String, // "SERIAL_RX", "SERIAL_TX", "API", "IHM", "SYS", "DEBUG", "TRACE", etc.
+    #[serde(default)]
+    pub side: Option<u8>, // Some(1), Some(2), or None
     pub level: String,    // "INFO", "DEBUG", "WARN", "ERROR"
     pub message: String,
 }
@@ -79,6 +81,18 @@ pub fn should_warn_file_size(len: u64, last_warned_mb: u64) -> Option<(u64, f64)
         }
     }
     None
+}
+
+static IS_DUAL_STATION: AtomicBool = AtomicBool::new(false);
+
+/// Sets whether the station is operating in dual charge point mode.
+pub fn set_dual_station(dual: bool) {
+    IS_DUAL_STATION.store(dual, Ordering::Relaxed);
+}
+
+/// Returns true if the station is operating in dual charge point mode.
+pub fn is_dual_station() -> bool {
+    IS_DUAL_STATION.load(Ordering::Relaxed)
 }
 
 static LAST_WARNED_MB: AtomicU64 = AtomicU64::new(0);
@@ -160,7 +174,12 @@ pub fn get_current_log_content() -> (String, String) {
     let recent = get_recent_logs();
     let mut out = String::new();
     for entry in recent {
-        out.push_str(&format!("[{}] [{}] [{}] {}\n", entry.timestamp, entry.level, entry.category, entry.message));
+        let side_tag = if is_dual_station() {
+            entry.side.map(|s| format!(" [SIDE{}]", s)).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        out.push_str(&format!("[{}] [{}] [{}]{} {}\n", entry.timestamp, entry.level, entry.category, side_tag, entry.message));
     }
     (filename, out)
 }
@@ -249,12 +268,18 @@ pub fn init() {
     }
 }
 
-/// Writes an entry to stdout, daily log file, ring buffer, and live SSE broadcast with an explicit category and level.
-pub fn log_with_level(category: &str, level: LogLevel, message: &str) {
+/// Writes an entry with an optional charge point side (1 or 2).
+pub fn log_with_level_side(category: &str, side: Option<u8>, level: LogLevel, message: &str) {
     let now = Local::now();
     let time_str = now.format("%H:%M:%S%.3f").to_string();
     let full_timestamp = now.format("%Y-%m-%d %H:%M:%S%.3f");
-    let entry_text = format!("[{}] [{}] [{}] {}", full_timestamp, level.as_str(), category, message);
+
+    let side_tag = if is_dual_station() {
+        side.map(|s| format!(" [SIDE{}]", s)).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let entry_text = format!("[{}] [{}] [{}]{} {}", full_timestamp, level.as_str(), category, side_tag, message);
 
     let configured_level = get_log_level();
     let should_output = level <= configured_level;
@@ -289,6 +314,7 @@ pub fn log_with_level(category: &str, level: LogLevel, message: &str) {
         id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
         timestamp: time_str,
         category: category.to_string(),
+        side,
         level: level.as_str().to_string(),
         message: message.to_string(),
     };
@@ -311,6 +337,23 @@ pub fn log_with_level(category: &str, level: LogLevel, message: &str) {
         );
         log_with_level("SYS", LogLevel::Warn, &warn_msg);
     }
+}
+
+/// Writes an entry to stdout, daily log file, ring buffer, and live SSE broadcast with an explicit category and level.
+pub fn log_with_level(category: &str, level: LogLevel, message: &str) {
+    log_with_level_side(category, None, level, message);
+}
+
+/// Convenience logging for serial port communication tagged with a side (1 or 2).
+pub fn log_side(category: &str, side: u8, message: &str) {
+    let level = match category {
+        "TRACE" => LogLevel::Trace,
+        "DEBUG" => LogLevel::Debug,
+        "WARN" => LogLevel::Warn,
+        "ERROR" => LogLevel::Error,
+        _ => LogLevel::Info,
+    };
+    log_with_level_side(category, Some(side), level, message);
 }
 
 /// Convenience function for logging at ERROR level.

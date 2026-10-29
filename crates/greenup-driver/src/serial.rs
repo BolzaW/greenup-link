@@ -78,15 +78,14 @@ pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartErro
 
 
 pub fn send_init_sequence_sync(port: &mut Box<dyn serialport::SerialPort>, state: &SharedState) {
-    let tx_cat = if state.side() == 2 { "TX2" } else { "TX1" };
     let hello = Command::RaspberryPiModeOk;
     let _ = port.write_all(hello.encode().as_bytes());
-    logger::log(tx_cat, &hello.as_frame());
+    logger::log_side("SERIAL_TX", state.side(), &hello.as_frame());
     std::thread::sleep(Duration::from_millis(200));
 
     for cmd in Command::startup_queries() {
         let _ = port.write_all(cmd.encode().as_bytes());
-        logger::log(tx_cat, &cmd.as_frame());
+        logger::log_side("SERIAL_TX", state.side(), &cmd.as_frame());
         std::thread::sleep(Duration::from_millis(150));
     }
 }
@@ -285,8 +284,7 @@ pub fn run_serial_loop_with_options(
                 while retries >= 0 && !success && is_running.load(Ordering::Relaxed) {
                     while let Ok(_) = internal_rx.try_recv() {}
 
-                    let tx_cat = if state.side() == 2 { "TX2" } else { "TX1" };
-                    logger::log(tx_cat, encoded.trim());
+                    logger::log_side("SERIAL_TX", state.side(), encoded.trim());
                     if let Err(e) = port.write_all(encoded.as_bytes()) {
                         logger::error("SERIAL", &format!("❌ Serial write error on {} : {}", port_name, e));
                         is_running.store(false, Ordering::Relaxed);
@@ -529,12 +527,8 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
     }
 
-    let rx_base_category = determine_rx_log_category(line);
-    let rx_category = match rx_base_category {
-        "SERIAL_RX" => if side == 2 { "RX2" } else { "RX1" },
-        other => other,
-    };
-    logger::log(rx_category, line);
+    let rx_category = determine_rx_log_category(line);
+    logger::log_side(rx_category, side, line);
 
     let event = parse_line(line);
 

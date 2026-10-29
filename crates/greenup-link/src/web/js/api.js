@@ -211,12 +211,16 @@ async function fetchInfo() {
 
         // Dual charge point banner visibility
         const pointBanner = document.getElementById('pointSelectorBanner');
+        const wasDual = window.isDualStation;
         if (info.is_dual) {
             window.isDualStation = true;
             if (pointBanner) pointBanner.classList.remove('hidden');
         } else {
             window.isDualStation = false;
             if (pointBanner) pointBanner.classList.add('hidden');
+        }
+        if (wasDual !== window.isDualStation && typeof renderLogs === 'function') {
+            renderLogs();
         }
 
         if (info.bluetooth_enabled !== null) {

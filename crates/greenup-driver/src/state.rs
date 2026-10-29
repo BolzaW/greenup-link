@@ -1,6 +1,6 @@
 use std::sync::{
     atomic::{AtomicU8, Ordering},
-    Arc, Mutex,
+    Arc, Mutex, RwLock,
 };
 use tokio::sync::mpsc;
 pub use crate::telemetry::{BoardInfo, SerialConnection, SerialStatus, Telemetry};
@@ -63,17 +63,26 @@ pub type SharedState = Arc<AppState>;
 /// Manages multi-point charging stations (1 or 2 charge points).
 pub struct StationManager {
     pub point1: SharedState,
-    pub point2: Option<SharedState>,
+    pub point2: RwLock<Option<SharedState>>,
 }
 
 impl StationManager {
     pub fn new(point1: SharedState, point2: Option<SharedState>) -> Self {
-        Self { point1, point2 }
+        Self {
+            point1,
+            point2: RwLock::new(point2),
+        }
+    }
+
+    /// Attaches the second charge point dynamically after startup.
+    pub fn attach_point2(&self, p2: SharedState) {
+        let mut guard = self.point2.write().unwrap_or_else(|e| e.into_inner());
+        *guard = Some(p2);
     }
 
     /// Returns true if two charging points are configured / active.
     pub fn is_dual(&self) -> bool {
-        self.point2.is_some()
+        self.point2.read().unwrap_or_else(|e| e.into_inner()).is_some()
     }
 
     /// Returns the list of active point numbers: [1] for single-point, [1, 2] for dual-point.
@@ -88,21 +97,22 @@ impl StationManager {
     /// Resolves the state for the given side (1 or 2).
     /// Dynamically routes to the charge point whose ATmega reported that side,
     /// or falls back cleanly to point1 / point2.
-    pub fn get_point(&self, requested_side: Option<u8>) -> &SharedState {
+    pub fn get_point(&self, requested_side: Option<u8>) -> SharedState {
         let target = requested_side.unwrap_or(1);
         if self.point1.side() == target {
-            return &self.point1;
+            return self.point1.clone();
         }
-        if let Some(ref p2) = self.point2 {
+        let guard = self.point2.read().unwrap_or_else(|e| e.into_inner());
+        if let Some(ref p2) = *guard {
             if p2.side() == target {
-                return p2;
+                return p2.clone();
             }
         }
         // Fallback by requested index if not yet assigned or both identical:
         if target == 2 {
-            self.point2.as_ref().unwrap_or(&self.point1)
+            guard.as_ref().cloned().unwrap_or_else(|| self.point1.clone())
         } else {
-            &self.point1
+            self.point1.clone()
         }
     }
 }
@@ -145,9 +155,16 @@ mod tests {
         p2.set_side(1);
 
         assert_eq!(manager.get_point(Some(1)).side(), 1);
-        assert!(Arc::ptr_eq(manager.get_point(Some(1)), &p2));
+        assert!(Arc::ptr_eq(&manager.get_point(Some(1)), &p2));
 
         assert_eq!(manager.get_point(Some(2)).side(), 2);
-        assert!(Arc::ptr_eq(manager.get_point(Some(2)), &p1));
+        assert!(Arc::ptr_eq(&manager.get_point(Some(2)), &p1));
+
+        // Test dynamic attach
+        let manager_dyn = StationManager::new(p1.clone(), None);
+        assert!(!manager_dyn.is_dual());
+        manager_dyn.attach_point2(p2.clone());
+        assert!(manager_dyn.is_dual());
+        assert_eq!(manager_dyn.available_points(), vec![1, 2]);
     }
 }

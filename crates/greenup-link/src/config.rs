@@ -24,12 +24,15 @@ bind = "0.0.0.0:8080"
 api_token = ""
 
 [serial]
-# Serial port connected to the charging station microcontroller (Point 1 / Right).
-# Default: "/dev/ttyUSB0"
-port = "/dev/ttyUSB0"
+# Dual charge point mode:
+# - "auto"  : Automatically detects 1 or 2 charge points based on the station hardware reference (Default)
+# - "true"  : Force 2 charge points mode
+# - "false" : Force 1 charge point mode
+dual_point = "auto"
 
-# Optional second serial port for dual-socket charging stations (Point 2 / Left).
-# If commented or unset, Green'Up Link runs in single-point mode.
+# Optional serial port(s) to bind.
+# If omitted or left empty, Green'Up Link automatically discovers available USB serial ports.
+# port = "/dev/ttyUSB0"
 # port2 = "/dev/ttyUSB1"
 
 # Baud rate for communication with the ATmega2560 board.
@@ -56,9 +59,34 @@ impl Default for HttpConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DualPointMode {
+    Auto,
+    True,
+    False,
+}
+
+impl Default for DualPointMode {
+    fn default() -> Self {
+        DualPointMode::Auto
+    }
+}
+
+impl DualPointMode {
+    #[allow(dead_code)]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DualPointMode::Auto => "auto",
+            DualPointMode::True => "true",
+            DualPointMode::False => "false",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SerialConfig {
-    pub port: String,
+    pub dual_point: DualPointMode,
+    pub port: Option<String>,
     pub port2: Option<String>,
     pub baud_rate: u32,
     pub watchdog_timeout_secs: u64,
@@ -67,7 +95,8 @@ pub struct SerialConfig {
 impl Default for SerialConfig {
     fn default() -> Self {
         Self {
-            port: "/dev/ttyUSB0".to_string(),
+            dual_point: DualPointMode::Auto,
+            port: None,
             port2: None,
             baud_rate: 115_200,
             watchdog_timeout_secs: 6,
@@ -141,16 +170,24 @@ impl AppConfig {
             }
         }
 
+        if let Ok(env_dp) = env::var("GREENUP_DUAL_POINT") {
+            match env_dp.trim().to_lowercase().as_str() {
+                "true" | "1" | "yes" => config.serial.dual_point = DualPointMode::True,
+                "false" | "0" | "no" => config.serial.dual_point = DualPointMode::False,
+                _ => config.serial.dual_point = DualPointMode::Auto,
+            }
+        }
+
         if let Ok(env_port) = env::var("GREENUP_SERIAL_PORT") {
             let trimmed = env_port.trim();
-            if !trimmed.is_empty() {
-                config.serial.port = trimmed.to_string();
+            if !trimmed.is_empty() && trimmed != "auto" {
+                config.serial.port = Some(trimmed.to_string());
             }
         }
 
         if let Ok(env_port2) = env::var("GREENUP_SERIAL_PORT2") {
             let trimmed = env_port2.trim();
-            if !trimmed.is_empty() {
+            if !trimmed.is_empty() && trimmed != "auto" {
                 config.serial.port2 = Some(trimmed.to_string());
             }
         }
@@ -197,14 +234,24 @@ impl AppConfig {
                     }
                 } else if current_section == "serial" {
                     match key.as_str() {
+                        "dual_point" => {
+                            match val.trim().to_lowercase().as_str() {
+                                "true" | "1" | "yes" => config.serial.dual_point = DualPointMode::True,
+                                "false" | "0" | "no" => config.serial.dual_point = DualPointMode::False,
+                                _ => config.serial.dual_point = DualPointMode::Auto,
+                            }
+                        }
                         "port" => {
-                            if !val.is_empty() {
-                                config.serial.port = val;
+                            let trimmed = val.trim();
+                            if trimmed.is_empty() || trimmed == "auto" {
+                                config.serial.port = None;
+                            } else {
+                                config.serial.port = Some(trimmed.to_string());
                             }
                         }
                         "port2" => {
                             let trimmed = val.trim();
-                            if trimmed.is_empty() {
+                            if trimmed.is_empty() || trimmed == "auto" {
                                 config.serial.port2 = None;
                             } else {
                                 config.serial.port2 = Some(trimmed.to_string());
@@ -305,11 +352,22 @@ mod tests {
     fn test_dual_port_config_parsing() {
         let toml = r#"
         [serial]
+        dual_point = "true"
         port = "/dev/ttyUSB0"
         port2 = "/dev/ttyUSB1"
         "#;
         let cfg = AppConfig::parse_toml(toml);
-        assert_eq!(cfg.serial.port, "/dev/ttyUSB0");
+        assert_eq!(cfg.serial.dual_point, DualPointMode::True);
+        assert_eq!(cfg.serial.port.as_deref(), Some("/dev/ttyUSB0"));
         assert_eq!(cfg.serial.port2.as_deref(), Some("/dev/ttyUSB1"));
+
+        let toml_auto = r#"
+        [serial]
+        dual_point = "auto"
+        "#;
+        let cfg_auto = AppConfig::parse_toml(toml_auto);
+        assert_eq!(cfg_auto.serial.dual_point, DualPointMode::Auto);
+        assert_eq!(cfg_auto.serial.port, None);
+        assert_eq!(cfg_auto.serial.port2, None);
     }
 }
