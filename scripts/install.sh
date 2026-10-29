@@ -411,14 +411,13 @@ else
     if [ "$IS_INTERACTIVE" = true ]; then
         echo ""
         echo "--------------------------------------------------------"
-        echo "  🔒 Sécurité & Authentification / Security & Access"
+        echo "  🔒 Security & Access Authentication"
         echo "--------------------------------------------------------"
-        echo "  Green'Up Link peut sécuriser l'interface Web et l'API REST avec un API Token."
-        echo "  (Green'Up Link can protect its Web GUI and REST API with an API Token.)"
-        echo "  - Oui [O/Y] : Génère un token aléatoire fort (recommandé)."
-        echo "  - Non [n/N] : Accès ouvert sans mot de passe sur le réseau local."
+        echo "  Green'Up Link can protect its Web GUI and REST API with an API Token."
+        echo "  - Yes [Y]: Generate a cryptographically strong random token (recommended)."
+        echo "  - No  [n]: Open LAN mode (no password required on trusted network)."
         echo ""
-        PROMPT_TEXT="  Générer un token aléatoire sécurisé ? / Generate random token? [O/n / Y/n] (défaut: O): "
+        PROMPT_TEXT="  Generate a secure random API token? [Y/n] (default: Y): "
         REPLY_TOKEN=""
         if [ -t 0 ]; then
             read -r -p "$PROMPT_TEXT" REPLY_TOKEN
@@ -429,13 +428,13 @@ else
         fi
 
         case "$REPLY_TOKEN" in
-            [nN]|[nN][oO]|[nN][oO][nN])
+            [nN]|[nN][oO])
                 TOKEN_SET=""
-                echo "  -> Accès libre (aucun token configuré)."
+                echo "  -> Open LAN mode (no API token configured)."
                 ;;
             *)
                 TOKEN_SET=$(generate_random_token)
-                echo "  -> 🔑 Token aléatoire généré : $TOKEN_SET"
+                echo "  -> 🔑 Generated random API token: $TOKEN_SET"
                 ;;
         esac
         DO_SET_TOKEN=true
