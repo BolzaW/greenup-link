@@ -23,7 +23,7 @@ Il communique avec la carte de puissance de la borne via un câble USB interne e
 - Une **interface Web locale** épurée et réactive avec visualiseur animé, contrôle de charge (7A à 32A), statut Linky TIC et console live intégrée (flux de logs temps réel SSE).
 - Une **API REST** complète et documentée, idéale pour l'intégration domotique (Home Assistant, Jeedom, Node-RED, etc.).
 - Une **gestion complète des logs** avec fichiers journaliers tournants (`greenup_YYYY-MM-DD.log`), rétention automatique de 7 jours et modification à chaud des niveaux (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
-- Le **support des bornes à double point de charge** avec auto-détection dynamique du second port USB et contrôle indépendant des deux côtés (voir la [Matrice de compatibilité matériel](docs/COMPATIBLE_HARDWARE.md)).
+- Le **support expérimental des bornes à double point de charge** avec auto-détection dynamique du second port USB et contrôle indépendant des deux côtés (*théorique, non testé sur matériel réel* — voir la [Matrice de compatibilité matériel](docs/COMPATIBLE_HARDWARE.md)).
 - Une compatibilité totale avec **EVCC** pour la charge solaire dynamique monosite ou multisite (voir le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md)).
 
 *(Expérimental / Démonstrateur)* : Un module `greenup-everest` autonome est également proposé à titre de démonstrateur expérimental pour interfacer la borne avec le framework open-source EVerest via MQTT (il ne constitue pas le cœur du projet ; voir également le projet [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
@@ -45,6 +45,7 @@ De plus, la pile logicielle d'origine Legrand (exécutant des versions obsolète
 Le projet est en évolution continue :
 - **Périmètre du logiciel** : Green'Up Link ne remplace que le kit de communication (la couche logicielle exécutée sur le Raspberry Pi). La borne conserve l'intégralité de son intelligence native, de ses sécurités électriques et de son fonctionnement autonome via sa carte de puissance interne ATmega2560.
 - **Matériel testé** : Je ne peux tester et valider le logiciel que sur mon propre matériel : référence **058001** (1 prise Type 2, 7.4 kW monophasé, sans prise domestique).
+- **Bornes à double point de charge** : L'architecture logicielle complète (double worker série, détection dynamique, routage Side?, sessions séparées) a été implémentée d'après les spécifications Java Legrand rétro-ingéniérées. Ne possédant pas de borne 2 points de charge, cette fonctionnalité n'a pas pu être testée sur du matériel réel et reste donc **théorique** (avis aux testeurs !).
 - **Compatibilité Type 2** : Toutes les bornes de la gamme Green'up Premium devraient fonctionner de manière nominale sur leur prise Type 2.
 - **Prise domestique (Schuko) et Triphasé** : Non prises en charge pour l'instant (manque de connaissances, de logs de communication série et de matériel de test pour investiguer ces configurations).
 - **Charge directe uniquement** : Pas de gestion de plages horaires intégrées (confiez la programmation horaire à Home Assistant ou EVCC).

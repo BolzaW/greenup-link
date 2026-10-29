@@ -8,17 +8,18 @@ This document provides an exhaustive compatibility reference for the Legrand Gre
 
 | Level | Description |
 | :--- | :--- |
-| 🟢 **Full remote control** | Fully supported and controllable via Green'Up Link (Type 2 socket(s), single-phase, no domestic socket). |
-| 🟡 **Partial remote control** | Partial support. The Type 2 socket(s) are fully controllable (including both independent sides on dual-point stations), but domestic Schuko sockets are unmanaged (physical contactor only, no software power metering or current modulation). |
+| 🟢 **Full remote control** | Fully supported, tested, and validated on real hardware (Single-phase, 1x Type 2 socket, no domestic socket). |
+| 🟡 **Partial remote control** | Partial support. The Type 2 socket is controllable, but domestic Schuko sockets are unmanaged (physical contactor only, no software power metering or current modulation). |
+| 🧪 **Theoretical support (Untested)** | Architecture implemented in software based on reverse engineering of Legrand's official Java sources, but **not physically tested on real hardware** (dual-point charging stations). The author does not own this equipment. Real-world tester feedback is warmly welcome! |
 | 🔴 **None** | Not supported (Three-phase models). While in theory the ATmega might respond to common serial commands, three-phase power regulation, phase allocation, and safety parameters are completely unverified. |
 
 > [!WARNING]
-> **Theoretical compatibility vs real-world validation:**
-> In theory, all Legrand Green'up Premium stations share the same internal ATmega2560 microcontroller family and common ASCII communication protocol over USB. Therefore, even three-phase stations *might* technically respond to basic commands.
+> **Real-World Validation vs Theoretical Support:**
+> - **Physically tested & fully validated:** Model **0 580 01** (Single-point, single-phase, 7.4 kW without domestic socket — author's hardware).
+> - **Theoretical implementation (Untested on real hardware):** Dual-point charging stations (2x Type 2) have been fully coded in software according to the decompiled Legrand Java sources and internal dual-USB architecture. However, **the author does not possess a dual-point wallbox and cannot physically test them**. This feature is therefore considered **theoretical and experimental until verified by a community tester**.
+> - **Unverified / Unsupported:** Three-phase stations (11–22 kW) and domestic Schuko contactors.
 > 
-> However, **Green'Up Link was physically tested and validated on model 0 580 01 (single-point, single-phase, 7.4 kW)**. While single-phase dual-point support is implemented according to Legrand's decompiled Java firmware specifications and USB protocol reverse-engineering, three-phase power regulation, phase balancing, or domestic Schuko contactors are currently unverified.
-> 
-> If you own one of these models and would like to help test or capture communication logs, please see the [Call for Testers](../README.md#call-for-testers--contributions) section!
+> If you own a dual-point station or an untested model, we would love your help to test and share serial logs! Please see the [Call for Testers](../README.md#call-for-testers--contributions) section.
 
 ---
 
@@ -74,25 +75,24 @@ This document provides an exhaustive compatibility reference for the Legrand Gre
 
 ### 4. Metal Pro Wallbox Range — Dual Charge Points (2 Points, Dual ATmega)
 
-> [!NOTE]
+> [!IMPORTANT]
+> **Theoretical Implementation — Call for Real-Hardware Testers:**
 > In official Legrand firmware architecture, dual-point stations are equipped with **two independent ATmega2560 microcontroller boards** connected to the Raspberry Pi over two separate internal USB links.
 > 
-> Green'Up Link provides full multi-loadpoint support with:
-> - Automatic hardware reference detection (`dual_point = "auto"`).
-> - Dynamic serial port candidate discovery.
-> - Automatic side identification (`Side:49` = Right / Point 1, `Side:48`/`Side:50` = Left / Point 2).
-> - Independent telemetry, state machine, current control, and session logging for each point.
+> Green'Up Link provides full software support (dual serial workers, automatic USB discovery, dynamic side assignment `Side?`, isolated session recording, and EVCC dual loadpoints).
+> 
+> However, **the author does not own a dual-point station and cannot physically test this feature**. It is therefore presented as **theoretical and experimental**. If you own one of these stations, we would be delighted to receive your feedback and logs!
 
 | Model Name | Legrand Reference | Min Power | Max Power | Electrical Grid | T2 Sockets | Schuko Sockets | Green'Up Link Compatibility | Details / Limitations |
 | :--- | :--- | :--- | :--- | :--- | :---: | :---: | :--- | :--- |
-| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko | **0 580 11** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | 🟡 **Partial remote control** | Both T2 points fully supported via dual-serial workers; Schukos not managed |
-| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko EV | **0 580 42** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | 🟡 **Partial remote control** | Both T2 points fully supported via dual-serial workers; Schukos not managed |
-| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko with kit | **0 590 11** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | 🟡 **Partial remote control** | Both T2 points fully supported via dual-serial workers; Schukos not managed |
-| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko EV with kit | **0 590 42** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | 🟡 **Partial remote control** | Both T2 points fully supported via dual-serial workers; Schukos not managed |
-| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko | **0 580 13** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | 🟡 **Partial remote control** | Both T2 points fully supported via dual-serial workers; Schukos not managed |
-| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko EV | **0 580 44** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | 🟡 **Partial remote control** | Both T2 points fully supported via dual-serial workers; Schukos not managed |
-| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko with kit | **0 590 13** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | 🟡 **Partial remote control** | Both T2 points fully supported via dual-serial workers; Schukos not managed |
-| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko EV with kit | **0 590 44** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | 🟡 **Partial remote control** | Both T2 points fully supported via dual-serial workers; Schukos not managed |
+| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko | **0 580 11** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed |
+| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko EV | **0 580 42** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed |
+| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko with kit | **0 590 11** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed |
+| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko EV with kit | **0 590 42** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed |
+| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko | **0 580 13** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed |
+| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko EV | **0 580 44** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed |
+| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko with kit | **0 590 13** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed |
+| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko EV with kit | **0 590 44** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed |
 | Green’up Premium metal 11–22 kW 2 pts T2 + schuko | **0 580 15** | 11 kW | 22 kW | Three-phase | 2 | 2 | 🔴 **None** | Three-phase (untested, uncertain behavior) |
 | Green’up Premium metal 11–22 kW 2 pts T2 + schuko EV | **0 580 49** | 11 kW | 22 kW | Three-phase | 2 | 2 | 🔴 **None** | Three-phase (untested, uncertain behavior) |
 | Green’up Premium metal 11–22 kW 2 pts T2 + schuko with kit | **0 590 15** | 11 kW | 22 kW | Three-phase | 2 | 2 | 🔴 **None** | Three-phase (untested, uncertain behavior) |

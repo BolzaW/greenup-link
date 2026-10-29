@@ -23,7 +23,7 @@ It communicates with the charging station's power board via an internal USB cabl
 - A clean, responsive **local Web GUI** with live visualizer, charging controls (7A–32A), Linky TIC status, and an integrated real-time debug console (SSE log streaming).
 - A comprehensive and documented **REST API**, perfect for home automation integration (Home Assistant, Jeedom, Node-RED, etc.).
 - Complete **log management** with daily rolling files (`greenup_YYYY-MM-DD.log`), 7-day automatic retention, and hot-reloadable log levels (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
-- **Dual charge point support** with automatic USB discovery, dynamic serial workers, and independent loadpoint controls (see the [Hardware Compatibility Matrix](docs/COMPATIBLE_HARDWARE.md)).
+- **Experimental dual charge point support** with automatic USB discovery, dynamic serial workers, and independent loadpoint controls (*theoretical, untested on real hardware* — see [Hardware Compatibility Matrix](docs/COMPATIBLE_HARDWARE.md)).
 - Full compatibility with **EVCC** for single or multi-loadpoint solar smart charging (see the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md)).
 
 *(Experimental / PoC)*: A standalone `greenup-everest` module is included as an experimental proof of concept to interface with the open-source EVerest framework via MQTT (not the core focus of this project; see also [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
@@ -45,6 +45,7 @@ Moreover, the official Legrand software stack (running outdated versions of Apac
 This project is actively in development:
 - **Scope of the software**: Green'Up Link only replaces the communication kit (software layer running on the Raspberry Pi). The charging station retains all of its native intelligence, electrical protections, and autonomous operation via its internal ATmega2560 power board.
 - **Tested hardware**: I can only test and validate on my own hardware: reference **058001** (single Type 2 socket, 7.4 kW single-phase, without domestic socket).
+- **Dual charge point stations**: The full software architecture (dual serial workers, dynamic discovery, Side? routing, separate sessions) is implemented based on the reverse-engineered Legrand Java specifications. As the author does not own a dual-point wallbox, this feature has not been physically validated on real hardware and remains **theoretical** (call for testers!).
 - **Type 2 compatibility**: All Green'up Premium stations should nominally work with their Type 2 socket.
 - **Domestic socket (Schuko) & Three-phase**: Not supported at this stage due to a lack of knowledge, captured serial communication logs, and test hardware to investigate these configurations.
 - **Direct charging only**: No support for schedules / onboard time programming (use Home Assistant or EVCC to schedule charges instead).
