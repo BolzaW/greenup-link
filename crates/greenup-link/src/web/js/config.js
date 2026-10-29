@@ -295,7 +295,12 @@ async function handleSerialReset() {
     }
 }
 
+let configDomListenersAttached = false;
+
 function initConfig() {
+    if (configDomListenersAttached) return;
+    configDomListenersAttached = true;
+
     const btnTic = document.getElementById('btnRefreshTicConfig');
     if (btnTic) btnTic.addEventListener('click', refreshTicFromConfig);
 

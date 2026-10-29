@@ -702,41 +702,46 @@ async function handleDeleteSessionClick() {
 // INITIALIZATION
 // ==============================================================================
 
+let sessionsDomListenersAttached = false;
+
 function initSessions() {
-    // Navigation Tabs Listeners
-    const tabBoard = document.getElementById('tabBoard');
-    const tabSessions = document.getElementById('tabSessions');
-    const tabConsole = document.getElementById('tabConsole');
-    const tabSystem = document.getElementById('tabSystem') || document.getElementById('tabConfig');
+    if (!sessionsDomListenersAttached) {
+        sessionsDomListenersAttached = true;
+        // Navigation Tabs Listeners
+        const tabBoard = document.getElementById('tabBoard');
+        const tabSessions = document.getElementById('tabSessions');
+        const tabConsole = document.getElementById('tabConsole');
+        const tabSystem = document.getElementById('tabSystem') || document.getElementById('tabConfig');
 
-    if (tabBoard) tabBoard.addEventListener('click', () => switchMainTab('board'));
-    if (tabSessions) tabSessions.addEventListener('click', () => switchMainTab('sessions'));
-    if (tabConsole) tabConsole.addEventListener('click', () => switchMainTab('console'));
-    if (tabSystem) tabSystem.addEventListener('click', () => switchMainTab('system'));
+        if (tabBoard) tabBoard.addEventListener('click', () => switchMainTab('board'));
+        if (tabSessions) tabSessions.addEventListener('click', () => switchMainTab('sessions'));
+        if (tabConsole) tabConsole.addEventListener('click', () => switchMainTab('console'));
+        if (tabSystem) tabSystem.addEventListener('click', () => switchMainTab('system'));
 
-    // Dropdown change listener
-    const select = document.getElementById('sessionSelect');
-    if (select) {
-        select.addEventListener('change', (e) => {
-            onSessionSelected(e.target.value);
+        // Dropdown change listener
+        const select = document.getElementById('sessionSelect');
+        if (select) {
+            select.addEventListener('change', (e) => {
+                onSessionSelected(e.target.value);
+            });
+        }
+
+        // Action buttons listeners
+        const btnZip = document.getElementById('btnSessionDownloadZip');
+        if (btnZip) btnZip.addEventListener('click', downloadSelectedSessionZip);
+
+        const btnDel = document.getElementById('btnSessionDelete');
+        if (btnDel) btnDel.addEventListener('click', handleDeleteSessionClick);
+
+        // Chart interactions & resize
+        setupChartInteractions();
+        window.addEventListener('resize', () => {
+            const sessionsPanel = document.getElementById('sessionsPanel');
+            if (sessionsPanel && !sessionsPanel.classList.contains('hidden')) {
+                resizeAndRedrawChart();
+            }
         });
     }
-
-    // Action buttons listeners
-    const btnZip = document.getElementById('btnSessionDownloadZip');
-    if (btnZip) btnZip.addEventListener('click', downloadSelectedSessionZip);
-
-    const btnDel = document.getElementById('btnSessionDelete');
-    if (btnDel) btnDel.addEventListener('click', handleDeleteSessionClick);
-
-    // Chart interactions & resize
-    setupChartInteractions();
-    window.addEventListener('resize', () => {
-        const sessionsPanel = document.getElementById('sessionsPanel');
-        if (sessionsPanel && !sessionsPanel.classList.contains('hidden')) {
-            resizeAndRedrawChart();
-        }
-    });
 
     // Check stored active tab
     const savedTab = localStorage.getItem('greenup_active_tab') || 'board';

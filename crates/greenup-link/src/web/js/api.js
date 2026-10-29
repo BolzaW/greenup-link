@@ -8,6 +8,8 @@ window.currentSide = 1;
 window.boardInfoComplete = false;
 window.lastTelemetry = null;
 let consoleInitialized = false;
+let sessionsInitialized = false;
+let configInitialized = false;
 let telemetryTimer = null;
 let isOfflineReconnecting = false;
 let offlineProbeTimer = null;
@@ -334,20 +336,13 @@ async function onAuthenticatedStart() {
         consoleInitialized = true;
         initConsole();
     }
-    if (typeof initSessions === 'function') {
+    if (!sessionsInitialized && typeof initSessions === 'function') {
+        sessionsInitialized = true;
         initSessions();
     }
-    if (typeof initConfig === 'function') {
+    if (!configInitialized && typeof initConfig === 'function') {
+        configInitialized = true;
         initConfig();
-    }
-
-    const activeTab = localStorage.getItem('greenup_active_tab') || 'board';
-    if (activeTab === 'system' && typeof loadConfigData === 'function') {
-        loadConfigData();
-    } else if (activeTab === 'sessions' && typeof loadSessionsData === 'function') {
-        loadSessionsData(true);
-    } else if (activeTab === 'console' && typeof startLogStream === 'function') {
-        startLogStream();
     }
 }
 
