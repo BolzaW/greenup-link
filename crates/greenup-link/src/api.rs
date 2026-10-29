@@ -20,7 +20,9 @@ use greenup_driver::serial::TicStartError;
 use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
 
 use std::sync::Arc;
-use axum::http::header::{HeaderValue, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
+use axum::http::header::{
+    HeaderValue, CACHE_CONTROL, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
+};
 use crate::auth::{self, SharedApiToken};
 
 /// Axum middleware appending standard defensive HTTP security headers to all responses.
@@ -30,6 +32,10 @@ async fn security_headers_middleware(req: Request, next: Next) -> Response {
     headers.insert(X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
     headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    headers.insert(
+        CACHE_CONTROL,
+        HeaderValue::from_static("no-cache, must-revalidate"),
+    );
     response
 }
 

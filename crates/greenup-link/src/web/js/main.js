@@ -1,12 +1,15 @@
-// Entry point: language initialization, authentication check, and telemetry polling loop.
+// Entry point: language initialization, authentication check, and lifecycle start.
 
 const savedLang = localStorage.getItem('prefLang') || (navigator.language.startsWith('fr') ? 'fr' : 'en');
-document.getElementById('langSelector').value = savedLang;
+const langSelector = document.getElementById('langSelector');
+if (langSelector) langSelector.value = savedLang;
 
 setupAuthModalListeners();
 
-setLanguage(savedLang).then(() => {
-    checkAuthAndStart();
+// Initialize i18n and check authentication status concurrently
+Promise.all([
+    setLanguage(savedLang),
+    checkAuthAndStart()
+]).catch(err => {
+    console.error('Initialization error:', err);
 });
-
-setInterval(fetchTelemetry, 2000);

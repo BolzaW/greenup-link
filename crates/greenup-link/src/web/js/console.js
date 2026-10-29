@@ -21,7 +21,7 @@ const LOG_LEVEL_SEVERITY = {
 };
 
 async function syncLogLevelFromServer() {
-    if (window.isAuthRequired && !window.isAuthenticated) return;
+    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
     try {
         const res = await apiFetch('/api/logs/level');
         if (res.ok) {
@@ -68,7 +68,7 @@ function setDebugMode(enabled) {
 
 function startLogStream() {
     if (logEventSource) return;
-    if (window.isAuthRequired && !window.isAuthenticated) return;
+    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
 
     apiFetch('/api/logs')
         .then(res => res.ok ? res.json() : [])
@@ -86,7 +86,7 @@ function startLogStream() {
 }
 
 function connectSse() {
-    if (window.isAuthRequired && !window.isAuthenticated) return;
+    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
     try {
         logEventSource = new EventSource(buildAuthUrl('/api/logs/stream'));
         logEventSource.onmessage = function(event) {

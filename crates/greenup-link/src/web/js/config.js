@@ -71,6 +71,12 @@ async function saveClientToken() {
                 feedback.className = 'text-[11px] font-medium text-emerald-400 min-h-[16px] mt-1 pl-1';
             }
             if (typeof hideAuthModal === 'function') hideAuthModal();
+            if (typeof onAuthenticatedStart === 'function') {
+                await onAuthenticatedStart();
+            }
+            if (typeof loadConfigData === 'function') {
+                await loadConfigData();
+            }
         } else {
             if (feedback) {
                 feedback.innerText = (typeof t === 'function' ? t('system.token_saved_local') : 'Clé enregistrée localement') || 'Clé enregistrée localement';
@@ -101,6 +107,9 @@ async function clearClientToken() {
     if (typeof setApiToken === 'function') {
         setApiToken('');
     }
+    if (typeof stopTelemetryPolling === 'function') {
+        stopTelemetryPolling();
+    }
 
     try {
         const res = await fetch('/api/auth/status');
@@ -120,7 +129,7 @@ async function clearClientToken() {
 }
 
 async function loadConfigData() {
-    if (window.isAuthRequired && !window.isAuthenticated) return;
+    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
 
     try {
         // Sync hardware / BLE state from /api/info

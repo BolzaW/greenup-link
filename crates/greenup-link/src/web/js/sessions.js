@@ -97,7 +97,7 @@ function switchMainTab(tabName) {
 // ==============================================================================
 
 async function loadSessionsData(isDefaultSelectionRequested = false) {
-    if (window.isAuthRequired && !window.isAuthenticated) return;
+    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
 
     try {
         const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
