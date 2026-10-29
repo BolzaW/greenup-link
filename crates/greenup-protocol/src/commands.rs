@@ -326,14 +326,9 @@ impl Command {
     }
 
     /// Determines whether this command expects an acknowledgment from the power board.
+    /// Note: Raw commands are non-blocking debug tools and never expect an explicit acknowledgment.
     pub fn expects_response(&self) -> bool {
-        match self {
-            Command::Raw(raw) => {
-                let trimmed = raw.trim();
-                trimmed == "ping" || trimmed.ends_with('?')
-            }
-            _ => self.expected_rx_prefix().is_some(),
-        }
+        self.expected_rx_prefix().is_some()
     }
 
     /// Checks if a received line from the serial port acknowledges this command.
@@ -341,7 +336,6 @@ impl Command {
     /// Special cases:
     /// - `SBOK` (`Command::SetStartButton(true)`): normally acknowledged by `SB:`, but when the
     ///   charging station is in `State:A` with no vehicle connected, the ATmega returns `SBF:0`.
-    /// - `Raw`: raw commands ending in `?` expect a response starting with prefix `<base>:`.
     pub fn matches_response(&self, rx_line: &str) -> bool {
         match self {
             Command::Ping => {
@@ -350,16 +344,6 @@ impl Command {
             }
             Command::SetStartButton(true) => {
                 rx_line.starts_with("SB:") || rx_line.starts_with("SBF:")
-            }
-            Command::Raw(raw) => {
-                let trimmed = raw.trim();
-                if trimmed == "ping" {
-                    rx_line.trim().starts_with("pong")
-                } else if let Some(base) = trimmed.strip_suffix('?') {
-                    rx_line.starts_with(&format!("{}:", base))
-                } else {
-                    false
-                }
             }
             _ => {
                 if let Some(prefix) = self.expected_rx_prefix() {
@@ -486,18 +470,15 @@ mod tests {
     }
 
     #[test]
-    fn raw_query_expects_and_matches_response() {
+    fn raw_commands_are_non_blocking_for_debug() {
         let raw_query = Command::Raw("CC?".into());
-        assert!(raw_query.expects_response());
-        assert!(raw_query.matches_response("CC:23"));
-        assert!(!raw_query.matches_response("State:A"));
+        assert!(!raw_query.expects_response());
+        assert!(!raw_query.matches_response("CC:23"));
 
         let raw_ping = Command::Raw("ping".into());
-        assert!(raw_ping.expects_response());
-        assert!(raw_ping.matches_response("pong"));
-        assert!(!raw_ping.matches_response("ping"));
+        assert!(!raw_ping.expects_response());
 
-        let raw_setter = Command::Raw("CCEl:16".into());
-        assert!(!raw_setter.expects_response());
+        let raw_debug = Command::Raw("CUSTOM_DEBUG_FRAME".into());
+        assert!(!raw_debug.expects_response());
     }
 }
