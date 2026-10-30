@@ -1124,13 +1124,7 @@
 }
 
 #visualizerGrid.no-tic #cableLabel {
-    left: -14px !important;
-}
-
-@media (min-width: 768px) {
-    #visualizerGrid.no-tic #cableLabel {
-        left: -20px !important;
-    }
+    left: 0px !important;
 }
 
 #visualizerGrid.no-tic #cellCar {
