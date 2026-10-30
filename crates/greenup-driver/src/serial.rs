@@ -36,12 +36,15 @@ const TICTM_MAX_ZEROS: u32 = 5;
 
 pub async fn trigger_init_sequence(state: &SharedState) {
     let _ = state.serial_tx.send(Command::RaspberryPiModeOk).await;
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
     for cmd in Command::startup_queries() {
         let _ = state.serial_tx.send(cmd).await;
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        tokio::time::sleep(Duration::from_millis(30)).await;
     }
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let _ = start_tic_detection(state).await;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -54,15 +57,10 @@ pub enum TicStartError {
     Serial,
 }
 
-/// Starts TIC detection (`TICTM:1`), ONLY if the hardware model supports TIC and the Legrand state is `A`.
-///
-/// Centralized safeguards:
-/// 1. Reject if the wallbox model does not physically support TIC (`has_tic == false`).
-/// 2. If the charging station is not in `State:A`, the function does absolutely nothing
-///    (no frame sent, no state modified).
-/// 
-/// The driver then takes care of sending `TICTM:0` at the end of the detection.
-pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartError> {
+/// Checks whether the charging station is currently eligible for TIC detection:
+/// 1. The hardware reference must physically support TIC (`c.is_known && c.has_tic == true`).
+/// 2. The Legrand operating state must be `State:A` (Available / Free).
+pub fn check_tic_eligibility(state: &SharedState) -> Result<(), TicStartError> {
     // 1. Hardware capability check: Reject if model is unknown or has no TIC input (assume minimum features)
     let has_tic = match state.info.lock() {
         Ok(info) => info.capabilities.as_ref().map(|c| c.is_known && c.has_tic).unwrap_or(false),
@@ -70,7 +68,6 @@ pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartErro
     };
 
     if !has_tic {
-        logger::log("SERIAL", "⛔ TIC detection rejected: charging station hardware does not support TIC");
         return Err(TicStartError::NotSupported);
     }
 
@@ -81,10 +78,35 @@ pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartErro
     };
 
     if current_state != "A" {
-        logger::log("SERIAL", &format!("⛔ TIC detection ignored: charging station not free (State: {})", current_state));
         return Err(TicStartError::NotInStateA(current_state));
     }
 
+    Ok(())
+}
+
+/// Starts TIC detection (`TICTM:1`), ONLY if the hardware model supports TIC and the Legrand state is `A`.
+///
+/// Centralized safeguards:
+/// 1. Reject if the wallbox model does not physically support TIC (`has_tic == false`).
+/// 2. If the charging station is not in `State:A`, the function does absolutely nothing
+///    (no frame sent, no state modified).
+/// 
+/// The driver then takes care of sending `TICTM:0` at the end of the detection.
+pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartError> {
+    match check_tic_eligibility(state) {
+        Ok(()) => {}
+        Err(TicStartError::NotSupported) => {
+            logger::log("SERIAL", "⛔ TIC detection rejected: charging station hardware does not support TIC");
+            return Err(TicStartError::NotSupported);
+        }
+        Err(TicStartError::NotInStateA(ref current_state)) => {
+            logger::log("SERIAL", &format!("⛔ TIC detection ignored: charging station not free (State: {})", current_state));
+            return Err(TicStartError::NotInStateA(current_state.clone()));
+        }
+        Err(e) => return Err(e),
+    }
+
+    logger::log("SERIAL", "🚀 Starting TIC detection (TICTM:1)");
     if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
     if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "detecting".to_string(); }
     state
@@ -163,6 +185,38 @@ pub fn send_command_sync(
     success
 }
 
+/// Helper called synchronously after the startup queries to automatically initialize TIC detection
+/// if the station model supports TIC and the station is in State:A.
+pub fn maybe_start_startup_tic_detection_sync(
+    port: &mut Box<dyn serialport::SerialPort>,
+    state: &SharedState,
+    internal_rx: &std::sync::mpsc::Receiver<String>,
+    is_running: &AtomicBool,
+) -> bool {
+    match check_tic_eligibility(state) {
+        Ok(()) => {
+            logger::log("SERIAL", "🚀 Starting automatic TIC detection after init sequence (Hardware compatible & State:A)");
+            if let Ok(mut tic) = state.tic_detection.lock() {
+                tic.is_active = true;
+                tic.zero_count = 0;
+            }
+            if let Ok(mut tel) = state.telemetry.lock() {
+                tel.tic_mode = "detecting".to_string();
+            }
+            send_command_sync(port, state, internal_rx, is_running, Command::SetTicTestMode(true))
+        }
+        Err(TicStartError::NotSupported) => {
+            logger::log("SERIAL", "ℹ️ Skipping automatic TIC detection: hardware model does not support TIC");
+            false
+        }
+        Err(TicStartError::NotInStateA(ref current_state)) => {
+            logger::log("SERIAL", &format!("ℹ️ Skipping automatic TIC detection: charging station not free (State: {})", current_state));
+            false
+        }
+        Err(_) => false,
+    }
+}
+
 pub fn send_init_sequence_sync(
     port: &mut Box<dyn serialport::SerialPort>,
     state: &SharedState,
@@ -178,6 +232,10 @@ pub fn send_init_sequence_sync(
         }
         send_command_sync(port, state, internal_rx, is_running, cmd);
         std::thread::sleep(Duration::from_millis(30));
+    }
+
+    if is_running.load(Ordering::Relaxed) {
+        maybe_start_startup_tic_detection_sync(port, state, internal_rx, is_running);
     }
 }
 
@@ -972,6 +1030,120 @@ mod tests {
     fn test_determine_rx_log_category_ping_pong_trace() {
         assert_eq!(determine_rx_log_category("pong"), "TRACE");
         assert_eq!(determine_rx_log_category("ping"), "SERIAL_RX");
+    }
+
+    #[tokio::test]
+    async fn test_check_tic_eligibility() {
+        use std::sync::Arc;
+        use tokio::sync::mpsc;
+        use crate::state::AppState;
+        use crate::hardware_specs::HardwareCapabilities;
+
+        let (tx, _rx) = mpsc::channel(10);
+        let state = Arc::new(AppState::new(tx));
+
+        // 1. Without capabilities set (None) -> NotSupported
+        assert_eq!(check_tic_eligibility(&state), Err(TicStartError::NotSupported));
+
+        // 2. Hardware without TIC (058030) -> NotSupported
+        {
+            let mut info = state.info.lock().unwrap();
+            info.capabilities = Some(HardwareCapabilities::from_reference("058030"));
+        }
+        assert_eq!(check_tic_eligibility(&state), Err(TicStartError::NotSupported));
+
+        // 3. Hardware with TIC (058001), but state is not "A" (e.g. "B") -> NotInStateA
+        {
+            let mut info = state.info.lock().unwrap();
+            info.capabilities = Some(HardwareCapabilities::from_reference("058001"));
+        }
+        {
+            let mut tel = state.telemetry.lock().unwrap();
+            tel.greenup_state = "B".to_string();
+        }
+        assert_eq!(check_tic_eligibility(&state), Err(TicStartError::NotInStateA("B".to_string())));
+
+        // 4. Hardware with TIC (058001) and state "A" -> Ok(())
+        {
+            let mut tel = state.telemetry.lock().unwrap();
+            tel.greenup_state = "A".to_string();
+        }
+        assert_eq!(check_tic_eligibility(&state), Ok(()));
+    }
+
+    #[tokio::test]
+    async fn test_trigger_init_sequence_auto_tic() {
+        use std::sync::Arc;
+        use tokio::sync::mpsc;
+        use crate::state::AppState;
+        use crate::hardware_specs::HardwareCapabilities;
+
+        // Case 1: Eligible station (TIC model 058001 and State A)
+        let (tx, mut rx) = mpsc::channel(50);
+        let state = Arc::new(AppState::new(tx));
+        {
+            let mut info = state.info.lock().unwrap();
+            info.capabilities = Some(HardwareCapabilities::from_reference("058001"));
+        }
+        {
+            let mut tel = state.telemetry.lock().unwrap();
+            tel.greenup_state = "A".to_string();
+        }
+
+        trigger_init_sequence(&state).await;
+
+        let mut received = Vec::new();
+        while let Ok(cmd) = rx.try_recv() {
+            received.push(cmd);
+        }
+
+        assert_eq!(received.first(), Some(&greenup_protocol::Command::RaspberryPiModeOk));
+        assert_eq!(received.last(), Some(&greenup_protocol::Command::SetTicTestMode(true)));
+        assert!(received.contains(&greenup_protocol::Command::SetTicTestMode(true)));
+
+        // Case 2: Ineligible station (model without TIC, e.g. 058030)
+        let (tx2, mut rx2) = mpsc::channel(50);
+        let state2 = Arc::new(AppState::new(tx2));
+        {
+            let mut info = state2.info.lock().unwrap();
+            info.capabilities = Some(HardwareCapabilities::from_reference("058030"));
+        }
+        {
+            let mut tel = state2.telemetry.lock().unwrap();
+            tel.greenup_state = "A".to_string();
+        }
+
+        trigger_init_sequence(&state2).await;
+
+        let mut received2 = Vec::new();
+        while let Ok(cmd) = rx2.try_recv() {
+            received2.push(cmd);
+        }
+
+        assert_eq!(received2.first(), Some(&greenup_protocol::Command::RaspberryPiModeOk));
+        assert!(!received2.contains(&greenup_protocol::Command::SetTicTestMode(true)));
+
+        // Case 3: Station with TIC but not in State A (e.g. State B)
+        let (tx3, mut rx3) = mpsc::channel(50);
+        let state3 = Arc::new(AppState::new(tx3));
+        {
+            let mut info = state3.info.lock().unwrap();
+            info.capabilities = Some(HardwareCapabilities::from_reference("058001"));
+        }
+        {
+            let mut tel = state3.telemetry.lock().unwrap();
+            tel.greenup_state = "B".to_string();
+        }
+
+        trigger_init_sequence(&state3).await;
+
+        let mut received3 = Vec::new();
+        while let Ok(cmd) = rx3.try_recv() {
+            received3.push(cmd);
+        }
+
+        assert_eq!(received3.first(), Some(&greenup_protocol::Command::RaspberryPiModeOk));
+        assert!(!received3.contains(&greenup_protocol::Command::SetTicTestMode(true)));
     }
 
     #[tokio::test]
