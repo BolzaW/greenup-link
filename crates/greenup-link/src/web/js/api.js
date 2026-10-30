@@ -544,11 +544,24 @@ async function fetchTelemetry() {
 
         if (!window.isUsbConnected) {
             valVoltage.innerText = '--';
+            valVoltage.className = 'text-3xl font-extrabold text-white font-mono tracking-tight transition-colors duration-200';
+            if (valVoltageUnit) valVoltageUnit.className = 'text-slate-500 font-semibold transition-colors duration-200';
+            valVoltage.title = '';
             valCurrent.innerText = '--';
             valPower.innerText = '--';
             valEnergy.innerText = '--';
         } else {
             valVoltage.innerText = data.voltage.toFixed(1);
+            if (data.voltage_source === 'external') {
+                valVoltage.className = 'text-3xl font-extrabold text-sky-400 font-mono tracking-tight transition-colors duration-200';
+                if (valVoltageUnit) valVoltageUnit.className = 'text-sky-600 font-semibold transition-colors duration-200';
+                const remaining = data.voltage_ttl_remaining_s != null ? ` (${data.voltage_ttl_remaining_s}s)` : '';
+                valVoltage.title = (window.t ? t('telemetry.voltage_external_tooltip') : 'Tension réseau mesurée par source externe') + remaining;
+            } else {
+                valVoltage.className = 'text-3xl font-extrabold text-white font-mono tracking-tight transition-colors duration-200';
+                if (valVoltageUnit) valVoltageUnit.className = 'text-slate-500 font-semibold transition-colors duration-200';
+                valVoltage.title = window.t ? t('telemetry.voltage_default_tooltip') : 'Tension réseau théorique par défaut (230 V)';
+            }
             valCurrent.innerText = data.current.toFixed(1);
             valPower.innerText = (data.power).toFixed(0);
             valEnergy.innerText = (data.energy).toFixed(0);

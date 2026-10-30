@@ -63,6 +63,8 @@
   },
   "telemetry": {
     "voltage": "Tension",
+    "voltage_external_tooltip": "Tension réseau mesurée par source externe (Home Assistant, Linky, etc.)",
+    "voltage_default_tooltip": "Tension réseau théorique par défaut (230 V)",
     "current": "Courant",
     "power": "Puissance",
     "energy": "Énergie"

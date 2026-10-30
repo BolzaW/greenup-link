@@ -85,6 +85,7 @@ pub fn build_router(station: SharedStation, api_token: Option<String>) -> Router
         .route("/api/tic/refresh", post(refresh_tic))
         .route("/api/bluetooth", post(set_bluetooth))
         .route("/api/command", post(send_raw_command))
+        .route("/api/voltage", post(set_voltage))
         .with_state(station)
         .route_layer(axum::middleware::from_fn_with_state(
             token_state.clone(),
@@ -295,7 +296,11 @@ async fn get_telemetry(
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
     logger::log("TRACE", &format!("📡 GET request /api/telemetry (side: {})", state.side()));
-    let mut telemetry = state.telemetry.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let mut telemetry = {
+        let mut tel = state.telemetry.lock().unwrap_or_else(|e| e.into_inner());
+        tel.evaluate_voltage();
+        tel.clone()
+    };
     telemetry.side = state.side();
     Json(telemetry)
 }
@@ -491,6 +496,59 @@ async fn refresh_tic(
     }
 }
 
+#[derive(serde::Deserialize, Debug, Clone)]
+pub struct SetVoltagePayload {
+    pub voltage: f32,
+    pub ttl_seconds: Option<u64>,
+}
+
+/// POST /api/voltage
+/// Injects an externally measured grid voltage (e.g. from Home Assistant, Linky TIC, Shelly).
+/// Applies globally to the station (all active charge points).
+async fn set_voltage(
+    State(station): State<SharedStation>,
+    Json(payload): Json<SetVoltagePayload>,
+) -> impl IntoResponse {
+    if payload.voltage < 100.0 || payload.voltage > 300.0 {
+        logger::log("API", &format!("⛔ Rejecting out of bounds external voltage: {:.1}V", payload.voltage));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "status": "error",
+                "error": "Voltage must be between 100.0 and 300.0 V"
+            })),
+        );
+    }
+
+    let ttl = payload.ttl_seconds.unwrap_or(60);
+    logger::log(
+        "API",
+        &format!("⚡ External grid voltage updated → {:.1}V (TTL: {}s)", payload.voltage, ttl),
+    );
+
+    // Apply to Point 1
+    if let Ok(mut tel) = station.point1.telemetry.lock() {
+        tel.set_external_voltage(payload.voltage, ttl);
+    }
+
+    // Apply to Point 2 if dual-point station
+    if let Some(ref p2) = *station.point2.read().unwrap_or_else(|e| e.into_inner()) {
+        if let Ok(mut tel) = p2.telemetry.lock() {
+            tel.set_external_voltage(payload.voltage, ttl);
+        }
+    }
+
+    (
+        StatusCode::OK,
+        Json(json!({
+            "status": "success",
+            "voltage": payload.voltage,
+            "source": if ttl == 0 { "default" } else { "external" },
+            "ttl_seconds": ttl
+        })),
+    )
+}
+
 /// POST /api/bluetooth
 async fn set_bluetooth(
     State(station): State<SharedStation>,
@@ -601,6 +659,73 @@ mod tests {
         assert!(!is_valid_raw_command("cmd|pipe")); // pipe
         assert!(!is_valid_raw_command("$VAR")); // dollar sign
         assert!(!is_valid_raw_command("cmd=val")); // equals sign
+    }
+
+    #[tokio::test]
+    async fn test_set_voltage_endpoint() {
+        use std::sync::Arc;
+        use tokio::sync::mpsc;
+        use greenup_driver::state::{AppState, StationManager};
+
+        let (tx1, _rx1) = mpsc::channel(10);
+        let (tx2, _rx2) = mpsc::channel(10);
+        let point1 = Arc::new(AppState::new_with_side(1, tx1));
+        let point2 = Arc::new(AppState::new_with_side(2, tx2));
+        {
+            let mut tel1 = point1.telemetry.lock().unwrap();
+            tel1.serial.status = greenup_driver::telemetry::SerialStatus::UsbConnected;
+            let mut tel2 = point2.telemetry.lock().unwrap();
+            tel2.serial.status = greenup_driver::telemetry::SerialStatus::UsbConnected;
+        }
+        let station = Arc::new(StationManager::new(point1.clone(), Some(point2.clone())));
+
+        // 1. Out of bounds voltage (< 100V) -> 400 Bad Request
+        let res = set_voltage(State(station.clone()), Json(SetVoltagePayload {
+            voltage: 80.0,
+            ttl_seconds: Some(60),
+        })).await.into_response();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+        // 2. Out of bounds voltage (> 300V) -> 400 Bad Request
+        let res = set_voltage(State(station.clone()), Json(SetVoltagePayload {
+            voltage: 350.0,
+            ttl_seconds: Some(60),
+        })).await.into_response();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+        // 3. Valid voltage -> 200 OK, applies to both points
+        let res = set_voltage(State(station.clone()), Json(SetVoltagePayload {
+            voltage: 236.4,
+            ttl_seconds: Some(120),
+        })).await.into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        {
+            let tel1 = point1.telemetry.lock().unwrap();
+            assert_eq!(tel1.voltage, 236.4);
+            assert_eq!(tel1.voltage_source, "external");
+            assert!(tel1.voltage_ttl_remaining_s.is_some());
+        }
+        {
+            let tel2 = point2.telemetry.lock().unwrap();
+            assert_eq!(tel2.voltage, 236.4);
+            assert_eq!(tel2.voltage_source, "external");
+            assert!(tel2.voltage_ttl_remaining_s.is_some());
+        }
+
+        // 4. Reset voltage with ttl=0 and valid voltage -> falls back to default 230V
+        let res = set_voltage(State(station.clone()), Json(SetVoltagePayload {
+            voltage: 230.0,
+            ttl_seconds: Some(0),
+        })).await.into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        {
+            let tel1 = point1.telemetry.lock().unwrap();
+            assert_eq!(tel1.voltage, 230.0);
+            assert_eq!(tel1.voltage_source, "default");
+            assert_eq!(tel1.voltage_ttl_remaining_s, None);
+        }
     }
 
     #[tokio::test]

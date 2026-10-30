@@ -63,6 +63,8 @@
   },
   "telemetry": {
     "voltage": "Voltage",
+    "voltage_external_tooltip": "Grid voltage measured by external source (Home Assistant, smart meter, etc.)",
+    "voltage_default_tooltip": "Default theoretical grid voltage (230 V)",
     "current": "Current",
     "power": "Power",
     "energy": "Energy"

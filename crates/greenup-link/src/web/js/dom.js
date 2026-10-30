@@ -5,6 +5,7 @@
 const lblState = document.getElementById('lblState');
 const lblError = document.getElementById('lblError');
 const valVoltage = document.getElementById('valVoltage');
+const valVoltageUnit = document.getElementById('valVoltageUnit');
 const valCurrent = document.getElementById('valCurrent');
 const valPower = document.getElementById('valPower');
 const valEnergy = document.getElementById('valEnergy');
