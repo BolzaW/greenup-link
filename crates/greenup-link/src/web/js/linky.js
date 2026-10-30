@@ -1,6 +1,61 @@
+function applyTicCapabilities(hasTic) {
+    window.stationHasTic = hasTic;
+
+    // 1. Visualizer adaptation (single dynamic layer)
+    const grid = document.getElementById('visualizerGrid');
+    const staticWire1 = document.getElementById('staticWire1');
+    const animWire1 = document.getElementById('animWire1');
+
+    if (grid) {
+        if (!hasTic) {
+            grid.classList.add('no-tic');
+            // Straight run across 6 columns (col 4-9), then arc across 3 columns (col 10-12) to meet bottom loop
+            const pathNoTic = "M -5 45 L 67 45 C 88 45 100 65 100 100";
+            if (staticWire1 && staticWire1.getAttribute('d') !== pathNoTic) {
+                staticWire1.setAttribute('d', pathNoTic);
+            }
+            if (animWire1 && animWire1.getAttribute('d') !== pathNoTic) {
+                animWire1.setAttribute('d', pathNoTic);
+            }
+        } else {
+            grid.classList.remove('no-tic');
+            const pathTic = "M -15 45 C 80 45 100 45 100 100";
+            if (staticWire1 && staticWire1.getAttribute('d') !== pathTic) {
+                staticWire1.setAttribute('d', pathTic);
+            }
+            if (animWire1 && animWire1.getAttribute('d') !== pathTic) {
+                animWire1.setAttribute('d', pathTic);
+            }
+        }
+    }
+
+    // 2. System / Config panel controls adaptation
+    const btnRefreshTic = document.getElementById('btnRefreshTicConfig');
+    const speedBadge = document.getElementById('cfgTicSpeedBadge');
+
+    if (!hasTic) {
+        if (btnRefreshTic) {
+            btnRefreshTic.disabled = true;
+            btnRefreshTic.classList.add('opacity-40', 'cursor-not-allowed', 'pointer-events-none');
+            btnRefreshTic.title = typeof t === 'function' ? t('system.tic_not_supported') : 'Non supporté sur ce modèle';
+        }
+        if (speedBadge) {
+            speedBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-500 border border-slate-700/60';
+            speedBadge.innerText = typeof t === 'function' ? t('system.tic_unsupported_badge') : 'N/A';
+        }
+    } else {
+        if (btnRefreshTic) {
+            btnRefreshTic.disabled = false;
+            btnRefreshTic.classList.remove('opacity-40', 'cursor-not-allowed', 'pointer-events-none');
+            btnRefreshTic.title = '';
+        }
+    }
+}
+
 // Linky (TIC) widget rendering. Two animation speeds: Standard (9600) and Historique (1200).
 
 function updateLinky(ticMode) {
+    if (window.stationHasTic === false) return;
     lastReportedTicMode = ticMode;
     updateTicSpeedBadge(ticMode);
     linkyBox.classList.remove('animate-pulse');
@@ -55,6 +110,7 @@ function updateLinky(ticMode) {
 }
 
 function updateTicSpeedBadge(ticMode) {
+    if (window.stationHasTic === false) return;
     const badge = document.getElementById('cfgTicSpeedBadge');
     if (!badge) return;
 

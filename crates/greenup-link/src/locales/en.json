@@ -189,7 +189,9 @@
     "token_saved_valid": "API token saved & validated",
     "token_saved_local": "Token saved locally",
     "token_invalid": "API token rejected by server",
-    "token_cleared": "Token cleared from browser"
+    "token_cleared": "Token cleared from browser",
+    "tic_not_supported": "TIC feature not available on this wallbox model",
+    "tic_unsupported_badge": "Unsupported"
   },
   "dual": {
     "selector_title": "Active Charge Point",

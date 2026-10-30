@@ -476,6 +476,10 @@ async fn refresh_tic(
     logger::log("API", &format!("🔄 Manual TIC detection request (TICTM:1) on Side {}", state.side()));
     match greenup_driver::serial::start_tic_detection(&state).await {
         Ok(()) => (StatusCode::OK, Json(json!({"status": "success", "message": "TIC detection started"}))),
+        Err(TicStartError::NotSupported) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "TIC is not supported on this charging station model"})),
+        ),
         Err(TicStartError::NotInStateA(current)) => (
             StatusCode::BAD_REQUEST,
             Json(json!({"error": format!("TIC detection can only be done when the charging station is free (State:A). Current state: {}", current)})),
@@ -597,6 +601,57 @@ mod tests {
         assert!(!is_valid_raw_command("cmd|pipe")); // pipe
         assert!(!is_valid_raw_command("$VAR")); // dollar sign
         assert!(!is_valid_raw_command("cmd=val")); // equals sign
+    }
+
+    #[tokio::test]
+    async fn test_refresh_tic_endpoint_guards() {
+        use std::sync::Arc;
+        use tokio::sync::mpsc;
+        use greenup_driver::state::{AppState, StationManager};
+        use greenup_driver::hardware_specs::HardwareCapabilities;
+        use greenup_driver::telemetry::SerialStatus;
+
+        let (tx, _rx) = mpsc::channel(10);
+        let point1 = Arc::new(AppState::new(tx));
+        let station = Arc::new(StationManager::new(point1.clone(), None));
+
+        // 1. When USB serial is disconnected -> SERVICE_UNAVAILABLE (503)
+        let response = refresh_tic(State(station.clone()), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        // Mark USB connected
+        {
+            let mut tel = point1.telemetry.lock().unwrap();
+            tel.serial.status = SerialStatus::UsbConnected;
+        }
+
+        // 2. Hardware without TIC (e.g. 058030) -> BAD_REQUEST (400)
+        {
+            let mut info = point1.info.lock().unwrap();
+            info.capabilities = Some(HardwareCapabilities::from_reference("058030"));
+        }
+        let response = refresh_tic(State(station.clone()), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // 3. Hardware with TIC (058001), but state is not "A" -> BAD_REQUEST (400)
+        {
+            let mut info = point1.info.lock().unwrap();
+            info.capabilities = Some(HardwareCapabilities::from_reference("058001"));
+        }
+        {
+            let mut tel = point1.telemetry.lock().unwrap();
+            tel.greenup_state = "C".to_string();
+        }
+        let response = refresh_tic(State(station.clone()), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // 4. Hardware with TIC and state is "A" -> OK (200)
+        {
+            let mut tel = point1.telemetry.lock().unwrap();
+            tel.greenup_state = "A".to_string();
+        }
+        let response = refresh_tic(State(station.clone()), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }
 

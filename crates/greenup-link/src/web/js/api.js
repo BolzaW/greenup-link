@@ -391,6 +391,16 @@ async function fetchInfo() {
             if (cfgVer) cfgVer.innerText = `v${info.link_version}`;
         }
 
+        if (info.capabilities) {
+            window.stationCapabilities = info.capabilities;
+            window.stationHasTic = (info.capabilities.has_tic !== false);
+        } else {
+            window.stationHasTic = true;
+        }
+        if (typeof applyTicCapabilities === 'function') {
+            applyTicCapabilities(window.stationHasTic);
+        }
+
         window.boardInfoComplete = !!(info.reference || info.software_version || info.serial_number);
 
     } catch (err) {
@@ -619,6 +629,7 @@ async function toggleBluetooth() {
 }
 
 async function refreshTic() {
+    if (window.stationHasTic === false) return;
     if (lastReportedState !== 'A') {
         alert(t('alert.tic_refresh_state_a'));
         return;

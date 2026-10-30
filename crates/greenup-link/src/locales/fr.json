@@ -189,7 +189,9 @@
     "token_saved_valid": "Clé API enregistrée & validée",
     "token_saved_local": "Clé enregistrée localement",
     "token_invalid": "Clé API refusée par le serveur",
-    "token_cleared": "Clé effacée du navigateur"
+    "token_cleared": "Clé effacée du navigateur",
+    "tic_not_supported": "Fonction TIC non disponible sur ce modèle de borne",
+    "tic_unsupported_badge": "Non supporté"
   },
   "dual": {
     "selector_title": "Point de charge actif",

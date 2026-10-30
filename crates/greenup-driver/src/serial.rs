@@ -44,19 +44,37 @@ pub async fn trigger_init_sequence(state: &SharedState) {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum TicStartError {
+    /// The charging station hardware does not support TIC (no TIC terminal on this model).
+    NotSupported,
     /// The charging station is not in `State:A` (contains the current Legrand state).
     NotInStateA(String),
     /// The channel to the serial port is closed.
     Serial,
 }
 
-/// Starts TIC detection (`TICTM:1`), ONLY if the Legrand state is `A`.
+/// Starts TIC detection (`TICTM:1`), ONLY if the hardware model supports TIC and the Legrand state is `A`.
 ///
-/// Centralized safeguard: if the charging station is not in `State:A`, the function does
-/// absolutely nothing (no frame sent, no state modified). The driver then takes care
-/// of sending `TICTM:0` at the end of the detection.
+/// Centralized safeguards:
+/// 1. Reject if the wallbox model does not physically support TIC (`has_tic == false`).
+/// 2. If the charging station is not in `State:A`, the function does absolutely nothing
+///    (no frame sent, no state modified).
+/// 
+/// The driver then takes care of sending `TICTM:0` at the end of the detection.
 pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartError> {
+    // 1. Hardware capability check: Reject if this model has no TIC input
+    let has_tic = match state.info.lock() {
+        Ok(info) => info.capabilities.as_ref().map(|c| c.has_tic).unwrap_or(false),
+        Err(_) => false,
+    };
+
+    if !has_tic {
+        logger::log("SERIAL", "⛔ TIC detection rejected: charging station hardware does not support TIC");
+        return Err(TicStartError::NotSupported);
+    }
+
+    // 2. Legrand state check: Must be State A (Free / Available)
     let current_state = match state.telemetry.lock() {
         Ok(tel) => tel.greenup_state.clone(),
         Err(_) => String::from("Unknown"),
@@ -954,5 +972,52 @@ mod tests {
     fn test_determine_rx_log_category_ping_pong_trace() {
         assert_eq!(determine_rx_log_category("pong"), "TRACE");
         assert_eq!(determine_rx_log_category("ping"), "SERIAL_RX");
+    }
+
+    #[tokio::test]
+    async fn test_start_tic_detection_safeguards() {
+        use std::sync::Arc;
+        use tokio::sync::mpsc;
+        use crate::state::AppState;
+        use crate::hardware_specs::HardwareCapabilities;
+
+        let (tx, mut rx) = mpsc::channel(10);
+        let state = Arc::new(AppState::new(tx));
+
+        // 1. Without capabilities set (None), should reject as NotSupported
+        let res = start_tic_detection(&state).await;
+        assert_eq!(res, Err(TicStartError::NotSupported));
+
+        // 2. With non-TIC capabilities (e.g. 058030)
+        {
+            let mut info = state.info.lock().unwrap();
+            info.capabilities = Some(HardwareCapabilities::from_reference("058030"));
+        }
+        let res = start_tic_detection(&state).await;
+        assert_eq!(res, Err(TicStartError::NotSupported));
+
+        // 3. With TIC capabilities (e.g. 058001), but state is not "A" (default is empty/unknown)
+        {
+            let mut info = state.info.lock().unwrap();
+            info.capabilities = Some(HardwareCapabilities::from_reference("058001"));
+        }
+        {
+            let mut tel = state.telemetry.lock().unwrap();
+            tel.greenup_state = "B".to_string();
+        }
+        let res = start_tic_detection(&state).await;
+        assert_eq!(res, Err(TicStartError::NotInStateA("B".to_string())));
+
+        // 4. With TIC capabilities and state "A" -> Success!
+        {
+            let mut tel = state.telemetry.lock().unwrap();
+            tel.greenup_state = "A".to_string();
+        }
+        let res = start_tic_detection(&state).await;
+        assert_eq!(res, Ok(()));
+
+        // Verify that command was queued to serial_tx
+        let cmd = rx.recv().await;
+        assert_eq!(cmd, Some(greenup_protocol::Command::SetTicTestMode(true)));
     }
 }

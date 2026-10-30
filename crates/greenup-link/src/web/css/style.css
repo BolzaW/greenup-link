@@ -1103,3 +1103,34 @@
     border-color: #38bdf8;
     box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
 }
+
+
+/* ==========================================================================
+   Adaptive Visualizer: NO-TIC Configuration
+   Single dynamic layer adapting when wallbox model has no TIC interface.
+   ========================================================================== */
+
+#visualizerGrid.no-tic #cellLinky,
+#visualizerGrid.no-tic #cellLinkyWire {
+    display: none !important;
+}
+
+#visualizerGrid.no-tic #cellCharger {
+    grid-column: span 3 / span 3 !important;
+}
+
+#visualizerGrid.no-tic #cellWireTop {
+    grid-column: span 9 / span 9 !important;
+}
+
+#visualizerGrid.no-tic #cableLabel {
+    left: 45% !important;
+}
+
+#visualizerGrid.no-tic #cellCar {
+    grid-column: span 9 / span 9 !important;
+}
+
+#visualizerGrid.no-tic #cellWireBottom {
+    grid-column: span 3 / span 3 !important;
+}

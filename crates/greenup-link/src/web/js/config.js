@@ -178,6 +178,15 @@ async function refreshTicFromConfig() {
     const btn = document.getElementById('btnRefreshTicConfig');
     const icon = document.getElementById('iconRefreshTic');
 
+    if (window.stationHasTic === false) {
+        if (feedback) {
+            feedback.innerText = (typeof t === 'function' ? t('system.tic_not_supported') : "Fonction TIC non disponible sur ce modèle de borne.");
+            feedback.className = 'text-[11px] font-medium text-amber-400 mt-1';
+            setTimeout(() => { feedback.innerText = ''; }, 4000);
+        }
+        return;
+    }
+
     if (lastReportedState !== 'A') {
         if (feedback) {
             feedback.innerText = (typeof t === 'function' ? t('alert.tic_refresh_state_a') : "La borne doit être à l'état A (Libre) pour lancer une détection TIC.") || "La borne doit être à l'état A (Libre) pour lancer une détection TIC.";
