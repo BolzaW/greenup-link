@@ -71,7 +71,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     }
 
     carIcon.style.fill = '';
-    carIcon.classList.remove('animate-pulse', 'pulse-car-blue');
+    carIcon.classList.remove('animate-pulse', 'pulse-car-blue', 'car-charging-shimmer');
     chargerBox.classList.remove('animate-pulse', 'pulse-charger-blue', 'pulse-charger-green');
 
     let stateLabel = iec_state || greenup_state;
@@ -122,9 +122,9 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
         chargerIcon.classList.replace('text-slate-600', 'text-sky-400');
         updateChargerLeds('chase-green');
 
-        // Animated green wave car
+        // Animated green shimmer car (Right-to-Left energy flow from charger)
         carBox.classList.add('scale-105');
-        carIcon.style.fill = 'url(#waveGradient)';
+        carIcon.classList.add('car-charging-shimmer');
     }
     // 4. Legrand State B: Vehicle connected, waiting for station authorization
     else if (greenup_state === 'B') {
@@ -181,7 +181,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     // Special case: charge physically completed (battery full)
     if (isChargeComplete && (iec_state === 'A' || iec_state === 'B' || greenup_state === 'A' || greenup_state === 'B')) {
         stateLabel = t('state.charge_complete') + " (" + greenup_state + ")";
-        carIcon.classList.remove('pulse-car-blue');
+        carIcon.classList.remove('pulse-car-blue', 'car-charging-shimmer');
         carIcon.classList.replace('text-slate-700', 'text-emerald-500');
         carIcon.classList.replace('text-sky-500', 'text-emerald-500');
         carIcon.style.fill = '#10b981';

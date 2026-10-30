@@ -876,6 +876,45 @@
     animation: pulseCarBlue 2.5s ease-in-out infinite;
 }
 
+/* --- Car Charging Shimmer Animation (Right-to-Left, Antigravity cadence) --- */
+@keyframes carShimmerRTL {
+    0% {
+        -webkit-mask-position: 0% 50%;
+        mask-position: 0% 50%;
+    }
+    68%, 100% {
+        -webkit-mask-position: 100% 50%;
+        mask-position: 100% 50%;
+    }
+}
+
+.car-charging-shimmer {
+    fill: #10b981 !important;
+    -webkit-mask-image: linear-gradient(
+        90deg,
+        rgba(0, 0, 0, 0.38) 0%,
+        rgba(0, 0, 0, 0.38) 35%,
+        rgba(0, 0, 0, 0.75) 43%,
+        rgb(0, 0, 0) 50%,
+        rgba(0, 0, 0, 0.75) 57%,
+        rgba(0, 0, 0, 0.38) 65%,
+        rgba(0, 0, 0, 0.38) 100%
+    );
+    mask-image: linear-gradient(
+        90deg,
+        rgba(0, 0, 0, 0.38) 0%,
+        rgba(0, 0, 0, 0.38) 35%,
+        rgba(0, 0, 0, 0.75) 43%,
+        rgb(0, 0, 0) 50%,
+        rgba(0, 0, 0, 0.75) 57%,
+        rgba(0, 0, 0, 0.38) 65%,
+        rgba(0, 0, 0, 0.38) 100%
+    );
+    -webkit-mask-size: 300% 100%;
+    mask-size: 300% 100%;
+    animation: carShimmerRTL 2.2s linear infinite;
+}
+
 @keyframes pulseChargerGreen {
     0%, 100% {
         border-color: rgba(16, 185, 129, 0.4);
