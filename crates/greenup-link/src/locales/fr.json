@@ -157,10 +157,10 @@
     "init_success": "Initialisation terminée avec succès",
     "reset_sent": "Commande de redémarrage envoyée...",
     "reset_success": "Redémarrage demandé avec succès",
-    "ble_title": "Module Bluetooth (BLE)",
+    "ble_title": "Bluetooth (BLE)",
     "ble_desc": "Active ou désactive la communication Bluetooth sur la carte Legrand",
     "ble_pending": "Commutation en cours...",
-    "tic_title": "Télé-Information Client (TIC)",
+    "tic_title": "Télé-Information (TIC)",
     "tic_desc": "Détection automatique de la vitesse TIC du compteur Linky",
     "btn_refresh_tic": "Tester / Actualiser détection TIC",
     "tic_refreshing": "Détection TIC lancée sur l'ATmega...",
@@ -169,7 +169,7 @@
     "board_specs": "Carte Borne",
     "usb_link_title": "Liaison Série USB ATmega",
     "serial_port": "Port Série",
-    "http_bind": "Interface HTTP",
+    "http_bind": "Hôte HTTP",
     "app_version": "Version Link",
     "service_status": "Statut Service",
     "service_active": "Actif",
@@ -191,7 +191,9 @@
     "token_invalid": "Clé API refusée par le serveur",
     "token_cleared": "Clé effacée du navigateur",
     "tic_not_supported": "Fonction TIC non disponible sur ce modèle de borne",
-    "tic_unsupported_badge": "Non supporté"
+    "tic_unsupported_badge": "Non supporté",
+    "ble_status_on": "Bluetooth actif sur la borne",
+    "ble_status_off": "Bluetooth désactivé sur la borne"
   },
   "dual": {
     "selector_title": "Point de charge actif",

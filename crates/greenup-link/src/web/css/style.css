@@ -932,77 +932,527 @@
 
 
 
-/* --- Config Panel Styles --- */
+/* --- Config & System Panel Styles --- */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes ping {
+    75%, 100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+.animate-ping {
+    animation: ping 1.2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.text-amber-400 { color: #fbbf24; }
+.text-rose-400 { color: #fb7185; }
+.bg-amber-400 { background-color: #fbbf24; }
+.bg-rose-400 { background-color: #fb7185; }
+.opacity-40 { opacity: 0.4; }
+.cursor-not-allowed { cursor: not-allowed; }
+
 .config-panel {
     display: flex;
     flex-direction: column;
-    height: 570px;
-    max-height: 590px;
+    gap: 0.75rem;
+    min-height: 550px;
     background-color: #0b1120;
     border: 1px solid #1e293b;
     border-radius: 1rem;
-    padding: 1.25rem;
+    padding: 1.15rem;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
     position: relative;
-    overflow-y: auto;
     box-sizing: border-box;
-    scrollbar-width: thin;
-    scrollbar-color: #334155 #0b1120;
+    justify-content: space-between;
 }
 
-.config-panel::-webkit-scrollbar {
+.config-panel svg {
+    flex-shrink: 0;
+}
+
+/* System Cards */
+.sys-card {
+    background-color: rgba(2, 6, 23, 0.65);
+    border: 1px solid #1e293b;
+    border-radius: 0.75rem;
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease;
+}
+
+.sys-card:hover {
+    border-color: #26354d;
+}
+
+.sys-card-module {
+    justify-content: space-between;
+    height: 100%;
+}
+
+.sys-module-top {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.sys-module-bottom {
+    margin-top: 0.35rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.sys-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 1px solid rgba(30, 41, 59, 0.75);
+}
+
+.sys-card-header-compact {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.sys-card-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #e2e8f0;
+    min-width: 0;
+    white-space: nowrap;
+}
+
+.sys-module-desc {
+    font-size: 0.68rem;
+    line-height: 1.35;
+    color: #64748b;
+    margin: 0;
+}
+
+/* USB Status Pill & LED */
+.sys-usb-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    background-color: #0f172a;
+    border: 1px solid #1e293b;
+    flex-shrink: 0;
+}
+
+.sys-usb-status-text {
+    font-size: 0.68rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.sys-led {
+    width: 8px;
+    height: 8px;
+    border-radius: 9999px;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.sys-led-emerald {
+    background-color: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+}
+
+.sys-led-amber {
+    background-color: #fbbf24;
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.7);
+}
+
+.sys-led-rose {
+    background-color: #f43f5e;
+    box-shadow: 0 0 8px rgba(244, 63, 94, 0.7);
+}
+
+.sys-led-dot {
     width: 6px;
+    height: 6px;
+    border-radius: 9999px;
+    background-color: #34d399;
+    box-shadow: 0 0 6px rgba(52, 211, 153, 0.7);
+    display: inline-block;
+    flex-shrink: 0;
 }
 
-.config-panel::-webkit-scrollbar-track {
-    background: #0b1120;
-    border-radius: 4px;
+.sys-service-active {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
 }
 
-.config-panel::-webkit-scrollbar-thumb {
-    background: #334155;
-    border-radius: 4px;
+.sys-led-sky {
+    background-color: #38bdf8;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
 }
 
-.config-panel::-webkit-scrollbar-thumb:hover {
-    background: #475569;
+.sys-led-muted {
+    background-color: #475569;
 }
 
-.config-btn {
-    width: 100%;
-    padding: 0.55rem 0.85rem;
+.sys-status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 34px;
+    padding: 0.4rem 0.75rem;
     border-radius: 0.5rem;
-    border: 1px solid #334155;
-    background-color: #1e293b;
-    color: #cbd5e1;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     font-weight: 600;
+    box-sizing: border-box;
+    border: 1px solid #1e293b;
+    background-color: rgba(15, 23, 42, 0.6);
+    color: #64748b;
+    transition: all 0.2s ease;
+}
+
+.sys-status-bar-on {
+    border-color: rgba(56, 189, 248, 0.3);
+    background-color: rgba(14, 165, 233, 0.08);
+    color: #7dd3fc;
+}
+
+.sys-status-bar-off {
+    border-color: #1e293b;
+    background-color: rgba(15, 23, 42, 0.5);
+    color: #64748b;
+}
+
+/* Board Hardware Identity Strip */
+.sys-board-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 0.7rem;
+    border-radius: 0.5rem;
+    background-color: rgba(15, 23, 42, 0.85);
+    border: 1px solid #1e293b;
+}
+
+.sys-board-main {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
+.sys-board-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 0.35rem;
+    background-color: rgba(14, 165, 233, 0.12);
+    border: 1px solid rgba(14, 165, 233, 0.25);
+    color: #38bdf8;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+}
+
+.sys-board-primary {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+
+.sys-board-secondary {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.66rem;
+    color: #64748b;
+}
+
+/* Grids & Key-Value Boxes */
+.sys-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+
+.sys-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+    gap: 0.5rem;
+}
+
+@media (min-width: 640px) {
+    .sys-grid-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .sys-grid-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+.sys-kv-box {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.45rem 0.65rem;
+    border-radius: 0.5rem;
+    background-color: rgba(15, 23, 42, 0.7);
+    border: 1px solid #1e293b;
+    min-width: 0;
+}
+
+.sys-kv-label {
+    font-size: 0.68rem;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.sys-kv-value {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #cbd5e1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sys-usb-details {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.66rem;
+    color: #64748b;
+    padding: 0 0.15rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sys-usb-details.sys-usb-ok {
+    color: rgba(52, 211, 153, 0.85);
+}
+
+.sys-usb-details.sys-usb-warn {
+    color: rgba(251, 191, 36, 0.85);
+}
+
+.sys-usb-details.sys-usb-err {
+    color: rgba(251, 113, 133, 0.85);
+}
+
+/* Alert Banner inside System Panel */
+.sys-alert-banner {
+    width: 100%;
+    padding: 0.65rem 0.85rem;
+    border-radius: 0.65rem;
+    border: 1px solid rgba(244, 63, 94, 0.45);
+    background-color: rgba(136, 19, 55, 0.25);
+    color: #fecdd3;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    box-sizing: border-box;
+}
+
+.sys-alert-banner.sys-alert-warn {
+    border-color: rgba(245, 158, 11, 0.45);
+    background-color: rgba(120, 53, 15, 0.25);
+    color: #fde68a;
+}
+
+.sys-alert-icon {
+    font-size: 0.95rem;
+    flex-shrink: 0;
+}
+
+.sys-alert-text {
+    font-size: 0.7rem;
+    font-weight: 500;
+    line-height: 1.35;
+    flex: 1;
+}
+
+/* Badges */
+.sys-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.5rem;
+    border-radius: 0.375rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.64rem;
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+    border: 1px solid #334155;
+    background-color: #0f172a;
+    color: #94a3b8;
+}
+
+.sys-badge-muted {
+    background-color: #0f172a;
+    border-color: #1e293b;
+    color: #64748b;
+}
+
+.sys-badge-sky {
+    background-color: rgba(14, 165, 233, 0.14);
+    border-color: rgba(56, 189, 248, 0.35);
+    color: #38bdf8;
+}
+
+.sys-badge-emerald {
+    background-color: rgba(16, 185, 129, 0.14);
+    border-color: rgba(52, 211, 153, 0.35);
+    color: #34d399;
+}
+
+.sys-badge-amber {
+    background-color: rgba(245, 158, 11, 0.15);
+    border-color: rgba(251, 191, 36, 0.4);
+    color: #fbbf24;
+}
+
+.sys-badge-rose {
+    background-color: rgba(244, 63, 94, 0.15);
+    border-color: rgba(251, 113, 133, 0.4);
+    color: #fb7185;
+}
+
+/* Toggle Switch Wrapper */
+.sys-toggle-wrap {
+    position: relative;
+    display: inline-block;
+    vertical-align: middle;
+    user-select: none;
+    width: 48px;
+    height: 24px;
+    flex-shrink: 0;
+}
+
+/* Token Section & Input Eye Button */
+.sys-token-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid rgba(30, 41, 59, 0.65);
+}
+
+.sys-token-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.sys-input-wrap {
+    position: relative;
+    flex: 1 1 0%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+}
+
+.config-input {
+    width: 100%;
+    height: 34px;
+    background-color: #0b1120;
+    border: 1px solid #334155;
+    border-radius: 0.5rem;
+    padding: 0 2.25rem 0 0.75rem;
+    color: #f1f5f9;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.72rem;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.config-input:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.35);
+}
+
+.sys-eye-btn {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: #64748b;
     cursor: pointer;
-    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.35rem;
+    transition: color 0.15s ease, background-color 0.15s ease;
+    padding: 0;
 }
 
-.config-btn:hover {
-    color: #ffffff;
-    border-color: #475569;
-    background-color: #273549;
+.sys-eye-btn:hover {
+    color: #e2e8f0;
+    background-color: rgba(51, 65, 85, 0.4);
 }
 
-/* --- System Panel Action Buttons --- */
+/* Feedback Messages */
+.sys-feedback {
+    font-size: 0.68rem;
+    font-weight: 500;
+    line-height: 1.3;
+    text-align: center;
+    margin-top: 0.25rem;
+}
+
+.sys-feedback:empty {
+    display: none;
+}
+
+.sys-feedback-info { color: #38bdf8; }
+.sys-feedback-ok { color: #34d399; }
+.sys-feedback-warn { color: #fbbf24; }
+.sys-feedback-error { color: #fb7185; }
+
+/* System Panel Action Buttons */
 .btn-system-action {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    min-height: 36px;
+    gap: 0.45rem;
+    padding: 0.4rem 0.75rem;
+    min-height: 34px;
     border-radius: 0.5rem;
     border: 1px solid #334155;
     background-color: #1e293b;
     color: #cbd5e1;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.15s ease;
+    white-space: nowrap;
+    box-sizing: border-box;
 }
 
 .btn-system-action svg {
@@ -1029,10 +1479,6 @@
     height: 0.875rem !important;
 }
 
-.config-panel svg {
-    flex-shrink: 0;
-}
-
 .btn-system-action:hover:not(:disabled) {
     color: #ffffff;
     border-color: #475569;
@@ -1044,8 +1490,11 @@
 }
 
 .btn-system-action:disabled {
-    opacity: 0.45;
+    opacity: 0.4;
     cursor: not-allowed;
+    background-color: #0f172a;
+    border-color: #1e293b;
+    color: #64748b;
 }
 
 .btn-system-action-danger {
@@ -1057,22 +1506,6 @@
     color: #ffffff;
     background-color: rgba(225, 29, 72, 0.2);
     border-color: rgba(244, 63, 94, 0.6);
-}
-
-.config-input {
-    background-color: #0b1120;
-    border: 1px solid #334155;
-    border-radius: 0.5rem;
-    padding: 0.55rem 0.85rem;
-    color: #f1f5f9;
-    font-size: 0.75rem;
-    outline: none;
-    transition: all 0.15s ease;
-}
-
-.config-input:focus {
-    border-color: #38bdf8;
-    box-shadow: 0 0 0 1px #38bdf8;
 }
 
 /* --- Dual Charge Point Switcher --- */

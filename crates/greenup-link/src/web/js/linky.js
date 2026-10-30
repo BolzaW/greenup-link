@@ -36,27 +36,26 @@ function applyTicCapabilities(hasTic) {
     if (!hasTic) {
         if (btnRefreshTic) {
             btnRefreshTic.disabled = true;
-            btnRefreshTic.classList.add('opacity-40', 'cursor-not-allowed', 'pointer-events-none');
             btnRefreshTic.title = typeof t === 'function' ? t('system.tic_not_supported') : 'Non supporté sur ce modèle';
         }
         if (speedBadge) {
-            speedBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-500 border border-slate-700/60';
-            speedBadge.innerText = typeof t === 'function' ? t('system.tic_unsupported_badge') : 'N/A';
+            speedBadge.className = 'sys-badge sys-badge-muted';
+            speedBadge.innerText = typeof t === 'function' ? t('system.tic_unsupported_badge') : 'Non supporté';
         }
     } else {
         if (btnRefreshTic) {
             btnRefreshTic.disabled = false;
-            btnRefreshTic.classList.remove('opacity-40', 'cursor-not-allowed', 'pointer-events-none');
             btnRefreshTic.title = '';
         }
+        updateTicSpeedBadge(lastReportedTicMode);
     }
 }
 
 // Linky (TIC) widget rendering. Two animation speeds: Standard (9600) and Historique (1200).
 
 function updateLinky(ticMode) {
-    if (window.stationHasTic === false) return;
     lastReportedTicMode = ticMode;
+    if (window.stationHasTic === false) return;
     updateTicSpeedBadge(ticMode);
     linkyBox.classList.remove('animate-pulse');
 
@@ -67,8 +66,6 @@ function updateLinky(ticMode) {
 
     switch(ticMode) {
         case '9600':
-
-
             linkyIcon.classList.replace('text-slate-600', 'text-sky-400');
             linkyContainer.classList.add('border-sky-500/30');
             animWireLinky.classList.remove('opacity-0');
@@ -76,8 +73,6 @@ function updateLinky(ticMode) {
             labelText = t('tic.standard');
             break;
         case '1200':
-
-
             linkyIcon.classList.replace('text-slate-600', 'text-sky-400');
             linkyContainer.classList.add('border-sky-500/30');
             animWireLinky.classList.remove('opacity-0');
@@ -116,23 +111,23 @@ function updateTicSpeedBadge(ticMode) {
 
     switch (ticMode) {
         case '9600':
-            badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-400 border border-sky-500/40';
-            badge.innerText = 'Standard (9600 bauds)';
+            badge.className = 'sys-badge sys-badge-sky';
+            badge.innerText = 'Standard • 9600';
             break;
         case '1200':
-            badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-sky-500/20 text-sky-400 border border-sky-500/40';
-            badge.innerText = 'Historique (1200 bauds)';
+            badge.className = 'sys-badge sys-badge-sky';
+            badge.innerText = 'Historique • 1200';
             break;
         case 'detecting':
-            badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40 animate-pulse';
+            badge.className = 'sys-badge sys-badge-amber animate-pulse';
             badge.innerText = (typeof t === 'function' ? t('tic.detecting') : 'Détection...') || 'Détection...';
             break;
         case '0':
-            badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700';
+            badge.className = 'sys-badge sys-badge-muted';
             badge.innerText = (typeof t === 'function' ? t('tic.disconnected') : 'Non connecté') || 'Non connecté';
             break;
         default:
-            badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-500 border border-slate-700';
+            badge.className = 'sys-badge sys-badge-muted';
             badge.innerText = '--';
             break;
     }

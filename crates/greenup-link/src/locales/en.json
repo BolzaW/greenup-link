@@ -157,10 +157,10 @@
     "init_success": "Initialization completed successfully",
     "reset_sent": "Restart command sent...",
     "reset_success": "Restart requested successfully",
-    "ble_title": "Bluetooth Module (BLE)",
+    "ble_title": "Bluetooth (BLE)",
     "ble_desc": "Enable or disable Bluetooth communication on the Legrand board",
     "ble_pending": "Switching...",
-    "tic_title": "Customer Tele-Information (TIC)",
+    "tic_title": "Tele-Information (TIC)",
     "tic_desc": "Automatic Linky meter TIC speed detection",
     "btn_refresh_tic": "Test / Refresh TIC detection",
     "tic_refreshing": "TIC detection triggered on ATmega...",
@@ -169,7 +169,7 @@
     "board_specs": "Station Board",
     "usb_link_title": "ATmega USB Serial Link",
     "serial_port": "Serial Port",
-    "http_bind": "HTTP Interface",
+    "http_bind": "HTTP Host",
     "app_version": "Link Version",
     "service_status": "Service Status",
     "service_active": "Active",
@@ -191,7 +191,9 @@
     "token_invalid": "API token rejected by server",
     "token_cleared": "Token cleared from browser",
     "tic_not_supported": "TIC feature not available on this wallbox model",
-    "tic_unsupported_badge": "Unsupported"
+    "tic_unsupported_badge": "Unsupported",
+    "ble_status_on": "Bluetooth active on station",
+    "ble_status_off": "Bluetooth disabled on station"
   },
   "dual": {
     "selector_title": "Active Charge Point",
