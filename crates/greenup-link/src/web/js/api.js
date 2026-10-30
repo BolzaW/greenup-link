@@ -391,11 +391,13 @@ async function fetchInfo() {
             if (cfgVer) cfgVer.innerText = `v${info.link_version}`;
         }
 
-        if (info.capabilities) {
+        if (info.capabilities && info.capabilities.is_known && info.capabilities.has_tic) {
             window.stationCapabilities = info.capabilities;
-            window.stationHasTic = (info.capabilities.has_tic !== false);
-        } else {
             window.stationHasTic = true;
+        } else {
+            window.stationCapabilities = info.capabilities || null;
+            // Unknown or missing hardware specs defaults strictly to false (minimum features)
+            window.stationHasTic = false;
         }
         if (typeof applyTicCapabilities === 'function') {
             applyTicCapabilities(window.stationHasTic);

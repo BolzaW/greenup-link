@@ -63,9 +63,9 @@ pub enum TicStartError {
 /// 
 /// The driver then takes care of sending `TICTM:0` at the end of the detection.
 pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartError> {
-    // 1. Hardware capability check: Reject if this model has no TIC input
+    // 1. Hardware capability check: Reject if model is unknown or has no TIC input (assume minimum features)
     let has_tic = match state.info.lock() {
-        Ok(info) => info.capabilities.as_ref().map(|c| c.has_tic).unwrap_or(false),
+        Ok(info) => info.capabilities.as_ref().map(|c| c.is_known && c.has_tic).unwrap_or(false),
         Err(_) => false,
     };
 
