@@ -4,7 +4,7 @@ function updateLinky(ticMode) {
     lastReportedTicMode = ticMode;
     updateTicSpeedBadge(ticMode);
     linkyBox.classList.remove('animate-pulse');
-    linkyLed.className = 'absolute -top-1 -right-1 w-3 h-3 md:w-4 md:h-4 rounded-full border-2 border-slate-900 bg-slate-700 transition-colors';
+
     linkyIcon.setAttribute('class', 'w-6 h-6 md:w-8 md:h-8 text-slate-600 transition-colors');
     linkyContainer.className = 'w-14 h-14 md:w-16 md:h-16 rounded-xl bg-slate-950 border-2 border-slate-800 flex items-center justify-center transition-all duration-300 shadow-inner';
 
@@ -12,8 +12,8 @@ function updateLinky(ticMode) {
 
     switch(ticMode) {
         case '9600':
-            linkyLed.classList.replace('bg-slate-700', 'bg-sky-500');
-            linkyLed.classList.add('shadow-[0_0_8px_rgba(14,165,233,0.8)]');
+
+
             linkyIcon.classList.replace('text-slate-600', 'text-sky-400');
             linkyContainer.classList.add('border-sky-500/30');
             animWireLinky.classList.remove('opacity-0');
@@ -21,8 +21,8 @@ function updateLinky(ticMode) {
             labelText = t('tic.standard');
             break;
         case '1200':
-            linkyLed.classList.replace('bg-slate-700', 'bg-sky-500');
-            linkyLed.classList.add('shadow-[0_0_8px_rgba(14,165,233,0.8)]');
+
+
             linkyIcon.classList.replace('text-slate-600', 'text-sky-400');
             linkyContainer.classList.add('border-sky-500/30');
             animWireLinky.classList.remove('opacity-0');

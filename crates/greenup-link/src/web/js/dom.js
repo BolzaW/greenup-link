@@ -27,7 +27,7 @@ const cableLabel = document.getElementById('cableLabel');
 // Linky
 const linkyBox = document.getElementById('linkyBox');
 const linkyContainer = document.getElementById('linkyContainer');
-const linkyLed = document.getElementById('linkyLed');
+
 const linkyLabel = document.getElementById('linkyLabel');
 const linkyIcon = document.getElementById('linkyIcon');
 const animWireLinky = document.getElementById('animWireLinky');
