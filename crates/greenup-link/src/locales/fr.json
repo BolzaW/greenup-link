@@ -66,8 +66,11 @@
     "voltage_external_tooltip": "Tension réseau mesurée par source externe (Home Assistant, Linky, etc.)",
     "voltage_default_tooltip": "Tension réseau théorique par défaut (230 V)",
     "current": "Courant",
+    "current_tooltip": "Courant mesuré par la borne (port série)",
     "power": "Puissance",
-    "energy": "Énergie"
+    "power_tooltip": "Puissance calculée (P = U × I)",
+    "energy": "Énergie",
+    "energy_tooltip": "Énergie calculée intégrée"
   },
   "controls": {
     "charge_params": "Paramètres de charge",

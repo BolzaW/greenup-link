@@ -66,8 +66,11 @@
     "voltage_external_tooltip": "Grid voltage measured by external source (Home Assistant, smart meter, etc.)",
     "voltage_default_tooltip": "Default theoretical grid voltage (230 V)",
     "current": "Current",
+    "current_tooltip": "Current measured by the charging station (serial port)",
     "power": "Power",
-    "energy": "Energy"
+    "power_tooltip": "Calculated power (P = V × I)",
+    "energy": "Energy",
+    "energy_tooltip": "Integrated calculated energy"
   },
   "controls": {
     "charge_params": "Charge parameters",

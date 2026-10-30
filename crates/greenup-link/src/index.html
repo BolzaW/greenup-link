@@ -540,34 +540,35 @@
                     <span data-i18n="telemetry.voltage">Tension</span>
                 </div>
                 <div class="flex items-baseline space-x-1">
-                    <span id="valVoltage" class="text-3xl font-extrabold text-white font-mono tracking-tight transition-colors duration-200">--</span>
+                    <span id="valVoltage" class="text-3xl font-extrabold text-white font-mono tracking-tight transition-colors duration-200" title="Tension réseau théorique par défaut (230 V)" data-i18n-title="telemetry.voltage_default_tooltip">--</span>
                     <span id="valVoltageUnit" class="text-slate-500 font-semibold transition-colors duration-200">V</span>
                 </div>
             </div>
-            <!-- Courant -->
-            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-center">
-                <div class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
-                    <span data-i18n="telemetry.current">Courant</span>
-                </div>
-                <div class="flex items-baseline space-x-1">
-                    <span id="valCurrent" class="text-3xl font-extrabold text-white font-mono tracking-tight">--</span>
-                    <span class="text-slate-500 font-semibold">A</span>
-                </div>
-            </div>
-            <!-- Puissance -->
+            <!-- Courant (Valeur mesurée lue sur le port série -> Vert) -->
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-center relative overflow-hidden group">
                 <div class="absolute inset-0 bg-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2 relative z-10">
-                    <svg class="w-4 h-4 text-emerald-500/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
+                    <svg class="w-4 h-4 text-emerald-500/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    <span data-i18n="telemetry.current">Courant</span>
+                </div>
+                <div class="flex items-baseline space-x-1 relative z-10">
+                    <span id="valCurrent" class="text-3xl font-extrabold text-emerald-400 font-mono tracking-tight glow-text transition-all duration-300" title="Courant mesuré par la borne (port série)" data-i18n-title="telemetry.current_tooltip">--</span>
+                    <span class="text-emerald-600 font-semibold">A</span>
+                </div>
+            </div>
+            <!-- Puissance (Valeur calculée P = U × I -> Bleu) -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-center relative overflow-hidden group">
+                <div class="absolute inset-0 bg-sky-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2 relative z-10">
+                    <svg class="w-4 h-4 text-sky-500/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
                     <span data-i18n="telemetry.power">Puissance</span>
                 </div>
                 <div class="flex items-baseline space-x-1 relative z-10">
-                    <span id="valPower" class="text-3xl font-extrabold text-emerald-400 font-mono tracking-tight glow-text transition-all duration-300">--</span>
-                    <span class="text-emerald-600 font-semibold">W</span>
+                    <span id="valPower" class="text-3xl font-extrabold text-sky-400 font-mono tracking-tight transition-all duration-300" title="Puissance calculée (P = U × I)" data-i18n-title="telemetry.power_tooltip">--</span>
+                    <span class="text-sky-600 font-semibold">W</span>
                 </div>
             </div>
-            <!-- Energie -->
+            <!-- Energie (Valeur calculée intégrée -> Bleu) -->
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-center relative overflow-hidden group">
                 <div class="absolute inset-0 bg-sky-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2 relative z-10">
@@ -575,7 +576,7 @@
                     <span data-i18n="telemetry.energy">Énergie</span>
                 </div>
                 <div class="flex items-baseline space-x-1 relative z-10">
-                    <span id="valEnergy" class="text-3xl font-extrabold text-sky-400 font-mono tracking-tight transition-all duration-300">--</span>
+                    <span id="valEnergy" class="text-3xl font-extrabold text-sky-400 font-mono tracking-tight transition-all duration-300" title="Énergie calculée intégrée" data-i18n-title="telemetry.energy_tooltip">--</span>
                     <span class="text-sky-600 font-semibold">Wh</span>
                 </div>
             </div>
