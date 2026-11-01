@@ -6,4 +6,4 @@ pub mod telemetry;
 pub mod hardware_specs;
 
 pub use state::{SharedState, SharedStation, StationManager};
-pub use serial::{run_serial_loop, run_serial_loop_with_options, SerialOptions};
+pub use serial::{run_serial_loop, run_serial_loop_with_options, trigger_init_sequence, SerialOptions};

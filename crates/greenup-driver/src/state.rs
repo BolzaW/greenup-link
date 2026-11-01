@@ -3,7 +3,7 @@ use std::sync::{
     Arc, Mutex, RwLock,
 };
 use tokio::sync::mpsc;
-pub use crate::telemetry::{BoardInfo, SerialConnection, SerialStatus, Telemetry};
+pub use crate::telemetry::{BoardInfo, SerialConnection, SerialStatus, SupervisionMode, Telemetry};
 
 #[derive(Default)]
 pub struct TicDetectionState {
@@ -14,6 +14,8 @@ pub struct TicDetectionState {
 pub struct AppState {
     /// Charge point side: 1 for Side 1 (Right / Droit), 2 for Side 2 (Left / Gauche).
     pub side: AtomicU8,
+    /// Supervision mode: 0 for Remote (active), 1 for Local (passive).
+    pub mode: AtomicU8,
     pub telemetry: Mutex<Telemetry>,
     pub info: Mutex<BoardInfo>,
     // Channel used by the API to send commands to the Serial thread
@@ -29,9 +31,25 @@ impl AppState {
     }
 
     pub fn new_with_side(side: u8, serial_tx: mpsc::Sender<greenup_protocol::Command>) -> Self {
+        Self::new_with_side_and_mode(side, SupervisionMode::Remote, serial_tx)
+    }
+
+    pub fn new_with_side_and_mode(
+        side: u8,
+        mode: SupervisionMode,
+        serial_tx: mpsc::Sender<greenup_protocol::Command>,
+    ) -> Self {
+        let mut tel = Telemetry::default();
+        tel.side = side;
+        tel.mode = mode;
+        let mode_val = match mode {
+            SupervisionMode::Remote => 0,
+            SupervisionMode::Local => 1,
+        };
         Self {
             side: AtomicU8::new(side),
-            telemetry: Mutex::new(Telemetry::default()),
+            mode: AtomicU8::new(mode_val),
+            telemetry: Mutex::new(tel),
             info: Mutex::new(BoardInfo::default()),
             serial_tx,
             tic_detection: Mutex::new(TicDetectionState::default()),
@@ -47,6 +65,27 @@ impl AppState {
     /// Sets the side number once discovered or reconfigured.
     pub fn set_side(&self, s: u8) {
         self.side.store(s, Ordering::Relaxed);
+    }
+
+    /// Returns current active supervision mode (Remote or Local).
+    pub fn mode(&self) -> SupervisionMode {
+        if self.mode.load(Ordering::Relaxed) == 1 {
+            SupervisionMode::Local
+        } else {
+            SupervisionMode::Remote
+        }
+    }
+
+    /// Sets the supervision mode and synchronizes with telemetry.
+    pub fn set_mode(&self, mode: SupervisionMode) {
+        let mode_val = match mode {
+            SupervisionMode::Remote => 0,
+            SupervisionMode::Local => 1,
+        };
+        self.mode.store(mode_val, Ordering::Relaxed);
+        if let Ok(mut tel) = self.telemetry.lock() {
+            tel.mode = mode;
+        }
     }
 
     /// Returns true if the USB serial link is active and actively communicating with the ATmega.
@@ -166,5 +205,19 @@ mod tests {
         manager_dyn.attach_point2(p2.clone());
         assert!(manager_dyn.is_dual());
         assert_eq!(manager_dyn.available_points(), vec![1, 2]);
+    }
+
+    #[tokio::test]
+    async fn test_app_state_supervision_mode() {
+        use crate::telemetry::SupervisionMode;
+        let (tx, _rx) = tokio::sync::mpsc::channel(1);
+        let state = AppState::new_with_side_and_mode(1, SupervisionMode::Remote, tx);
+        assert_eq!(state.mode(), SupervisionMode::Remote);
+
+        state.set_mode(SupervisionMode::Local);
+        assert_eq!(state.mode(), SupervisionMode::Local);
+
+        state.set_mode(SupervisionMode::Remote);
+        assert_eq!(state.mode(), SupervisionMode::Remote);
     }
 }

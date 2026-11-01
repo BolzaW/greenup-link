@@ -168,6 +168,16 @@ async function loadConfigData() {
         }
         updateClientTokenBadge();
 
+        // Sync supervision mode from /api/mode
+        try {
+            const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
+            const modeRes = await apiFetch(`/api/mode${sideQuery}`);
+            if (modeRes.ok) {
+                const modeData = await modeRes.json();
+                updateSupervisionModeUi(modeData.mode, modeData.can_switch);
+            }
+        } catch (_) {}
+
     } catch (e) {
         console.warn('Failed to refresh config panel info:', e);
     }
@@ -346,5 +356,146 @@ function initConfig() {
                 saveClientToken();
             }
         });
+    }
+}
+
+function updateSupervisionModeUi(mode, can_switch) {
+    window.currentSupervisionMode = mode;
+    const badgeActive = document.getElementById('cfgModeActiveBadge');
+    const btnRemote = document.getElementById('btnModeRemote');
+    const btnLocal = document.getElementById('btnModeLocal');
+    const badgeRemote = document.getElementById('badgeModeRemote');
+    const badgeLocal = document.getElementById('badgeModeLocal');
+    const hdrModeBadge = document.getElementById('hdrModeBadge');
+    const localBanner = document.getElementById('localModeBanner');
+
+    const isLocal = mode === 'local';
+
+    // Header badge
+    if (hdrModeBadge) {
+        hdrModeBadge.classList.remove('hidden');
+        if (isLocal) {
+            hdrModeBadge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded border font-mono mode-badge-local';
+            hdrModeBadge.innerText = (typeof t === 'function' ? t('system.mode_local_short') : 'Passif') || 'Passif';
+            hdrModeBadge.title = (typeof t === 'function' ? t('system.mode_local_desc') : 'Mode passif sniffer');
+        } else {
+            hdrModeBadge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded border font-mono mode-badge-remote';
+            hdrModeBadge.innerText = (typeof t === 'function' ? t('system.mode_remote_short') : 'Supervisé') || 'Supervisé';
+            hdrModeBadge.title = (typeof t === 'function' ? t('system.mode_remote_desc') : 'Mode supervisé actif');
+        }
+    }
+
+    // Config Panel Buttons
+    if (btnRemote && btnLocal) {
+        if (isLocal) {
+            btnLocal.classList.add('active', 'mode-local-active');
+            btnRemote.classList.remove('active');
+            if (badgeLocal) badgeLocal.classList.remove('hidden');
+            if (badgeRemote) badgeRemote.classList.add('hidden');
+            if (badgeActive) {
+                badgeActive.className = 'sys-badge sys-badge-amber';
+                badgeActive.innerText = (typeof t === 'function' ? t('system.mode_local_short') : 'Passif') || 'Passif';
+            }
+        } else {
+            btnRemote.classList.add('active');
+            btnLocal.classList.remove('active', 'mode-local-active');
+            if (badgeRemote) badgeRemote.classList.remove('hidden');
+            if (badgeLocal) badgeLocal.classList.add('hidden');
+            if (badgeActive) {
+                badgeActive.className = 'sys-badge sys-badge-emerald';
+                badgeActive.innerText = (typeof t === 'function' ? t('system.mode_remote_short') : 'Supervisé') || 'Supervisé';
+            }
+        }
+
+        if (can_switch !== undefined) {
+            const notice = document.getElementById('cfgModeNotice');
+            if (!can_switch) {
+                btnRemote.disabled = true;
+                btnLocal.disabled = true;
+                if (notice) notice.classList.add('text-amber-400');
+            } else {
+                btnRemote.disabled = false;
+                btnLocal.disabled = false;
+                if (notice) notice.classList.remove('text-amber-400');
+            }
+        }
+    }
+
+    // Controls Panel Banner
+    if (localBanner) {
+        if (isLocal) {
+            localBanner.classList.remove('hidden');
+        } else {
+            localBanner.classList.add('hidden');
+        }
+    }
+
+    // Lock/Unlock controls in Controls panel
+    if (typeof updateControlsForMode === 'function') {
+        updateControlsForMode(isLocal);
+    }
+}
+
+async function switchSupervisionMode(targetMode) {
+    if (window.currentSupervisionMode === targetMode) return;
+
+    if (lastReportedState && lastReportedState !== 'A' && lastReportedState !== 'DISCONNECTED') {
+        alert(typeof t === 'function' ? t('system.mode_state_a_required') : "La bascule de mode nécessite que la borne soit à l'état A (Libre / Déconnectée).");
+        return;
+    }
+
+    const confirmMsg = targetMode === 'local'
+        ? (typeof t === 'function' ? t('system.mode_switch_confirm_local') : "Attention : le passage en mode Passif (Local) envoie une commande Reset à l'ATmega pour libérer la borne, puis cesse tout envoi de trame. Voulez-vous continuer ?")
+        : (typeof t === 'function' ? t('system.mode_switch_confirm_remote') : "Voulez-vous réactiver la supervision active (mode Distant) et réinitialiser la communication avec la borne ?");
+
+    if (!confirm(confirmMsg)) return;
+
+    const feedback = document.getElementById('cfgModeFeedback');
+    const btnRemote = document.getElementById('btnModeRemote');
+    const btnLocal = document.getElementById('btnModeLocal');
+    if (btnRemote) btnRemote.disabled = true;
+    if (btnLocal) btnLocal.disabled = true;
+
+    if (feedback) {
+        feedback.innerText = (typeof t === 'function' ? t('system.mode_switching') : "Changement de mode en cours...") || "Changement de mode en cours...";
+        feedback.className = 'sys-feedback sys-feedback-info animate-pulse';
+    }
+
+    try {
+        const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
+        const res = await apiFetch(`/api/mode${sideQuery}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: targetMode })
+        });
+
+        if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            throw new Error(errData.error || ('HTTP ' + res.status));
+        }
+
+        const data = await res.json();
+        updateSupervisionModeUi(data.mode || targetMode);
+
+        if (feedback) {
+            feedback.innerText = (typeof t === 'function' ? t('system.mode_switch_success') : "Mode mis à jour avec succès") || "Mode mis à jour avec succès";
+            feedback.className = 'sys-feedback sys-feedback-ok';
+        }
+
+        if (typeof fetchTelemetry === 'function') {
+            fetchTelemetry();
+        }
+    } catch (err) {
+        console.error('Mode switch error:', err);
+        if (feedback) {
+            feedback.innerText = (typeof t === 'function' ? t('alert.error') : 'Erreur: ') + (err.message || err);
+            feedback.className = 'sys-feedback sys-feedback-error';
+        }
+    } finally {
+        if (btnRemote) btnRemote.disabled = false;
+        if (btnLocal) btnLocal.disabled = false;
+        if (feedback) {
+            setTimeout(() => { feedback.innerText = ''; }, 4000);
+        }
     }
 }

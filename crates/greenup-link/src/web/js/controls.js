@@ -68,9 +68,45 @@ function updateControlButtons(charge_authorized, charge_paused) {
     }
 }
 
-btnEnableDisable.addEventListener('click', () => sendPostAction('/api/charge', { action: window.lastChargeAuthorized ? 'disable' : 'enable' }));
+function updateControlsForMode(isLocal) {
+    if (isLocal) {
+        if (slider) slider.disabled = true;
+        if (btnEnableDisable) {
+            btnEnableDisable.disabled = true;
+            btnEnableDisable.title = typeof t === 'function' ? t('controls.local_mode_notice') : "Commandes verrouillées : la borne est en mode Passif (Local)";
+        }
+        if (btnPauseResume) {
+            btnPauseResume.disabled = true;
+            btnPauseResume.title = typeof t === 'function' ? t('controls.local_mode_notice') : "Commandes verrouillées : la borne est en mode Passif (Local)";
+        }
+        if (controlsPanel) {
+            controlsPanel.classList.add('opacity-75');
+        }
+    } else {
+        if (slider && window.isUsbConnected) slider.disabled = false;
+        if (btnEnableDisable && window.isUsbConnected) {
+            btnEnableDisable.disabled = false;
+            btnEnableDisable.removeAttribute('title');
+        }
+        if (btnPauseResume && window.isUsbConnected) {
+            btnPauseResume.disabled = false;
+            btnPauseResume.removeAttribute('title');
+        }
+        if (controlsPanel && window.isUsbConnected && !isActionPending) {
+            controlsPanel.classList.remove('opacity-75');
+        }
+    }
+}
 
-btnPauseResume.addEventListener('click', () => sendPostAction('/api/charge', { action: window.lastChargePaused ? 'resume' : 'pause' }));
+btnEnableDisable.addEventListener('click', () => {
+    if (window.currentSupervisionMode === 'local') return;
+    sendPostAction('/api/charge', { action: window.lastChargeAuthorized ? 'disable' : 'enable' });
+});
+
+btnPauseResume.addEventListener('click', () => {
+    if (window.currentSupervisionMode === 'local') return;
+    sendPostAction('/api/charge', { action: window.lastChargePaused ? 'resume' : 'pause' });
+});
 
 slider.addEventListener('mousedown', () => isDraggingSlider = true);
 slider.addEventListener('mouseup', () => isDraggingSlider = false);
@@ -81,5 +117,6 @@ slider.addEventListener('input', (e) => {
     lblSlider.innerText = e.target.value + " A";
 });
 slider.addEventListener('change', (e) => {
+    if (window.currentSupervisionMode === 'local') return;
     sendPostAction('/api/current/' + e.target.value);
 });

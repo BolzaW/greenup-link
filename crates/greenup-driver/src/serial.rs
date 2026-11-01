@@ -410,7 +410,14 @@ pub fn run_serial_loop_with_options(
         });
 
         reset_serial_filters();
-        send_init_sequence_sync(&mut port, &state, &internal_rx, &is_running);
+        if state.mode() == crate::telemetry::SupervisionMode::Remote {
+            send_init_sequence_sync(&mut port, &state, &internal_rx, &is_running);
+        } else {
+            logger::info(
+                "SERIAL",
+                "👂 Operating in Local mode: passive monitoring enabled. ATmega init sequence bypassed (zero serial transmission).",
+            );
+        }
 
         let session_start = Instant::now();
         let mut last_watchdog_probe = Instant::now();
@@ -428,7 +435,14 @@ pub fn run_serial_loop_with_options(
             };
 
             if let Some(cmd) = cmd_opt {
-                send_command_sync(&mut port, &state, &internal_rx, &is_running, cmd);
+                if state.mode() == crate::telemetry::SupervisionMode::Local && cmd != Command::Reset {
+                    logger::warn(
+                        "SERIAL",
+                        &format!("⛔ Command {} dropped: station operating in Local mode (passive)", cmd.as_frame()),
+                    );
+                } else {
+                    send_command_sync(&mut port, &state, &internal_rx, &is_running, cmd);
+                }
             } else {
                 std::thread::sleep(Duration::from_millis(50));
             }
@@ -459,8 +473,8 @@ pub fn run_serial_loop_with_options(
             let probe_threshold = Duration::from_secs(options.watchdog_timeout_secs.saturating_sub(15).max(5));
 
             if elapsed_since_rx >= probe_threshold && elapsed_since_rx < watchdog_timeout {
-                // Preventive probe: send lightweight 'ping' every 7s to verify ATmega is alive
-                if last_watchdog_probe.elapsed() >= Duration::from_secs(7) {
+                // Preventive probe: send lightweight 'ping' every 7s to verify ATmega is alive (Remote mode only)
+                if state.mode() == crate::telemetry::SupervisionMode::Remote && last_watchdog_probe.elapsed() >= Duration::from_secs(7) {
                     last_watchdog_probe = Instant::now();
                     send_command_sync(&mut port, &state, &internal_rx, &is_running, Command::Ping);
                 }
@@ -499,8 +513,8 @@ pub fn run_serial_loop_with_options(
                     }
                 }
 
-                // Emergency rescue attempt: try sending RaspberryPiModeOK every 15s to unfreeze UART state
-                if last_watchdog_probe.elapsed() >= Duration::from_secs(15) {
+                // Emergency rescue attempt: try sending RaspberryPiModeOK every 15s to unfreeze UART state (Remote mode only)
+                if state.mode() == crate::telemetry::SupervisionMode::Remote && last_watchdog_probe.elapsed() >= Duration::from_secs(15) {
                     last_watchdog_probe = Instant::now();
                     logger::warn("SERIAL", &format!("🚨 Attempting emergency ATmega interface reset (RaspberryPiModeOK) on {}...", port_name));
                     send_command_sync(&mut port, &state, &internal_rx, &is_running, Command::RaspberryPiModeOk);
@@ -654,8 +668,12 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
 
     match event {
         ProtocolEvent::Ping => {
-            logger::log("SERIAL", "🤝 Hardware ping detected, sending RaspberryPiModeOK");
-            let _ = state.serial_tx.try_send(Command::RaspberryPiModeOk);
+            if state.mode() == crate::telemetry::SupervisionMode::Remote {
+                logger::log("SERIAL", "🤝 Hardware ping detected, sending RaspberryPiModeOK");
+                let _ = state.serial_tx.try_send(Command::RaspberryPiModeOk);
+            } else {
+                logger::log("SERIAL", "👂 Hardware ping detected, ignored in Local mode (no RaspberryPiModeOK sent)");
+            }
         }
         ProtocolEvent::Pong => {
             // Heartbeat response acknowledged (last_rx timestamp already updated)

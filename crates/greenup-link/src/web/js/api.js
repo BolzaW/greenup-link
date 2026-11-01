@@ -448,7 +448,7 @@ function updateUsbStatus(serial) {
         usbStatusBadge.className = 'sys-usb-status-text text-emerald-400';
         usbStatusBadge.innerText = t('usb.status_connected');
         usbAlertBanner.className = 'sys-alert-banner hidden';
-        if (controlsPanel && !isActionPending) {
+        if (controlsPanel && !isActionPending && window.currentSupervisionMode !== 'local') {
             controlsPanel.classList.remove('opacity-40', 'pointer-events-none');
             controlsPanel.removeAttribute('title');
         }
@@ -584,6 +584,13 @@ async function fetchTelemetry() {
         updateLinky(data.tic_mode);
         updateVisuals(data.greenup_state, data.charge_complete, data.iec_state, data.error_code, data.charge_paused, data.charge_authorized);
 
+        if (data.mode) {
+            const canSwitch = data.greenup_state === 'A' || data.greenup_state === 'DISCONNECTED';
+            if (typeof updateSupervisionModeUi === 'function') {
+                updateSupervisionModeUi(data.mode, canSwitch);
+            }
+        }
+
         if (typeof onTelemetryUpdateForSessions === 'function') {
             onTelemetryUpdateForSessions(data);
         }
@@ -668,6 +675,10 @@ async function refreshTic() {
 }
 
 async function sendPostAction(url, bodyObj = null) {
+    if (window.currentSupervisionMode === 'local') {
+        alert(typeof t === 'function' ? t('controls.local_mode_notice') : 'Mode Passif actif : les commandes sont verrouillées.');
+        return;
+    }
     if (!window.isUsbConnected) {
         alert(t('usb.controls_disabled'));
         return;

@@ -1567,3 +1567,63 @@
 #visualizerGrid.no-tic #cellWireBottom {
     grid-column: span 3 / span 3 !important;
 }
+
+/* ==========================================================================
+   Supervision Mode (Remote / Local Sniffer)
+   ========================================================================== */
+.sys-mode-card {
+    border-color: rgba(99, 102, 241, 0.25);
+}
+
+.sys-mode-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0.65rem 0.8rem;
+    border-radius: 0.6rem;
+    background-color: rgba(15, 23, 42, 0.7);
+    border: 1px solid #334155;
+    color: #e2e8f0;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    user-select: none;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.sys-mode-btn:hover:not(:disabled) {
+    background-color: rgba(30, 41, 59, 0.85);
+    border-color: #64748b;
+}
+
+.sys-mode-btn.active {
+    background-color: rgba(14, 165, 233, 0.12);
+    border-color: #0284c7;
+    box-shadow: 0 0 14px rgba(14, 165, 233, 0.2);
+}
+
+.sys-mode-btn.active.mode-local-active {
+    background-color: rgba(245, 158, 11, 0.12);
+    border-color: #d97706;
+    box-shadow: 0 0 14px rgba(245, 158, 11, 0.2);
+}
+
+.sys-mode-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background-color: #0b1120;
+    border-color: #1e293b;
+}
+
+.mode-badge-local {
+    background-color: rgba(245, 158, 11, 0.15);
+    border-color: rgba(245, 158, 11, 0.4);
+    color: #fbbf24;
+}
+
+.mode-badge-remote {
+    background-color: rgba(14, 165, 233, 0.12);
+    border-color: rgba(14, 165, 233, 0.35);
+    color: #38bdf8;
+}

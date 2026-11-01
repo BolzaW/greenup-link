@@ -42,6 +42,12 @@ baud_rate = 115200
 # Silence timeout before alerting on loss of communication (seconds).
 # Default: 60
 watchdog_timeout_secs = 60
+
+[station]
+# Supervision mode at startup:
+# - "remote" : Active supervision (default) - manages charging and communicates with ATmega
+# - "local"  : Passive monitor mode - listens to serial telemetry only, zero transmissions to ATmega
+mode = "remote"
 "#;
 
 #[derive(Debug, Clone)]
@@ -104,10 +110,24 @@ impl Default for SerialConfig {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct StationConfig {
+    pub mode: greenup_driver::telemetry::SupervisionMode,
+}
+
+impl Default for StationConfig {
+    fn default() -> Self {
+        Self {
+            mode: greenup_driver::telemetry::SupervisionMode::Remote,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct AppConfig {
     pub http: HttpConfig,
     pub serial: SerialConfig,
+    pub station: StationConfig,
 }
 
 impl AppConfig {
@@ -192,6 +212,12 @@ impl AppConfig {
             }
         }
 
+        if let Ok(env_mode) = env::var("GREENUP_MODE") {
+            if let Some(m) = greenup_driver::telemetry::SupervisionMode::from_str(&env_mode) {
+                config.station.mode = m;
+            }
+        }
+
         config
     }
 
@@ -268,6 +294,12 @@ impl AppConfig {
                             }
                         }
                         _ => {}
+                    }
+                } else if current_section == "station" {
+                    if key.as_str() == "mode" {
+                        if let Some(m) = greenup_driver::telemetry::SupervisionMode::from_str(&val) {
+                            config.station.mode = m;
+                        }
                     }
                 }
             }

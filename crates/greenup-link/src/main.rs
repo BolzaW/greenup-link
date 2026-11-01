@@ -48,6 +48,7 @@ fn discover_candidate_ports(configured_port: Option<&str>, configured_port2: Opt
 
 fn spawn_serial_worker(
     side: u8,
+    mode: greenup_driver::telemetry::SupervisionMode,
     port_name: String,
     baud_rate: u32,
     watchdog_timeout_secs: u64,
@@ -60,9 +61,14 @@ fn spawn_serial_worker(
 
     let mut tel = Telemetry::default();
     tel.side = side;
+    tel.mode = mode;
 
     let app_state = Arc::new(AppState {
         side: AtomicU8::new(side),
+        mode: AtomicU8::new(match mode {
+            greenup_driver::telemetry::SupervisionMode::Remote => 0,
+            greenup_driver::telemetry::SupervisionMode::Local => 1,
+        }),
         telemetry: Mutex::new(tel),
         info: Mutex::new(initial_info),
         serial_tx: tx.clone(),
@@ -104,6 +110,21 @@ async fn main() {
         );
     }
 
+    match app_config.station.mode {
+        greenup_driver::telemetry::SupervisionMode::Local => {
+            greenup_driver::logger::warn(
+                "SYS",
+                "👂 Supervision mode: LOCAL (passive monitoring - no commands will be sent to ATmega)",
+            );
+        }
+        greenup_driver::telemetry::SupervisionMode::Remote => {
+            greenup_driver::logger::log(
+                "SYS",
+                "⚡ Supervision mode: REMOTE (active supervision enabled)",
+            );
+        }
+    }
+
     let (port1_name, port2_candidate) = discover_candidate_ports(
         app_config.serial.port.as_deref(),
         app_config.serial.port2.as_deref(),
@@ -116,6 +137,7 @@ async fn main() {
 
     let (app_state_1, _tx1) = spawn_serial_worker(
         1,
+        app_config.station.mode,
         port1_name,
         app_config.serial.baud_rate,
         app_config.serial.watchdog_timeout_secs,
@@ -130,6 +152,7 @@ async fn main() {
             );
             let (app_state_2, _tx2) = spawn_serial_worker(
                 2,
+                app_config.station.mode,
                 port2_candidate.clone(),
                 app_config.serial.baud_rate,
                 app_config.serial.watchdog_timeout_secs,
@@ -178,7 +201,8 @@ async fn main() {
                                 ref_str, port2_target
                             ),
                         );
-                        let (app_state_2, _tx2) = spawn_serial_worker(2, port2_target, baud, wd, &ver);
+                        let point_mode = station_clone.point1.mode();
+                        let (app_state_2, _tx2) = spawn_serial_worker(2, point_mode, port2_target, baud, wd, &ver);
                         station_clone.attach_point2(app_state_2);
                         greenup_driver::logger::set_dual_station(true);
                     } else {

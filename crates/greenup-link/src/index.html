@@ -21,6 +21,7 @@
             <h1 class="text-lg md:text-2xl font-bold tracking-tight text-white leading-none">Green'Up <span class="text-sky-400">Link</span></h1>
             <div class="flex items-center space-x-1.5 mt-1">
                 <span class="text-[9px] md:text-xs text-slate-500"><span data-i18n="header.subtitle">Interface de contrôle locale</span> <span id="lblLinkVersion"></span></span>
+                <span id="hdrModeBadge" class="hidden text-[9px] font-bold px-1.5 py-0.5 rounded border font-mono"></span>
             </div>
         </div>
     </div>
@@ -426,6 +427,41 @@
                 <div id="serialActionFeedback" class="sys-feedback"></div>
             </div>
 
+            <!-- Mode de Supervision (Remote vs Local Passif) -->
+            <div class="sys-card sys-mode-card">
+                <div class="sys-card-header">
+                    <div class="sys-card-title">
+                        <svg width="15" height="15" class="text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        <span data-i18n="system.supervision_title">Mode de supervision</span>
+                    </div>
+                    <span id="cfgModeActiveBadge" class="sys-badge sys-badge-emerald" data-i18n="system.mode_remote_short">Supervisé</span>
+                </div>
+                <p class="sys-module-desc" data-i18n="system.supervision_desc">Bascule entre le contrôle actif et l'écoute passive (sniffer) du bus série</p>
+                <div class="sys-grid-2">
+                    <button type="button" id="btnModeRemote" class="sys-mode-btn active" onclick="switchSupervisionMode('remote')">
+                        <div class="flex items-center justify-between w-full mb-1">
+                            <span class="font-bold text-xs" data-i18n="system.mode_remote">Supervisé (Distant)</span>
+                            <span id="badgeModeRemote" class="sys-badge sys-badge-emerald text-[9px]" data-i18n="system.mode_badge_active">Actif</span>
+                        </div>
+                        <p class="text-[10px] text-slate-400 leading-snug" data-i18n="system.mode_remote_desc">Green'Up Link pilote activement la borne (autorisations, consigne de courant, watchdog, TIC).</p>
+                    </button>
+                    <button type="button" id="btnModeLocal" class="sys-mode-btn" onclick="switchSupervisionMode('local')">
+                        <div class="flex items-center justify-between w-full mb-1">
+                            <span class="font-bold text-xs" data-i18n="system.mode_local">Passif (Local / Sniffer)</span>
+                            <span id="badgeModeLocal" class="sys-badge sys-badge-amber text-[9px] hidden" data-i18n="system.mode_badge_active">Actif</span>
+                        </div>
+                        <p class="text-[10px] text-slate-400 leading-snug" data-i18n="system.mode_local_desc">Green'Up Link n'envoie aucune commande à l'ATmega. Il journalise et affiche les trames spontanées sans interférer.</p>
+                    </button>
+                </div>
+                <div id="cfgModeNotice" class="text-[11px] text-slate-400 flex items-center gap-1.5 pt-1">
+                    <span class="text-amber-400 font-bold">ℹ️</span>
+                    <span data-i18n="system.mode_state_a_required">La bascule de mode nécessite que la borne soit à l'état A (Libre / Déconnectée).</span>
+                </div>
+                <div id="cfgModeFeedback" class="sys-feedback"></div>
+            </div>
+
             <!-- 2. Périphériques & Modules (2-Column Side-by-Side Cards) -->
             <div class="sys-grid-2">
                 <!-- Bluetooth Module -->
@@ -586,6 +622,12 @@
         <div id="controlsPanel" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex-1 flex flex-col justify-between transition-opacity duration-300 min-h-[220px]">
             <div>
                 <h3 class="text-sm font-bold text-slate-300 uppercase tracking-widest mb-6" data-i18n="controls.charge_params">Paramètres de charge</h3>
+
+                <!-- Local Mode Banner (shown when station is in passive local sniffer mode) -->
+                <div id="localModeBanner" class="hidden mb-6 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-3">
+                    <svg class="w-5 h-5 flex-shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <span data-i18n="controls.local_mode_notice">Mode Passif actif : la borne est autonome. Les commandes de charge sont verrouillées.</span>
+                </div>
 
                 <!-- Slider -->
                 <div class="mb-8 bg-slate-950/50 p-4 rounded-xl border border-slate-800">
