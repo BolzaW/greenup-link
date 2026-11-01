@@ -59,6 +59,9 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
     let protected_api = Router::new()
         .route("/api/info", get(get_info))
         .route("/api/telemetry", get(get_telemetry))
+        .route("/api/sessions", get(list_sessions_handler))
+        .route("/api/sessions/:id/export", post(export_session_handler))
+        .route("/api/sessions/:id", axum::routing::delete(delete_session_handler))
         .route("/api/logs", get(get_logs))
         .route("/api/logs/stream", get(stream_logs))
         .route("/api/logs/export", get(export_logs))
@@ -99,6 +102,7 @@ pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
         .route("/js/visuals.js", get(serve_js_visuals))
         .route("/js/api.js", get(serve_js_api))
         .route("/js/console.js", get(serve_js_console))
+        .route("/js/sessions.js", get(serve_js_sessions))
         .route("/js/main.js", get(serve_js_main))
         .merge(api_router)
         .layer(axum::middleware::from_fn(security_headers_middleware))
@@ -165,6 +169,11 @@ async fn serve_js_visuals() -> impl IntoResponse {
 /// GET /js/api.js
 async fn serve_js_api() -> impl IntoResponse {
     ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/api.js"))
+}
+
+/// GET /js/sessions.js
+async fn serve_js_sessions() -> impl IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "application/javascript; charset=utf-8")], include_str!("web/js/sessions.js"))
 }
 
 /// GET /js/main.js
@@ -526,5 +535,238 @@ mod tests {
         assert!(!is_valid_raw_command("cmd|pipe")); // pipe
         assert!(!is_valid_raw_command("$VAR")); // dollar sign
         assert!(!is_valid_raw_command("cmd=val")); // equals sign
+    }
+}
+
+
+// ==============================================================================
+// SESSION HISTORY API HANDLERS
+// ==============================================================================
+
+/// GET /api/sessions
+/// Returns the list of all saved sessions and the live summary of the currently active session (if any).
+async fn list_sessions_handler(State(state): State<SharedState>) -> impl IntoResponse {
+    let active_summary = if let Ok(tel) = state.telemetry.lock() {
+        greenup_driver::session::get_active_session_summary(&tel)
+    } else {
+        None
+    };
+
+    let saved_sessions = greenup_driver::session::list_saved_sessions();
+    logger::debug(
+        "API",
+        &format!(
+            "Listed {} saved sessions (active session: {})",
+            saved_sessions.len(),
+            active_summary.is_some()
+        ),
+    );
+
+    Json(json!({
+        "active_session": active_summary,
+        "sessions": saved_sessions,
+    }))
+}
+
+#[derive(serde::Deserialize)]
+pub struct ExportSessionPayload {
+    pub format: String,
+}
+
+/// POST /api/sessions/:id/export
+/// Exports a session file in the requested format (csv, txt, zip).
+async fn export_session_handler(
+    Path(id): Path<String>,
+    Json(payload): Json<ExportSessionPayload>,
+) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
+    if !greenup_driver::session::is_valid_session_id(&id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Invalid session ID format" })),
+        ));
+    }
+
+    let sessions_dir = greenup_driver::session::get_sessions_dir();
+    let csv_path = sessions_dir.join(format!("{}.csv", id));
+    let txt_path = sessions_dir.join(format!("{}.txt", id));
+
+    let fmt = payload.format.trim().to_lowercase();
+    logger::debug("API", &format!("Export requested for session '{}' in format '{}'", id, fmt));
+
+    match fmt.as_str() {
+        "csv" => {
+            if !csv_path.exists() {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    Json(json!({ "error": format!("Session CSV file not found for {}", id) })),
+                ));
+            }
+            let content = std::fs::read(&csv_path).map_err(|e| {
+                logger::error("API", &format!("Failed to read CSV file {:?}: {}", csv_path, e));
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Failed to read CSV file from disk" })),
+                )
+            })?;
+
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("text/csv; charset=utf-8"),
+            );
+            if let Ok(disp) = axum::http::HeaderValue::from_str(&format!("attachment; filename=\"{}.csv\"", id)) {
+                headers.insert(axum::http::header::CONTENT_DISPOSITION, disp);
+            }
+            Ok((headers, content).into_response())
+        }
+        "txt" => {
+            if !txt_path.exists() {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    Json(json!({ "error": format!("Session TXT file not found for {}", id) })),
+                ));
+            }
+            let content = std::fs::read(&txt_path).map_err(|e| {
+                logger::error("API", &format!("Failed to read TXT file {:?}: {}", txt_path, e));
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({ "error": "Failed to read TXT file from disk" })),
+                )
+            })?;
+
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("text/plain; charset=utf-8"),
+            );
+            if let Ok(disp) = axum::http::HeaderValue::from_str(&format!("attachment; filename=\"{}.txt\"", id)) {
+                headers.insert(axum::http::header::CONTENT_DISPOSITION, disp);
+            }
+            Ok((headers, content).into_response())
+        }
+        "zip" => {
+            if !csv_path.exists() && !txt_path.exists() {
+                return Err((
+                    StatusCode::NOT_FOUND,
+                    Json(json!({ "error": format!("No session files found on disk for {}", id) })),
+                ));
+            }
+
+            let mut buffer = std::io::Cursor::new(Vec::new());
+            {
+                let mut zip = zip::ZipWriter::new(&mut buffer);
+                let options = zip::write::SimpleFileOptions::default()
+                    .compression_method(zip::CompressionMethod::Deflated);
+
+                if csv_path.exists() {
+                    let csv_bytes = std::fs::read(&csv_path).map_err(|e| {
+                        logger::error("API", &format!("Failed to read CSV for ZIP: {}", e));
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({ "error": "Failed to read CSV for ZIP" })),
+                        )
+                    })?;
+                    zip.start_file(format!("{}.csv", id), options).map_err(|e| {
+                        logger::error("API", &format!("Failed to start ZIP CSV entry: {}", e));
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({ "error": "Failed to create ZIP entry" })),
+                        )
+                    })?;
+                    use std::io::Write;
+                    zip.write_all(&csv_bytes).map_err(|e| {
+                        logger::error("API", &format!("Failed to write CSV bytes into ZIP: {}", e));
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({ "error": "Failed to write into ZIP archive" })),
+                        )
+                    })?;
+                }
+
+                if txt_path.exists() {
+                    let txt_bytes = std::fs::read(&txt_path).map_err(|e| {
+                        logger::error("API", &format!("Failed to read TXT for ZIP: {}", e));
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({ "error": "Failed to read TXT for ZIP" })),
+                        )
+                    })?;
+                    zip.start_file(format!("{}.txt", id), options).map_err(|e| {
+                        logger::error("API", &format!("Failed to start ZIP TXT entry: {}", e));
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({ "error": "Failed to create ZIP entry" })),
+                        )
+                    })?;
+                    use std::io::Write;
+                    zip.write_all(&txt_bytes).map_err(|e| {
+                        logger::error("API", &format!("Failed to write TXT bytes into ZIP: {}", e));
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({ "error": "Failed to write into ZIP archive" })),
+                        )
+                    })?;
+                }
+
+                zip.finish().map_err(|e| {
+                    logger::error("API", &format!("Failed to finalize ZIP archive: {}", e));
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({ "error": "Failed to finalize ZIP archive" })),
+                    )
+                })?;
+            }
+
+            let zip_data = buffer.into_inner();
+            let mut headers = axum::http::HeaderMap::new();
+            headers.insert(
+                axum::http::header::CONTENT_TYPE,
+                axum::http::HeaderValue::from_static("application/zip"),
+            );
+            if let Ok(disp) = axum::http::HeaderValue::from_str(&format!("attachment; filename=\"{}.zip\"", id)) {
+                headers.insert(axum::http::header::CONTENT_DISPOSITION, disp);
+            }
+            Ok((headers, zip_data).into_response())
+        }
+        _ => Err((
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "error": "Unsupported export format. Supported formats: csv, txt, zip" })),
+        )),
+    }
+}
+
+/// DELETE /api/sessions/:id
+/// Deletes the session files from disk.
+async fn delete_session_handler(
+    Path(id): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    if id.trim().is_empty() || id.eq_ignore_ascii_case("active") {
+        return Err((
+            StatusCode::CONFLICT,
+            Json(json!({ "error": "Cannot delete currently active charging session" })),
+        ));
+    }
+
+    logger::info("API", &format!("Delete requested for session '{}'", id));
+    match greenup_driver::session::delete_session(&id) {
+        Ok(true) => Ok(Json(json!({
+            "message": "Session deleted successfully",
+            "id": id,
+        }))),
+        Ok(false) => Err((
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": format!("Session '{}' not found", id) })),
+        )),
+        Err(err_msg) => {
+            let status = if err_msg.contains("active") {
+                StatusCode::CONFLICT
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            Err((
+                status,
+                Json(json!({ "error": err_msg })),
+            ))
+        }
     }
 }

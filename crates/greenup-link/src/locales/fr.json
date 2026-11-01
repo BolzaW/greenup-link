@@ -2,7 +2,10 @@
   "header": {
     "subtitle": "IHM",
     "ble_module": "BLE",
-    "debug": "Debug"
+    "debug": "Debug",
+    "tab_board": "Borne",
+    "tab_sessions": "Sessions",
+    "tab_console": "Console"
   },
   "auth": {
     "title": "Authentification requise",
@@ -106,5 +109,30 @@
     "0012": "Coupure secteur / Défaut alimentation",
     "0013": "Erreur communication interne",
     "0015": "Défaut fuite courant continu (6mA DC)"
+  },
+  "sessions": {
+    "title": "Sessions de charge",
+    "loading": "Chargement des sessions...",
+    "no_sessions": "Aucune session enregistrée",
+    "active_prefix": "⚡ [En cours]",
+    "active_reason": "Charge en cours",
+    "download_zip": "ZIP",
+    "download_zip_title": "Télécharger l'archive ZIP (CSV + fiche résumé)",
+    "downloading": "Téléchargement...",
+    "delete_title": "Supprimer la session",
+    "delete_confirm": "Confirmer ?",
+    "delete_failed": "Échec de la suppression : ",
+    "stat_charge_duration": "Durée charge",
+    "stat_total_duration": "Durée totale",
+    "stat_energy": "Énergie",
+    "stat_power_max": "P. Crête",
+    "stat_power_avg": "P. Moyenne",
+    "stat_reason": "Fin",
+    "chart_power_curve": "Courbe de puissance",
+    "chart_loading": "Chargement...",
+    "chart_no_data": "Aucune donnée de courbe disponible",
+    "time_h": "h",
+    "time_m": "m",
+    "time_s": "s"
   }
 }

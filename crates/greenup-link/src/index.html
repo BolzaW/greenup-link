@@ -23,20 +23,26 @@
         </div>
     </div>
 
-    <!-- Controls: Debug Toggle, BT Toggle & Language (Top Right on Mobile, Right on Desktop) -->
-    <div class="col-span-1 flex items-center justify-end space-x-2 md:space-x-4 md:order-last">
-        <!-- Debug Toggle Widget -->
-        <div class="flex flex-col items-center justify-center mt-1">
-            <div class="flex items-center space-x-1 mb-1">
-                <svg class="w-3 h-3 text-slate-500 hidden sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
-                <span class="text-[8px] md:text-[9px] font-bold text-slate-500 uppercase tracking-wider" data-i18n="header.debug">DEBUG</span>
-            </div>
-            <div class="relative inline-block align-middle select-none transition duration-200 ease-in w-[48px] opacity-80 hover:opacity-100">
-                <input type="checkbox" name="toggleDebug" id="toggleDebug" class="toggle-checkbox absolute block rounded-full bg-slate-200 border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out"/>
-                <label for="toggleDebug" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-800 cursor-pointer transition-colors duration-200 ease-in-out border border-slate-700"></label>
-            </div>
+    <!-- Navigation Tabs (Center on Desktop, Full-width Row on Mobile) -->
+    <div class="col-span-2 md:col-span-1 flex justify-center order-3 md:order-2 my-1 md:my-0">
+        <div class="header-nav-tabs">
+            <button id="tabBoard" class="header-tab active" data-tab="board">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                <span data-i18n="header.tab_board">Borne</span>
+            </button>
+            <button id="tabSessions" class="header-tab" data-tab="sessions">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                <span data-i18n="header.tab_sessions">Sessions</span>
+            </button>
+            <button id="tabConsole" class="header-tab" data-tab="console">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                <span data-i18n="header.tab_console">Console</span>
+            </button>
         </div>
+    </div>
 
+    <!-- Controls: BT Toggle, Language & Auth (Top Right on Mobile, Right on Desktop) -->
+    <div class="col-span-1 flex items-center justify-end space-x-2 md:space-x-4 order-2 md:order-3">
         <!-- Bluetooth Toggle Widget -->
         <div class="flex flex-col items-center justify-center mt-1">
             <div class="flex items-center space-x-1 mb-1">
@@ -64,7 +70,7 @@
     </div>
 
     <!-- Board Info & USB Link Status (Bottom Full-width on Mobile, Middle on Desktop) -->
-    <div class="col-span-2 w-full md:w-auto text-xs text-slate-400 flex flex-col items-start bg-slate-900/50 p-2 px-3 rounded-lg border border-slate-800 shadow-inner md:mx-6">
+    <div class="col-span-2 w-full md:w-auto text-xs text-slate-400 flex flex-col items-start bg-slate-900/50 p-2 px-3 rounded-lg border border-slate-800 shadow-inner md:mx-6 order-4">
         <div class="flex items-center space-x-2 w-full flex-wrap gap-y-1">
             <span id="usbLed" class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse inline-block flex-shrink-0"></span>
             <span id="usbStatusBadge" class="font-bold text-[10px] md:text-[11px] text-rose-400 flex-shrink-0" data-i18n="usb.status_disconnected">USB cable disconnected</span>
@@ -184,6 +190,94 @@
                 <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1" data-i18n="visualizer.system_state">État système</span>
                 <div id="lblState" class="text-sm font-semibold text-slate-300" data-i18n="state.searching">Recherche de la borne...</div>
                 <div id="lblError" class="text-rose-500 text-xs mt-1 font-medium h-4"></div>
+            </div>
+        </div>
+
+        <!-- Sessions History Panel (Replaces visualizer in Sessions mode) -->
+        <div id="sessionsPanel" class="hidden sessions-panel">
+            <!-- Top Toolbar: Selector + Download ZIP + Delete -->
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800">
+                <div class="flex-1 min-w-0 flex items-center space-x-2">
+                    <svg class="w-4 h-4 text-sky-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    <select id="sessionSelect" class="session-dropdown flex-1 min-w-0" aria-label="Sélectionner une session">
+                        <option value="" disabled selected data-i18n="sessions.loading">Chargement des sessions...</option>
+                    </select>
+                </div>
+                <div class="flex items-center space-x-2 flex-shrink-0 justify-end">
+                    <!-- Download ZIP button -->
+                    <button id="btnSessionDownloadZip" class="session-btn session-btn-zip" title="Télécharger l'archive ZIP (CSV + fiche résumé)" data-i18n-title="sessions.download_zip_title">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                        </svg>
+                        <span id="lblSessionDownloadZip" data-i18n="sessions.download_zip">ZIP</span>
+                    </button>
+                    <!-- Delete button -->
+                    <button id="btnSessionDelete" class="session-btn session-btn-delete" title="Supprimer la session sélectionnée" data-i18n-title="sessions.delete_title">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                        <span id="lblSessionDelete"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Session Summary Stat Cards (4 cards) -->
+            <div id="sessionSummaryCards" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                <!-- Duration -->
+                <div class="session-stat-card">
+                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                        <span>⏱️</span> <span data-i18n="sessions.stat_charge_duration">Durée charge</span>
+                    </span>
+                    <span id="sessionValChargingDuration" class="text-sm font-bold text-slate-200 font-mono mt-0.5">--</span>
+                    <span id="sessionValTotalDuration" class="text-[9px] text-slate-500 font-mono">--</span>
+                </div>
+                <!-- Energy -->
+                <div class="session-stat-card">
+                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                        <span>⚡</span> <span data-i18n="sessions.stat_energy">Énergie</span>
+                    </span>
+                    <span id="sessionValEnergy" class="text-sm font-bold text-sky-400 font-mono mt-0.5">--</span>
+                    <span id="sessionValPhase" class="text-[9px] text-slate-500 font-mono">--</span>
+                </div>
+                <!-- Power Peak / Avg -->
+                <div class="session-stat-card">
+                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                        <span>📈</span> <span data-i18n="sessions.stat_power_max">P. Crête</span>
+                    </span>
+                    <span id="sessionValMaxPower" class="text-sm font-bold text-emerald-400 font-mono mt-0.5">--</span>
+                    <span id="sessionValAvgPower" class="text-[9px] text-slate-500 font-mono">--</span>
+                </div>
+                <!-- Reason / Status -->
+                <div class="session-stat-card">
+                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                        <span>🛑</span> <span data-i18n="sessions.stat_reason">Fin</span>
+                    </span>
+                    <span id="sessionValReason" class="text-xs font-semibold text-slate-300 truncate mt-0.5" title="">--</span>
+                    <span id="sessionValEndTime" class="text-[9px] text-slate-500 font-mono">--</span>
+                </div>
+            </div>
+
+            <!-- Chart Container -->
+            <div class="session-chart-wrap">
+                <!-- Header inside chart container -->
+                <div class="flex items-center justify-between px-2 pt-1 pb-1">
+                    <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+                        <span data-i18n="sessions.chart_power_curve">Courbe de puissance</span>
+                    </span>
+                    <span id="sessionChartStatus" class="text-[10px] font-mono text-slate-500"></span>
+                </div>
+
+                <!-- Canvas -->
+                <div class="relative flex-1 w-full min-h-[200px] overflow-hidden">
+                    <canvas id="sessionChartCanvas" class="w-full h-full block"></canvas>
+                    <div id="sessionChartTooltip" class="chart-tooltip"></div>
+                    <div id="sessionChartEmpty" class="absolute inset-0 flex items-center justify-center text-slate-500 text-xs hidden">
+                        <span data-i18n="sessions.chart_no_data">Aucune donnée de courbe disponible</span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -390,6 +484,7 @@
 <script src="/js/visuals.js"></script>
 <script src="/js/api.js"></script>
 <script src="/js/console.js"></script>
+<script src="/js/sessions.js"></script>
 <script src="/js/main.js"></script>
 </body>
 </html>

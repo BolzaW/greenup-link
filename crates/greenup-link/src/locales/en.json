@@ -2,7 +2,10 @@
   "header": {
     "subtitle": "GUI",
     "ble_module": "BLE",
-    "debug": "Debug"
+    "debug": "Debug",
+    "tab_board": "Charger",
+    "tab_sessions": "Sessions",
+    "tab_console": "Console"
   },
   "auth": {
     "title": "Authentication Required",
@@ -106,5 +109,30 @@
     "0012": "Power outage / Under-voltage",
     "0013": "Internal communication error",
     "0015": "6mA DC leakage fault"
+  },
+  "sessions": {
+    "title": "Charging Sessions",
+    "loading": "Loading sessions...",
+    "no_sessions": "No sessions recorded",
+    "active_prefix": "⚡ [Active]",
+    "active_reason": "Charging in progress",
+    "download_zip": "ZIP",
+    "download_zip_title": "Download ZIP archive (CSV + summary text)",
+    "downloading": "Downloading...",
+    "delete_title": "Delete session",
+    "delete_confirm": "Confirm?",
+    "delete_failed": "Failed to delete session: ",
+    "stat_charge_duration": "Charge time",
+    "stat_total_duration": "Total time",
+    "stat_energy": "Energy",
+    "stat_power_max": "Peak power",
+    "stat_power_avg": "Avg power",
+    "stat_reason": "End reason",
+    "chart_power_curve": "Power curve",
+    "chart_loading": "Loading...",
+    "chart_no_data": "No curve data available",
+    "time_h": "h",
+    "time_m": "m",
+    "time_s": "s"
   }
 }

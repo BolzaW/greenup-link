@@ -341,6 +341,14 @@ pub fn run_serial_loop_with_options(
 
             if let Ok(mut tel) = state.telemetry.lock() {
                 tel.serial.last_rx_secs_ago = Some(elapsed_since_rx.as_secs());
+                if crate::session::check_state_a_timeout(&tel) {
+                    tel.energy = 0.0;
+                    tel.current = 0.0;
+                    tel.power = 0.0;
+                    tel.last_power_update = None;
+                    tel.charge_complete = false;
+                    reset_serial_filters();
+                }
             }
 
             if elapsed_since_rx > watchdog_timeout {
@@ -391,6 +399,11 @@ pub fn run_serial_loop_with_options(
 
         is_running.store(false, Ordering::Relaxed);
         let _ = reader_thread.join();
+        if let Ok(tel) = state.telemetry.lock() {
+            if crate::session::is_active() {
+                crate::session::end_session("Driver shutdown / Serial disconnected", &tel);
+            }
+        }
         drop(port);
 
         logger::warn("SERIAL", "🔌 Serial session ended. Resuming USB search in 2s...");
@@ -447,7 +460,7 @@ pub fn reset_serial_filters() {
 }
 
 /// Determines the logging category/level for an incoming serial line:
-/// - `CCI:xx`: logged in INFO (`"SERIAL_RX"`) only if variation >= 1.0A (otherwise `"TRACE"`)
+/// - `CCI:xx`: logged in INFO (`"SERIAL_RX"`) only if variation >= 0.5A (otherwise `"TRACE"`)
 /// - `CC:xx`: logged in INFO (`"SERIAL_RX"`) only if variation >= 1A (otherwise `"TRACE"`)
 /// - `CPh:xx`: logged in INFO (`"SERIAL_RX"`) on first reception or value change (otherwise `"DEBUG"`)
 /// - Other frames: logged in INFO (`"SERIAL_RX"`)
@@ -458,13 +471,13 @@ pub fn determine_rx_log_category(line: &str) -> &'static str {
             let mut last = LAST_LOGGED_CCI.lock().unwrap_or_else(|e| e.into_inner());
             let diff = match *last {
                 Some(prev) => (current_val - prev).abs(),
-                None => 1.0, // First measurement -> log in INFO
+                None => 0.5, // First measurement -> log in INFO
             };
-            if diff >= 1.0 {
+            if diff >= 0.5 {
                 *last = Some(current_val);
                 "SERIAL_RX" // Logged as INFO
             } else {
-                "TRACE" // Variations < 1A logged as TRACE
+                "TRACE" // Variations < 0.5A logged as TRACE
             }
         } else {
             "TRACE"
@@ -504,6 +517,17 @@ pub fn determine_rx_log_category(line: &str) -> &'static str {
 }
 
 fn parse_incoming_line(line: &str, state: &SharedState) {
+    if let Ok(mut tel) = state.telemetry.lock() {
+        if crate::session::check_state_a_timeout(&tel) {
+            tel.energy = 0.0;
+            tel.current = 0.0;
+            tel.power = 0.0;
+            tel.last_power_update = None;
+            tel.charge_complete = false;
+            reset_serial_filters();
+        }
+    }
+
     let rx_category = determine_rx_log_category(line);
     logger::log(rx_category, line);
 
@@ -556,7 +580,9 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             }
         }
         ProtocolEvent::Dip1(_) => {}
-        ProtocolEvent::ChargePhases(_) => {}
+        ProtocolEvent::ChargePhases(phase) => {
+            crate::session::update_phase(&phase);
+        }
         ProtocolEvent::StateChange(state_val) => {
             if state_val == "V" {
                 logger::log("SYS", "!!! CRITICAL ALERT: POWER OUTAGE DETECTED (State:V) - IMMINENT SHUTDOWN !!!");
@@ -579,14 +605,41 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                     logger::log("SERIAL", &format!("🔌 Charge interrupted/ended (State {}): current & power set to 0", state_val));
                 }
 
-                if state_val == "A" || state_val == "L" {
-                    // Vehicle unplugged or station idle: reset all session counters
+                if crate::session::is_immediate_termination_state(&state_val) {
+                    // Immediate absolute termination (State L, or safety/fault states R, ST, U, V, W, X, Y, Z)
+                    if crate::session::is_active() {
+                        let reason = match state_val.as_str() {
+                            "L" => "Cable unlocked / unlatched (State: L)".to_string(),
+                            _ => format!("Safety / fault termination (State: {})", state_val),
+                        };
+                        crate::session::end_session(&reason, &tel);
+                    }
                     tel.current = 0.0;
                     tel.power = 0.0;
                     tel.energy = 0.0;
                     tel.last_power_update = None;
                     tel.charge_complete = false;
                     reset_serial_filters();
+                } else if state_val == "A" {
+                    // State A: vehicle disconnected or temporary pilot interruption
+                    // Contactors open: current and power are zero immediately
+                    tel.current = 0.0;
+                    tel.power = 0.0;
+                    tel.last_power_update = None;
+
+                    if crate::session::is_active() {
+                        crate::session::on_state_change(&state_val, &tel);
+                        // Note: tel.energy is preserved during the 60s grace period
+                    } else {
+                        tel.energy = 0.0;
+                        tel.charge_complete = false;
+                    }
+                } else if crate::session::is_connected_state(&state_val) {
+                    if !crate::session::is_active() {
+                        crate::session::start_session(&state_val, &tel);
+                    } else {
+                        crate::session::on_state_change(&state_val, &tel);
+                    }
                 }
 
                 tel.greenup_state = state_val.clone();
@@ -676,6 +729,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                     tel.power = 0.0;
                     tel.last_power_update = None;
                 }
+                crate::session::on_telemetry_tick(&tel);
             }
         }
         ProtocolEvent::LimitAmps(limit) => {
@@ -702,6 +756,10 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::Frequency(f) => {
             if let Ok(mut tel) = state.telemetry.lock() { tel.frequency = f; }
+        }
+        ProtocolEvent::SessionTicket(ticket) => {
+            logger::log("SERIAL", &format!("🎫 Legrand session ticket received: {}", ticket));
+            crate::session::record_ticket(&ticket);
         }
         ProtocolEvent::CommandNotUnderstood(cmd) => {
             logger::log("SERIAL", &format!("⚠️ Command not recognized by the charging station: {}", cmd));
@@ -815,4 +873,25 @@ mod tests {
         assert_eq!(determine_rx_log_category("CPh:Tri"), "DEBUG");
     }
 
+
+    #[test]
+    fn test_determine_rx_log_category_cci_filtering() {
+        reset_serial_filters();
+
+        // First CCI is logged as INFO (SERIAL_RX)
+        assert_eq!(determine_rx_log_category("CCI:16.00"), "SERIAL_RX");
+
+        // Small variation < 0.5A is demoted to TRACE
+        assert_eq!(determine_rx_log_category("CCI:16.20"), "TRACE");
+        assert_eq!(determine_rx_log_category("CCI:16.40"), "TRACE");
+
+        // Variation >= 0.5A from last logged baseline (16.00 -> 16.55) is logged as INFO
+        assert_eq!(determine_rx_log_category("CCI:16.55"), "SERIAL_RX");
+
+        // Sub-0.5A from new baseline (16.55) is TRACE
+        assert_eq!(determine_rx_log_category("CCI:16.80"), "TRACE");
+
+        // Variation >= 0.5A down (16.55 -> 15.90, diff 0.65) is logged as INFO
+        assert_eq!(determine_rx_log_category("CCI:15.90"), "SERIAL_RX");
+    }
 }

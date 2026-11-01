@@ -167,9 +167,9 @@ function onAuthenticatedStart() {
     if (!consoleInitialized) {
         consoleInitialized = true;
         initConsole();
-    } else if (localStorage.getItem('greenup_debug_mode') === 'true') {
-        syncLogLevelFromServer();
-        startLogStream();
+    }
+    if (typeof initSessions === 'function') {
+        initSessions();
     }
 }
 
@@ -305,6 +305,10 @@ async function fetchTelemetry() {
         lastReportedState = data.greenup_state;
         updateLinky(data.tic_mode);
         updateVisuals(data.greenup_state, data.charge_complete, data.iec_state, data.error_code, data.charge_paused, data.charge_authorized);
+
+        if (typeof onTelemetryUpdateForSessions === 'function') {
+            onTelemetryUpdateForSessions(data);
+        }
 
     } catch (err) {
         console.error("Erreur polling", err);

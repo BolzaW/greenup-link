@@ -44,11 +44,6 @@ async function syncLogLevelFromServer() {
 function initConsole() {
     setupConsoleDomListeners();
     loadConsoleHistory();
-    syncLogLevelFromServer();
-    const debugStored = localStorage.getItem('greenup_debug_mode');
-    if (debugStored === 'true') {
-        setDebugMode(true);
-    }
 }
 
 function setDebugMode(enabled) {
