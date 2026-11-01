@@ -51,7 +51,9 @@
     "unknown": "Inconnu",
     "code": "Code",
     "charge_complete": "Charge Terminée",
-    "offline": "Hors Ligne"
+    "offline": "Hors Ligne",
+    "connected_waiting_station": "Connecté — Attente borne",
+    "connected_waiting_car": "Connecté — Attente véhicule"
   },
   "telemetry": {
     "voltage": "Tension",

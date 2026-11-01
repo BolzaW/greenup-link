@@ -1,7 +1,10 @@
 // Charging visualizer: charger box, cables, car, state label and action buttons appearance.
-// The charging cable animation runs at a FIXED speed (defined in css/style.css, .anim-flow).
-// Variable speed (proportional to current) was removed: restarting the CSS animation on every
-// current change caused visual glitches.
+// Accurately reflects Legrand firmware states (A, B, C, D, E, L, R, V, X...):
+// - State B: Charger pulses slowly in blue (waiting for station authorization)
+// - State C: Charger solid green, Car pulses slowly in blue (waiting for vehicle request)
+// - State D/E: Active charging with animated green wave car, flowing cable, and subtle green breathing pulse on charger
+// - State A/L: Idle disconnected
+// - Fault states: Red warning styling
 
 function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, charge_paused, charge_authorized) {
     if (greenup_state === window.lastVisualState &&
@@ -38,83 +41,122 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     }
 
     carIcon.style.fill = '';
-    carIcon.classList.remove('animate-pulse');
-    chargerBox.classList.remove('animate-pulse');
+    carIcon.classList.remove('animate-pulse', 'pulse-car-blue');
+    chargerBox.classList.remove('animate-pulse', 'pulse-charger-blue', 'pulse-charger-green');
+    chargerLed.classList.remove('pulse-led-blue', 'pulse-led-green');
 
     let stateLabel = iec_state || greenup_state;
-    switch(iec_state) {
-        case 'A':
-            stateLabel = t('state.disconnected') + " (" + greenup_state + ")";
-            break;
 
-        case 'B':
-            stateLabel = t('state.connected') + " (" + greenup_state + ")";
-            // Solid green cable when plugged in
-            if(animWire1) { animWire1.classList.remove('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#10b981'); }
-            if(animWire2) { animWire2.classList.remove('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#10b981'); }
-            if (cableLabel) {
-                cableLabel.classList.remove('opacity-0', 'text-rose-500');
-                cableLabel.classList.add('text-emerald-400');
-            }
-            break;
+    // 1. Fault states: Red visualizer
+    if (iec_state === 'E' || iec_state === 'F' || greenup_state === 'R' || greenup_state === 'V' || greenup_state === 'X') {
+        stateLabel = `${t('state.fault')} (${iec_state || greenup_state}) - ${t('state.code')}: ${error_code || t('state.unknown')}`;
+        chargerBox.classList.add('border-rose-500/50', 'shadow-[0_0_30px_rgba(244,63,94,0.15)]');
+        chargerIcon.classList.replace('text-slate-600', 'text-rose-500');
+        chargerLed.classList.replace('bg-slate-700', 'bg-rose-500');
 
-        case 'C':
-            stateLabel = t('state.charging') + " (" + greenup_state + ")";
+        carIcon.classList.replace('text-slate-700', 'text-rose-500');
 
-            // Animated green cable (fixed speed)
-            if(animWire1) {
-                animWire1.classList.remove('opacity-0');
-                animWire1.classList.add('anim-flow');
-                animWire1.setAttribute('stroke', '#10b981');
-            }
-            if(animWire2) {
-                animWire2.classList.remove('opacity-0');
-                animWire2.classList.add('anim-flow');
-                animWire2.setAttribute('stroke', '#10b981');
-            }
-            if (cableLabel) {
-                cableLabel.classList.remove('opacity-0', 'text-rose-500');
-                cableLabel.classList.add('text-emerald-400');
-            }
-            // Green charger
-            chargerBox.classList.add('border-emerald-500/50', 'shadow-[0_0_30px_rgba(16,185,129,0.15)]');
-            chargerIcon.classList.replace('text-slate-600', 'text-emerald-400');
-            chargerLed.classList.replace('bg-slate-700', 'bg-emerald-400');
-            chargerLed.classList.add('shadow-[0_0_10px_rgba(16,185,129,0.8)]');
+        if (animWire1) { animWire1.classList.remove('opacity-0'); animWire1.setAttribute('stroke', '#f43f5e'); }
+        if (animWire2) { animWire2.classList.remove('opacity-0'); animWire2.setAttribute('stroke', '#f43f5e'); }
+        if (cableLabel) {
+            cableLabel.classList.remove('opacity-0', 'text-emerald-400');
+            cableLabel.classList.add('text-rose-500');
+        }
+    }
+    // 2. Disconnected states (Legrand A or L, or IEC A)
+    else if (greenup_state === 'A' || greenup_state === 'L' || iec_state === 'A') {
+        stateLabel = t('state.disconnected') + " (" + greenup_state + ")";
+    }
+    // 3. Active charging states (Legrand D or E, or IEC C)
+    else if (greenup_state === 'D' || greenup_state === 'E' || iec_state === 'C') {
+        stateLabel = t('state.charging') + " (" + greenup_state + ")";
 
-            // Animated green car
-            carBox.classList.add('scale-105');
-            carIcon.style.fill = 'url(#waveGradient)';
-            break;
+        // Flowing green cable
+        if (animWire1) {
+            animWire1.classList.remove('opacity-0');
+            animWire1.classList.add('anim-flow');
+            animWire1.setAttribute('stroke', '#10b981');
+        }
+        if (animWire2) {
+            animWire2.classList.remove('opacity-0');
+            animWire2.classList.add('anim-flow');
+            animWire2.setAttribute('stroke', '#10b981');
+        }
+        if (cableLabel) {
+            cableLabel.classList.remove('opacity-0', 'text-rose-500');
+            cableLabel.classList.add('text-emerald-400');
+        }
 
-        case 'E':
-        case 'F':
-            stateLabel = `${t('state.fault')} (${iec_state} / ${greenup_state}) - ${t('state.code')}: ${error_code || t('state.unknown')}`;
-            // Red charger, cable and car
-            chargerBox.classList.add('border-rose-500/50', 'shadow-[0_0_30px_rgba(244,63,94,0.15)]');
-            chargerIcon.classList.replace('text-slate-600', 'text-rose-500');
-            chargerLed.classList.replace('bg-slate-700', 'bg-rose-500');
+        // Green charger with gentle breathing pulse
+        chargerBox.classList.add('border-emerald-500/50', 'pulse-charger-green');
+        chargerIcon.classList.replace('text-slate-600', 'text-emerald-400');
+        chargerLed.classList.replace('bg-slate-700', 'bg-emerald-400');
+        chargerLed.classList.add('pulse-led-green');
 
-            carIcon.classList.replace('text-slate-700', 'text-rose-500');
+        // Animated green wave car
+        carBox.classList.add('scale-105');
+        carIcon.style.fill = 'url(#waveGradient)';
+    }
+    // 4. Legrand State B: Vehicle connected, waiting for station authorization
+    else if (greenup_state === 'B') {
+        stateLabel = (t('state.connected_waiting_station') || (t('state.connected') + " — Attente borne")) + " (B)";
 
-            if(animWire1) { animWire1.classList.remove('opacity-0'); animWire1.setAttribute('stroke', '#f43f5e'); }
-            if(animWire2) { animWire2.classList.remove('opacity-0'); animWire2.setAttribute('stroke', '#f43f5e'); }
-            if (cableLabel) {
-                cableLabel.classList.remove('opacity-0', 'text-emerald-400');
-                cableLabel.classList.add('text-rose-500');
-            }
-            break;
+        // Solid green cable (connected)
+        if (animWire1) { animWire1.classList.remove('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#10b981'); }
+        if (animWire2) { animWire2.classList.remove('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#10b981'); }
+        if (cableLabel) {
+            cableLabel.classList.remove('opacity-0', 'text-rose-500');
+            cableLabel.classList.add('text-emerald-400');
+        }
 
-        default:
-            stateLabel = iec_state || greenup_state;
-            break;
+        // Charger pulses slowly in blue
+        chargerBox.classList.add('border-sky-500/60', 'pulse-charger-blue');
+        chargerIcon.classList.replace('text-slate-600', 'text-sky-400');
+        chargerLed.classList.replace('bg-slate-700', 'bg-sky-400');
+        chargerLed.classList.add('pulse-led-blue');
+
+        // Car remains idle slate (ready)
+    }
+    // 5. Legrand State C: Station authorized and ready, waiting for EV to request charge
+    else if (greenup_state === 'C') {
+        stateLabel = (t('state.connected_waiting_car') || (t('state.connected') + " — Attente véhicule")) + " (C)";
+
+        // Solid green cable (connected)
+        if (animWire1) { animWire1.classList.remove('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#10b981'); }
+        if (animWire2) { animWire2.classList.remove('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#10b981'); }
+        if (cableLabel) {
+            cableLabel.classList.remove('opacity-0', 'text-rose-500');
+            cableLabel.classList.add('text-emerald-400');
+        }
+
+        // Charger is solid green (ready & authorized)
+        chargerBox.classList.add('border-emerald-500/50', 'shadow-[0_0_30px_rgba(16,185,129,0.15)]');
+        chargerIcon.classList.replace('text-slate-600', 'text-emerald-400');
+        chargerLed.classList.replace('bg-slate-700', 'bg-emerald-400');
+        chargerLed.classList.add('shadow-[0_0_10px_rgba(16,185,129,0.8)]');
+
+        // Car pulses slowly in blue
+        carIcon.style.fill = '#38bdf8';
+        carIcon.classList.add('pulse-car-blue');
+    }
+    // 6. Other connected states (I, W, M...)
+    else {
+        stateLabel = t('state.connected') + " (" + greenup_state + ")";
+        if (animWire1) { animWire1.classList.remove('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#10b981'); }
+        if (animWire2) { animWire2.classList.remove('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#10b981'); }
+        if (cableLabel) {
+            cableLabel.classList.remove('opacity-0', 'text-rose-500');
+            cableLabel.classList.add('text-emerald-400');
+        }
     }
 
-    // Special case: charge physically completed (e.g. L or M after charging)
-    if (isChargeComplete && (iec_state === 'A' || iec_state === 'B')) {
+    // Special case: charge physically completed (battery full)
+    if (isChargeComplete && (iec_state === 'A' || iec_state === 'B' || greenup_state === 'A' || greenup_state === 'B')) {
         stateLabel = t('state.charge_complete') + " (" + greenup_state + ")";
+        carIcon.classList.remove('pulse-car-blue');
         carIcon.classList.replace('text-slate-700', 'text-emerald-500');
         carIcon.classList.replace('text-sky-500', 'text-emerald-500');
+        carIcon.style.fill = '#10b981';
     }
 
     updateControlButtons(charge_authorized, charge_paused);
