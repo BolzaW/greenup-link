@@ -3,10 +3,10 @@ members = [
     "crates/greenup-driver", 
     "crates/greenup-everest",
     "crates/greenup-link",
-    "crates/greenup-protocol"
+    "crates/greenup-protocol",
+    "crates/greenup-simulator"
 ]
 resolver = "2"
 
 [workspace.package]
 version = "0.4.0-dev"
-
