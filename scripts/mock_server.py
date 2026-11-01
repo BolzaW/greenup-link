@@ -32,6 +32,12 @@ BASE_DIR = pathlib.Path(__file__).parent.parent / "crates" / "greenup-link" / "s
 
 # Simulated backend state
 state = {
+    "serial": {
+        "status": "usb_connected",
+        "port": "/dev/ttyUSB0",
+        "message": "USB serial link active - Station connected",
+        "last_rx_secs_ago": 0,
+    },
     "voltage": 230.8,
     "current": 16.0,
     "power": 3692.0,
@@ -87,6 +93,11 @@ add_mock_log("SERIAL", "WARN", "⚠️ Retrying frame sync (mock warning)")
 add_mock_log("SYS", "ERROR", "❌ Simulated minor error check (mock error)")
 
 class MockHandler(http.server.BaseHTTPRequestHandler):
+    def end_headers(self):
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+        super().end_headers()
     def log_message(self, format, *args):
         # Mute high frequency polling logs
         if self.path in ("/api/telemetry", "/api/logs/stream"):
@@ -98,6 +109,8 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
 
         if url == "/":
             self.serve_file(BASE_DIR / "index.html", "text/html; charset=utf-8")
+        elif url == "/favicon.ico":
+            self.serve_file(BASE_DIR / "web" / "favicon.ico", "image/x-icon")
         elif url == "/css/style.css":
             self.serve_file(BASE_DIR / "web" / "css" / "style.css", "text/css; charset=utf-8")
         elif url.startswith("/js/"):
@@ -106,12 +119,16 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         elif url.startswith("/locales/"):
             filename = url[len("/locales/"):]
             self.serve_file(BASE_DIR / "locales" / filename, "application/json; charset=utf-8")
+        elif url == "/api/auth/status":
+            add_mock_log("API", "DEBUG", "🔐 GET /api/auth/status (auth_required: False)")
+            self.send_json({"auth_required": False, "authenticated": True})
         elif url == "/api/telemetry":
             if state["iec_state"] == "C" and not state["charge_paused"]:
                 state["power"] = state["voltage"] * state["current"]
                 state["energy"] += (state["power"] * 2.0 / 3600.0)
             self.send_json(state)
         elif url == "/api/info":
+            add_mock_log("API", "DEBUG", "🔍 GET /api/info")
             info = {
                 "reference": "059001",
                 "hardware_version": "01",
@@ -123,12 +140,15 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             }
             self.send_json(info)
         elif url == "/api/logs":
+            add_mock_log("API", "DEBUG", f"📋 GET /api/logs ({len(mock_logs)} entries)")
             self.send_json(mock_logs)
         elif url == "/api/logs/stream":
+            add_mock_log("API", "DEBUG", "📡 GET /api/logs/stream (SSE client connected)")
             self.handle_sse_stream()
         elif url == "/api/logs/export":
             self.handle_logs_export()
         elif url == "/api/logs/level":
+            add_mock_log("API", "DEBUG", f"🎚️ GET /api/logs/level → {state.get('log_level', 'INFO')}")
             self.send_json({"level": state.get("log_level", "INFO")})
         else:
             self.send_error(404, "Not Found")
@@ -136,6 +156,7 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
     def handle_logs_export(self):
         now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"greenup_{now}.log"
+        add_mock_log("API", "DEBUG", f"💾 GET /api/logs/export ({filename})")
         lines = []
         for entry in mock_logs:
             lines.append(f"[{entry['timestamp']}] [{entry['level']}] [{entry['category']}] {entry['message']}\n")
@@ -204,6 +225,17 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         url = self.path.split("?")[0]
         content_len = int(self.headers.get("Content-Length", 0))
+        if content_len > 4096:
+            add_mock_log("API", "WARN", f"⛔ Request payload exceeded 4 KB limit ({content_len} bytes)")
+            self.send_response(413)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "status": "error",
+                "error": "Payload too large. Maximum body size is 4 KB."
+            }).encode("utf-8"))
+            return
+
         body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
 
         if url.startswith("/api/current/"):
@@ -281,24 +313,43 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 self.send_error(400, str(e))
         elif url == "/api/command":
             cmd = body.strip()
-            add_mock_log("API", "INFO", f"🔧 Raw command received: {cmd}")
-            add_mock_log("SERIAL_TX", "INFO", cmd)
-            # Simulated responses
-            if cmd in ("!GET_STATE", "State?"):
-                add_mock_log("SERIAL_RX", "INFO", f"State:{state['greenup_state']}")
-            elif cmd == "CC?":
-                add_mock_log("SERIAL_RX", "INFO", "CC:32A")
-            elif cmd == "Side?":
-                add_mock_log("SERIAL_RX", "INFO", "Side:Left")
-            elif cmd == "!GET_ALL":
-                add_mock_log("SERIAL_RX", "INFO", f"State:{state['greenup_state']} I:{state['current']} V:{state['voltage']}")
-            elif cmd.startswith("FM1:"):
-                add_mock_log("SERIAL_RX", "INFO", f"{cmd}:OK")
-            elif cmd == "RPIMODEOK":
-                add_mock_log("SERIAL_RX", "INFO", "RPIMODE:OK")
+            import re
+            if not re.match(r'^[a-zA-Z0-9:?]{1,20}$', cmd):
+                add_mock_log("API", "WARN", f"⛔ Rejected invalid raw command: '{cmd}'")
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "status": "error",
+                    "error": "Invalid command format. Allowed characters: [a-zA-Z0-9:?], length 1-20 characters."
+                }).encode("utf-8"))
+                return
+
+            if cmd.lower() == "service":
+                add_mock_log("API", "WARN", "⚠️ Warning: ATmega interactive service menu triggered via raw command")
+                add_mock_log("SERIAL_TX", "INFO", cmd)
+                add_mock_log("SERIAL_RX", "INFO", "---service menu--- Press 0 : Exit")
             else:
-                add_mock_log("SERIAL_RX", "INFO", "ACK")
+                add_mock_log("API", "INFO", f"🔧 Raw command received: {cmd}")
+                add_mock_log("SERIAL_TX", "INFO", cmd)
+                # Simulated responses
+                if cmd == "State?":
+                    add_mock_log("SERIAL_RX", "INFO", f"State:{state['greenup_state']}")
+                elif cmd == "CC?":
+                    add_mock_log("SERIAL_RX", "INFO", "CC:32A")
+                elif cmd == "Side?":
+                    add_mock_log("SERIAL_RX", "INFO", "Side:Left")
+                elif cmd == "RPIMODEOK":
+                    add_mock_log("SERIAL_RX", "INFO", "RPIMODE:OK")
+                else:
+                    add_mock_log("SERIAL_RX", "INFO", "ACK")
             self.send_json({"status": "success", "message": "Command sent"})
+        elif url == "/api/init":
+            add_mock_log("API", "INFO", "🔄 Initialization sequence started (mock)")
+            self.send_json({"status": "success", "message": "Initialization sequence started"})
+        elif url == "/api/reset":
+            add_mock_log("API", "WARN", "⚠️ Hardware restart requested (mock)")
+            self.send_json({"status": "success", "message": "ATmega board restart requested"})
         else:
             self.send_json({"status": "success"})
 
@@ -311,6 +362,7 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
         self.end_headers()
         self.wfile.write(data)
 

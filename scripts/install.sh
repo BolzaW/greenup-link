@@ -17,8 +17,28 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_DIR="/home/pi/greenup"
+TARGET_DIR="/opt/greenup-link"
 TARGET_BIN="$TARGET_DIR/greenup-link"
+
+# Create dedicated unprivileged system user 'greenup' if it does not exist
+echo "  -> Setting up dedicated unprivileged system user 'greenup'..."
+if ! id -u greenup >/dev/null 2>&1; then
+    useradd --system --no-create-home --home-dir "$TARGET_DIR" --shell /usr/sbin/nologin greenup
+    echo "  -> Created system user 'greenup'"
+else
+    echo "  -> System user 'greenup' already exists"
+fi
+
+# Ensure greenup user belongs to 'dialout' group (required for /dev/ttyUSB* serial access)
+if getent group dialout >/dev/null 2>&1; then
+    usermod -a -G dialout greenup 2>/dev/null || true
+    echo "  -> Added 'greenup' user to group 'dialout' (serial port access)"
+fi
+
+# Also add to 'gpio' group if present on Raspberry Pi OS
+if getent group gpio >/dev/null 2>&1; then
+    usermod -a -G gpio greenup 2>/dev/null || true
+fi
 
 # 2. Environment check: Detect official Legrand software stack
 echo ""
@@ -75,6 +95,60 @@ else
     echo "  -> Standard/clean OS detected (no Legrand stack found, skipping legacy neutralization)."
 fi
 
+# Helper functions for SHA256 checksum verification
+verify_sha256() {
+    local target_file="$1"
+    local filename="$2"
+    local checksums_file="$3"
+
+    if ! command -v sha256sum >/dev/null 2>&1; then
+        echo "  -> Warning: 'sha256sum' utility not found, skipping checksum verification."
+        return 0
+    fi
+
+    if [ ! -f "$checksums_file" ]; then
+        return 0
+    fi
+
+    local expected_hash
+    expected_hash=$(awk -v fn="$filename" '$2 == fn || $2 == "*"fn {print $1}' "$checksums_file" | head -n 1)
+
+    if [ -z "$expected_hash" ]; then
+        echo "  -> Note: No SHA256 checksum entry found for '$filename' in checksum file, skipping verification."
+        return 0
+    fi
+
+    echo "  -> Verifying SHA256 integrity for $filename..."
+    local actual_hash
+    actual_hash=$(sha256sum "$target_file" | awk '{print $1}')
+
+    if [ "$expected_hash" != "$actual_hash" ]; then
+        echo "❌ Error: SHA256 checksum mismatch for $filename!"
+        echo "   Expected: $expected_hash"
+        echo "   Actual:   $actual_hash"
+        return 1
+    fi
+
+    echo "  -> Verified SHA256 checksum: $actual_hash (OK)"
+    return 0
+}
+
+verify_local_sha256() {
+    local target_file="$1"
+    local filename="$2"
+    local checksums_file=""
+
+    if [ -f "$SCRIPT_DIR/SHA256SUMS.txt" ]; then
+        checksums_file="$SCRIPT_DIR/SHA256SUMS.txt"
+    elif [ -f "./SHA256SUMS.txt" ]; then
+        checksums_file="./SHA256SUMS.txt"
+    fi
+
+    if [ -n "$checksums_file" ]; then
+        verify_sha256 "$target_file" "$filename" "$checksums_file"
+    fi
+}
+
 # 3. Install Green'Up Link binary
 echo ""
 echo "[2/4] Installing Green'Up Link binary to $TARGET_DIR..."
@@ -87,21 +161,27 @@ if systemctl is-active --quiet greenup-link.service 2>/dev/null; then
 fi
 
 if [ -f "$SCRIPT_DIR/greenup-link" ] && [ "$(realpath "$SCRIPT_DIR/greenup-link" 2>/dev/null || echo "$SCRIPT_DIR/greenup-link")" != "$TARGET_BIN" ]; then
+    verify_local_sha256 "$SCRIPT_DIR/greenup-link" "greenup-link" || exit 1
     mv -f "$SCRIPT_DIR/greenup-link" "$TARGET_BIN"
     echo "  -> Moved $SCRIPT_DIR/greenup-link to $TARGET_BIN"
 elif [ -f "./greenup-link" ] && [ "$(realpath ./greenup-link 2>/dev/null || echo "./greenup-link")" != "$TARGET_BIN" ]; then
+    verify_local_sha256 "./greenup-link" "greenup-link" || exit 1
     mv -f "./greenup-link" "$TARGET_BIN"
     echo "  -> Moved ./greenup-link to $TARGET_BIN"
 elif [ -f "$SCRIPT_DIR/greenup-link-armv7-legacy" ]; then
+    verify_local_sha256 "$SCRIPT_DIR/greenup-link-armv7-legacy" "greenup-link-armv7-legacy" || exit 1
     mv -f "$SCRIPT_DIR/greenup-link-armv7-legacy" "$TARGET_BIN"
     echo "  -> Moved $SCRIPT_DIR/greenup-link-armv7-legacy to $TARGET_BIN"
 elif [ -f "./greenup-link-armv7-legacy" ]; then
+    verify_local_sha256 "./greenup-link-armv7-legacy" "greenup-link-armv7-legacy" || exit 1
     mv -f "./greenup-link-armv7-legacy" "$TARGET_BIN"
     echo "  -> Moved ./greenup-link-armv7-legacy to $TARGET_BIN"
 elif [ -f "$SCRIPT_DIR/greenup-link-aarch64" ]; then
+    verify_local_sha256 "$SCRIPT_DIR/greenup-link-aarch64" "greenup-link-aarch64" || exit 1
     mv -f "$SCRIPT_DIR/greenup-link-aarch64" "$TARGET_BIN"
     echo "  -> Moved $SCRIPT_DIR/greenup-link-aarch64 to $TARGET_BIN"
 elif [ -f "./greenup-link-aarch64" ]; then
+    verify_local_sha256 "./greenup-link-aarch64" "greenup-link-aarch64" || exit 1
     mv -f "./greenup-link-aarch64" "$TARGET_BIN"
     echo "  -> Moved ./greenup-link-aarch64 to $TARGET_BIN"
 elif [ -f "$TARGET_BIN" ] && { [ "$1" = "--reconfigure" ] || [ "$1" = "--offline" ] || [ "$1" = "--no-download" ]; }; then
@@ -175,7 +255,8 @@ else
         exit 1
     fi
 
-    echo "  -> Downloading binary: $DOWNLOAD_URL"
+    BIN_FILENAME=$(basename "$DOWNLOAD_URL")
+    echo "  -> Downloading binary: $BIN_FILENAME ($DOWNLOAD_URL)"
     TMP_FILE=$(mktemp /tmp/greenup-bin-XXXXXX)
 
     if command -v curl >/dev/null 2>&1; then
@@ -188,6 +269,27 @@ else
         echo "❌ Error: Download failed or resulted in an empty file."
         rm -f "$TMP_FILE"
         exit 1
+    fi
+
+    # Download SHA256SUMS.txt if available in release assets
+    CHECKSUMS_URL=$(echo "$URLS" | grep -Ei 'sha256sums\.txt' | head -n 1 || true)
+    if [ -n "$CHECKSUMS_URL" ]; then
+        TMP_CHECKSUMS=$(mktemp /tmp/greenup-sums-XXXXXX)
+        if command -v curl >/dev/null 2>&1; then
+            curl -sSL "$CHECKSUMS_URL" -o "$TMP_CHECKSUMS" 2>/dev/null || true
+        else
+            wget -qO "$TMP_CHECKSUMS" "$CHECKSUMS_URL" 2>/dev/null || true
+        fi
+
+        if [ -s "$TMP_CHECKSUMS" ]; then
+            if ! verify_sha256 "$TMP_FILE" "$BIN_FILENAME" "$TMP_CHECKSUMS"; then
+                rm -f "$TMP_FILE" "$TMP_CHECKSUMS"
+                exit 1
+            fi
+        fi
+        rm -f "$TMP_CHECKSUMS"
+    else
+        echo "  -> Warning: SHA256SUMS.txt not found in release assets, skipping verification."
     fi
 
     mv -f "$TMP_FILE" "$TARGET_BIN"
@@ -224,7 +326,40 @@ else
     fi
 fi
 
-chown -R pi:pi "$TARGET_DIR" 2>/dev/null || true
+CONFIG_FILE="$TARGET_DIR/greenup.toml"
+if [ ! -f "$CONFIG_FILE" ]; then
+    cat << 'EOF' > "$CONFIG_FILE"
+# ==============================================================================
+# Green'Up Link - Configuration File
+# ==============================================================================
+
+[http]
+# Network interface and port to listen on.
+# Default: "0.0.0.0:8080" (all network interfaces).
+bind = "0.0.0.0:8080"
+
+# Optional API token / password to protect the Web GUI and REST API.
+# - Leave empty ("") to disable authentication (open access on trusted LAN).
+# - Set a secret string to require authentication on all /api/* routes.
+#   Compatible with:
+#     * Bearer Token : Authorization: Bearer <api_token>  (EVCC, Home Assistant, Web GUI)
+#     * API Key      : X-API-Key: <api_token>
+#     * Basic Auth   : Authorization: Basic <base64(user:api_token)>  (curl -u :token)
+api_token = ""
+EOF
+    chmod 640 "$CONFIG_FILE"
+    echo "  -> Created default configuration file at $CONFIG_FILE"
+else
+    chmod 640 "$CONFIG_FILE" 2>/dev/null || true
+    echo "  -> Keeping existing configuration file at $CONFIG_FILE"
+fi
+
+# Ensure proper ownership and permissions for the dedicated user
+mkdir -p "$TARGET_DIR/logs"
+chown -R greenup:greenup "$TARGET_DIR"
+chmod 750 "$TARGET_DIR"
+chmod 755 "$TARGET_BIN"
+[ -f "$UNINSTALL_TARGET" ] && chmod 755 "$UNINSTALL_TARGET"
 
 # 5. Configure and start Systemd service
 echo ""
@@ -238,13 +373,20 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/pi/greenup
-ExecStart=/home/pi/greenup/greenup-link
+User=greenup
+Group=greenup
+WorkingDirectory=/opt/greenup-link
+ExecStart=/opt/greenup-link/greenup-link
 StandardOutput=inherit
 StandardError=inherit
 Restart=always
 RestartSec=5s
-User=root
+
+# Security hardening
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
@@ -262,10 +404,14 @@ sleep 1
 if systemctl is-active --quiet greenup-link.service; then
     IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "your-pi-ip")
     echo "🎉 Success: Green'Up Link is active and running!"
-    echo "   Web Interface:  http://${IP_ADDR}:8080"
-    echo "   Service Status: sudo systemctl status greenup-link"
+    echo "   Web Interface:   http://${IP_ADDR}:8080"
+    echo "   Directory:       /opt/greenup-link"
+    echo "   Config & Auth:   /opt/greenup-link/greenup.toml"
+    echo "   Logs:            /opt/greenup-link/logs/"
+    echo "   Service User:    greenup (dialout group)"
+    echo "   Service Status:  sudo systemctl status greenup-link"
     echo "   Live Logs:       sudo journalctl -u greenup-link -f"
-    echo "   Rollback/Remove: sudo /home/pi/greenup/uninstall.sh"
+    echo "   Rollback/Remove: sudo /opt/greenup-link/uninstall.sh"
 else
     echo "⚠️ Warning: Service was configured and started, but is not reporting active yet."
     echo "   Check details with: sudo systemctl status greenup-link"

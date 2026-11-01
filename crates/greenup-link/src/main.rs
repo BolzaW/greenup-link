@@ -1,7 +1,6 @@
 mod api;
-pub 
-
-
+mod auth;
+mod config;
 
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -16,6 +15,13 @@ async fn main() {
     greenup_driver::logger::log("SYS", "===================================================");
     greenup_driver::logger::log("SYS", &format!("               GREEN'UP LINK v{:<15}     ", pkg_version));
     greenup_driver::logger::log("SYS", "===================================================");
+
+    let app_config = config::AppConfig::load();
+    if app_config.http.api_token.is_some() {
+        greenup_driver::logger::log("SYS", "🔒 API authentication: ENABLED (Bearer token / Basic Auth)");
+    } else {
+        greenup_driver::logger::log("SYS", "🔓 API authentication: DISABLED (open LAN mode — set api_token in greenup.toml to secure)");
+    }
 
     let (tx, rx) = mpsc::channel::<greenup_protocol::Command>(32);
 
@@ -33,8 +39,14 @@ async fn main() {
     // 1. Start the Serial communication daemon
     // We use spawn_blocking because reading from the serial port (port.read) is blocking
     let state_for_serial = app_state.clone();
+    let serial_options = greenup_driver::SerialOptions {
+        port: app_config.serial.port.clone(),
+        baud_rate: app_config.serial.baud_rate,
+        timeout_ms: 100,
+        watchdog_timeout_secs: app_config.serial.watchdog_timeout_secs,
+    };
     tokio::task::spawn_blocking(move || {
-        greenup_driver::run_serial_loop(state_for_serial, rx);
+        greenup_driver::run_serial_loop_with_options(state_for_serial, rx, serial_options);
     });
 
     // Send the initialization sequence on startup
@@ -46,13 +58,14 @@ async fn main() {
     });
 
     // 2. Start the Axum HTTP server
-    let router = api::build_router(app_state);
+    let router = api::build_router(app_state, app_config.http.api_token);
     
-    // Listen on all network interfaces (0.0.0.0) on port 8080
-    let addr = "0.0.0.0:8080";
+    let addr = &app_config.http.bind;
     greenup_driver::logger::log("SYS", &format!("🌍 Web server started: http://{}", addr));
     
-    let listener = tokio::net::TcpListener::bind(addr).await.expect("Failed to bind port 8080");
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .unwrap_or_else(|e| panic!("Failed to bind {}: {}", addr, e));
     axum::serve(listener, router).await.expect("Fatal web server error");
 }
 

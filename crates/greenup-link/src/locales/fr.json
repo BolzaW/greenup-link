@@ -4,6 +4,14 @@
     "ble_module": "BLE",
     "debug": "Debug"
   },
+  "auth": {
+    "title": "Authentification requise",
+    "description": "Cette borne est protégée par une clé d'accès. Veuillez saisir l'API Token configuré dans greenup.toml.",
+    "placeholder": "Clé API / Token...",
+    "submit": "Déverrouiller",
+    "invalid": "Clé API invalide. Veuillez réessayer.",
+    "logout_title": "Verrouiller la session (déconnexion)"
+  },
   "console": {
     "title": "Console Live",
     "type_all": "Source : Tout",
@@ -22,7 +30,10 @@
     "clear_title": "Effacer la console",
     "pause_title": "Mettre en pause le défilement",
     "export_title": "Exporter le fichier de log en cours",
-    "hint": "Entrée pour envoyer • ↑↓ Historique"
+    "hint": "Entrée pour envoyer • ↑↓ Historique",
+    "invalid_cmd_format": "Format invalide : lettres, chiffres, : et ? (1 à 20 car.)",
+    "sending": "Envoi : ",
+    "cmd_sent": "Commande envoyée"
   },
   "visualizer": {
     "force_tic_refresh": "Forcer l'actualisation du mode TIC",
@@ -49,7 +60,9 @@
     "charge_params": "Paramètres de charge",
     "current_limit": "Consigne de Courant",
     "enable": "ACTIVER",
-    "disable": "DÉSACTIVER", "pause": "PAUSE", "resume": "REPRENDRE"
+    "disable": "DÉSACTIVER",
+    "pause": "PAUSE",
+    "resume": "REPRENDRE"
   },
   "tic": {
     "standard": "TIC Standard\n(9600 bauds)",
@@ -59,6 +72,16 @@
   },
   "info": {
     "not_available": "Informations non disponibles"
+  },
+  "usb": {
+    "status_connected": "Liaison USB active",
+    "status_connecting": "USB connecté — En attente borne",
+    "status_no_response": "USB connecté — Aucune réponse ATmega",
+    "status_disconnected": "Câble USB déconnecté",
+    "alert_disconnected": "Câble USB non détecté (/dev/ttyUSB0 introuvable). Vérifiez le branchement du câble USB reliant le Raspberry Pi.",
+    "alert_no_response": "Aucune réponse de la carte Legrand sur /dev/ttyUSB0. Vérifiez l'alimentation de la borne ou redémarrez-la électriquement si l'ATmega est figé.",
+    "alert_connecting": "Port USB connecté. Initialisation du dialogue avec l'ATmega...",
+    "controls_disabled": "Commandes désactivées : liaison série USB non connectée"
   },
   "alert": {
     "error": "Erreur: ",

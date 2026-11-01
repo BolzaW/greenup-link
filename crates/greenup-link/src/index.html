@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Green'Up Link</title>
+    <link rel="icon" href="/favicon.ico?v=4">
     <link rel="stylesheet" href="/css/style.css">
 </head>
 <body class="min-h-screen flex flex-col p-4 md:p-8 selection:bg-sky-500/30">
@@ -53,15 +54,35 @@
             <option value="fr">🇫🇷 FR</option>
             <option value="en">🇬🇧 EN</option>
         </select>
+
+        <!-- Lock / Logout Button (shown only when API auth is enabled) -->
+        <button id="btnLogout" onclick="logoutApiToken()" class="header-btn-logout hidden" title="Verrouiller la session" data-i18n-title="auth.logout_title">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+            </svg>
+        </button>
     </div>
 
-    <!-- Board Info (Bottom Full-width on Mobile, Middle on Desktop) -->
+    <!-- Board Info & USB Link Status (Bottom Full-width on Mobile, Middle on Desktop) -->
     <div class="col-span-2 w-full md:w-auto text-xs text-slate-400 flex flex-col items-start bg-slate-900/50 p-2 px-3 rounded-lg border border-slate-800 shadow-inner md:mx-6">
-        <div id="boardInfo" class="font-mono text-[10px] md:text-[11px] text-slate-300">...</div>
-        <div id="subInfo" class="opacity-60 font-mono text-[9px] md:text-[10px] mt-1">...</div>
+        <div class="flex items-center space-x-2 w-full flex-wrap gap-y-1">
+            <span id="usbLed" class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse inline-block flex-shrink-0"></span>
+            <span id="usbStatusBadge" class="font-bold text-[10px] md:text-[11px] text-rose-400 flex-shrink-0" data-i18n="usb.status_disconnected">USB cable disconnected</span>
+            <span class="opacity-30 hidden sm:inline">|</span>
+            <div id="boardInfo" class="font-mono text-[10px] md:text-[11px] text-slate-300 truncate">...</div>
+        </div>
+        <div id="subInfo" class="opacity-60 font-mono text-[9px] md:text-[10px] mt-1 pl-4">...</div>
     </div>
 
 </header>
+
+<!-- Alert Banner (shown when USB is disconnected or unresponsive) -->
+<div id="usbAlertBanner" class="max-w-6xl mx-auto w-full mb-6 p-3 px-4 rounded-xl border flex items-center space-x-3 transition-all duration-300 hidden">
+    <div id="usbAlertIcon" class="flex-shrink-0 text-xl">🔴</div>
+    <div class="flex-1 text-xs md:text-sm font-medium" id="usbAlertText" data-i18n="usb.alert_disconnected">
+        USB cable not detected (/dev/ttyUSB0 not found). Check the USB connection to the Raspberry Pi.
+    </div>
+</div>
 
 <main class="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
     
@@ -240,7 +261,7 @@
                 <div class="console-prompt-row">
                     <div class="console-input-wrap">
                         <span class="console-input-prefix">&gt;</span>
-                        <input type="text" id="consoleCommandInput" placeholder="Commande raw (ex: State?, CC?, Side?...)" data-i18n-placeholder="console.prompt_placeholder" class="console-input"/>
+                        <input type="text" id="consoleCommandInput" maxlength="20" placeholder="Raw command (ex: State?, CC?, Side?...)" data-i18n-placeholder="console.prompt_placeholder" class="console-input"/>
                     </div>
                     <button id="btnConsoleSend" class="console-btn-send">
                         <span data-i18n="console.send">Envoyer</span>
@@ -345,6 +366,22 @@
         
     </div>
 </main>
+
+<!-- Authentication Modal (shown when api_token is enabled and client is unauthorized) -->
+<div id="authModal" class="auth-overlay hidden">
+    <div class="auth-card">
+        <div class="auth-icon-box">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+            </svg>
+        </div>
+        <h2 class="text-lg font-bold text-white mb-2" data-i18n="auth.title">Authentification requise</h2>
+        <p class="text-xs text-slate-400" data-i18n="auth.description">Cette borne est protégée par une clé d'accès. Veuillez saisir l'API Token configuré dans greenup.toml.</p>
+        <input type="password" id="authTokenInput" class="auth-input" placeholder="Clé API / Token..." data-i18n-placeholder="auth.placeholder" autocomplete="current-password" />
+        <div id="authErrorMsg" class="text-rose-500 text-xs font-medium mt-2 hidden" data-i18n="auth.invalid">Clé API invalide. Veuillez réessayer.</div>
+        <button id="btnAuthSubmit" class="auth-btn-submit" data-i18n="auth.submit">Déverrouiller</button>
+    </div>
+</div>
 
 <script src="/js/dom.js"></script>
 <script src="/js/i18n.js"></script>

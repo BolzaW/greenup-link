@@ -4,6 +4,12 @@ while ([string]::IsNullOrWhiteSpace($PI_IP)) {
 }
 $BASE_URL = "http://${PI_IP}:8080"
 
+$API_TOKEN = Read-Host "Enter API token (press Enter if authentication is disabled)"
+$AUTH_HEADERS = @{}
+if (-not [string]::IsNullOrWhiteSpace($API_TOKEN)) {
+    $AUTH_HEADERS["Authorization"] = "Bearer $($API_TOKEN.Trim())"
+}
+
 function Show-Menu {
     Clear-Host
     Write-Host "=================================================" -ForegroundColor Cyan
@@ -29,35 +35,35 @@ while ($true) {
         switch ($choice) {
             "1" {
                 Write-Host "`n[GET] $BASE_URL/api/info..." -ForegroundColor Yellow
-                $response = Invoke-RestMethod -Uri "$BASE_URL/api/info" -Method Get
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/info" -Method Get -Headers $AUTH_HEADERS
                 $response | ConvertTo-Json -Depth 5 | Write-Host -ForegroundColor Green
             }
             "2" {
                 Write-Host "`n[GET] $BASE_URL/api/telemetry..." -ForegroundColor Yellow
-                $response = Invoke-RestMethod -Uri "$BASE_URL/api/telemetry" -Method Get
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/telemetry" -Method Get -Headers $AUTH_HEADERS
                 $response | ConvertTo-Json -Depth 5 | Write-Host -ForegroundColor Green
             }
             "3" {
                 $state = Read-Host "Enable (E) / Disable (D) / Pause (P) / Resume (R) the charge?"
                 if ($state -match "^[Ee]") {
                     Write-Host "`n[POST] $BASE_URL/api/charge/enable..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Body '{"action":"enable"}' -ContentType "application/json"
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Headers $AUTH_HEADERS -Body '{"action":"enable"}' -ContentType "application/json"
                 } elseif ($state -match "^[Dd]") {
                     Write-Host "`n[POST] $BASE_URL/api/charge/disable..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Body '{"action":"disable"}' -ContentType "application/json"
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Headers $AUTH_HEADERS -Body '{"action":"disable"}' -ContentType "application/json"
                 } elseif ($state -match "^[Pp]") {
                     Write-Host "`n[POST] $BASE_URL/api/charge/pause..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Body '{"action":"pause"}' -ContentType "application/json"
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Headers $AUTH_HEADERS -Body '{"action":"pause"}' -ContentType "application/json"
                 } else {
                     Write-Host "`n[POST] $BASE_URL/api/charge/resume..." -ForegroundColor Yellow
-                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Body '{"action":"resume"}' -ContentType "application/json"
+                    $response = Invoke-RestMethod -Uri "$BASE_URL/api/charge" -Method Post -Headers $AUTH_HEADERS -Body '{"action":"resume"}' -ContentType "application/json"
                 }
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
             "4" {
                 $amps = Read-Host "Enter current limit (e.g., 16)"
                 Write-Host "`n[POST] $BASE_URL/api/current/$amps..." -ForegroundColor Yellow
-                $response = Invoke-RestMethod -Uri "$BASE_URL/api/current/$amps" -Method Post
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/current/$amps" -Method Post -Headers $AUTH_HEADERS
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
             "5" {
@@ -65,22 +71,22 @@ while ($true) {
                 $isEnabled = $state -match "^[Yy]"
                 $body = @{ enabled = $isEnabled } | ConvertTo-Json
                 Write-Host "`n[POST] $BASE_URL/api/bluetooth..." -ForegroundColor Yellow
-                $response = Invoke-RestMethod -Uri "$BASE_URL/api/bluetooth" -Method Post -Body $body -ContentType "application/json"
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/bluetooth" -Method Post -Headers $AUTH_HEADERS -Body $body -ContentType "application/json"
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
             "6" {
                 Write-Host "`n[POST] $BASE_URL/api/init..." -ForegroundColor Yellow
-                $response = Invoke-RestMethod -Uri "$BASE_URL/api/init" -Method Post
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/init" -Method Post -Headers $AUTH_HEADERS
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
             "7" {
                 Write-Host "`n[POST] $BASE_URL/api/tic/refresh..." -ForegroundColor Yellow
-                $response = Invoke-RestMethod -Uri "$BASE_URL/api/tic/refresh" -Method Post
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/tic/refresh" -Method Post -Headers $AUTH_HEADERS
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
             "8" {
                 Write-Host "`n[POST] $BASE_URL/api/reset..." -ForegroundColor Yellow
-                $response = Invoke-RestMethod -Uri "$BASE_URL/api/reset" -Method Post
+                $response = Invoke-RestMethod -Uri "$BASE_URL/api/reset" -Method Post -Headers $AUTH_HEADERS
                 $response | ConvertTo-Json | Write-Host -ForegroundColor Green
             }
             "COMMAND" {
@@ -99,7 +105,7 @@ while ($true) {
 
                     Write-Host "[POST] $BASE_URL/api/command -> '$cmd'" -ForegroundColor Yellow
                     try {
-                        $response = Invoke-RestMethod -Uri "$BASE_URL/api/command" -Method Post -Body $cmd -ContentType "text/plain"
+                        $response = Invoke-RestMethod -Uri "$BASE_URL/api/command" -Method Post -Headers $AUTH_HEADERS -Body $cmd -ContentType "text/plain"
                         $response | ConvertTo-Json -Depth 2 | Write-Host -ForegroundColor Green
                     } catch {
                         Write-Host "❌ Request error: $($_.Exception.Message)" -ForegroundColor Red
@@ -116,10 +122,9 @@ while ($true) {
         }
     } catch {
         Write-Host "`n❌ Communication error: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "Is the Raspberry Pi server running?" -ForegroundColor Gray
+        Write-Host "Is the Raspberry Pi server running and is your API token valid?" -ForegroundColor Gray
     }
 
     Write-Host "`nPress Enter to continue..." -ForegroundColor DarkGray
     $null = Read-Host
 }
-

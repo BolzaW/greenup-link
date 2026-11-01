@@ -2,10 +2,51 @@
 
 This API allows interfacing the Green'Up Link software with any standard home automation controller (Home Assistant, Jeedom, Node-RED, etc.). All responses are in JSON format.
 
+## 🔒 Authentication (Optional)
+
+By default, `api_token` is empty (`""`) in `greenup.toml` (open access on trusted local networks).
+If you configure a non-empty `api_token` in `/opt/greenup-link/greenup.toml` (or via the `GREENUP_API_TOKEN` environment variable), all `/api/*` endpoints require authentication.
+
+Three standard authentication methods are supported simultaneously against the same `api_token`:
+
+1. **Bearer Token (Recommended for EVCC, Home Assistant, scripts)**:
+   ```http
+   Authorization: Bearer <your_api_token>
+   ```
+2. **API Key Header**:
+   ```http
+   X-API-Key: <your_api_token>
+   ```
+3. **HTTP Basic Auth** (with any username or empty username, and `<your_api_token>` as password):
+   ```bash
+   curl -u :your_api_token http://<station_ip>:8080/api/telemetry
+   ```
+
+*(Note: For browser Server-Sent Events `/api/logs/stream` and file downloads `/api/logs/export`, passing `?token=<your_api_token>` in the query string is also supported).*
+
+---
+
+## 🛡️ Security & Resource Limits
+
+1. **Request Body Size Limit (4 KB)**:
+   All incoming HTTP request bodies are globally capped at **4096 bytes (4 KB)** via Axum's `DefaultBodyLimit`. Any request exceeding this limit is immediately rejected with HTTP `413 Payload Too Large` to protect Raspberry Pi system resources.
+2. **Raw Command Sanitization**:
+   `POST /api/command` strictly validates input against `^[a-zA-Z0-9:?]{1,20}$`, blocking CRLF injection (`\r`, `\n`), escape sequences, and oversized frames on the ATmega serial bus.
+3. **Daily Log Size Warning**:
+   To safeguard Raspberry Pi microSD endurance, the logger monitors active daily log file growth. If a log file exceeds **10 MB** (and each subsequent 10 MB step, typically when `DEBUG` or `TRACE` is active), a `SYS` warning is emitted to alert the administrator. Logging continues without truncation or interruption so that complete diagnostic data is preserved.
+4. **Defensive Security Headers**:
+   All HTTP responses served by Green'Up Link include defensive security headers:
+   - `X-Frame-Options: DENY`: Prevents embedding the Web UI inside external `<iframe>` elements (clickjacking defense).
+   - `X-Content-Type-Options: nosniff`: Prevents MIME-type confusion / sniffing.
+   - `Referrer-Policy: no-referrer`: Prevents local station IP and URL paths from leaking in external requests.
+
+---
+
 ## 📋 Endpoints Overview
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
+| `GET` | `/api/auth/status` | Check if authentication is enabled and if the provided token is valid |
 | `GET` | `/api/info` | Hardware info (Firmware, Serial, Capabilities) |
 | `GET` | `/api/telemetry` | Real-time telemetry + Legrand / IEC states |
 | `GET` | `/api/logs` | Recent in-memory logs (last 500 entries) |
@@ -62,6 +103,12 @@ This API allows interfacing the Green'Up Link software with any standard home au
 - **Typical Response**:
   ```json
   {
+    "serial": {
+      "status": "usb_connected",
+      "port": "/dev/ttyUSB0",
+      "message": "USB serial link active - Station connected",
+      "last_rx_secs_ago": 0
+    },
     "voltage": 232.0,
     "current": 15.6,
     "power": 3619.2,
@@ -79,7 +126,12 @@ This API allows interfacing the Green'Up Link software with any standard home au
     "tic_mode": "9600"
   }
   ```
-  - `greenup_state`: Legrand proprietary state (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). See [`STATE_MACHINE.md`](STATE_MACHINE.md).
+  - `serial`: USB serial communication state with the ATmega2560 board:
+    - `status`: `"usb_connected"` (bidirectional link active), `"usb_connecting"` (port opened, waiting for board), `"usb_no_response"` (USB open but station board silent/frozen), `"usb_disconnected"` (USB cable unplugged or `/dev/ttyUSB0` missing).
+    - `port`: Port path (e.g. `"/dev/ttyUSB0"`).
+    - `message`: Human-readable status description.
+    - `last_rx_secs_ago`: Elapsed seconds since the last frame received from the board (or `null` if disconnected).
+  - `greenup_state`: Legrand proprietary state (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). Returns `"DISCONNECTED"` if USB is unplugged. See [`STATE_MACHINE.md`](STATE_MACHINE.md).
   - `iec_state`: Deduced standard IEC 61851-1 state (`A`, `B`, `C`, `E`, `F`). Returns `null` if it cannot be deduced.
   - `cp_voltage` (`CP?`): Control Pilot voltage in volts (`12`, `9`, `6`).
   - `charge_authorized`: Indicates whether charging is currently authorized (`true`) or blocked (`false`).
@@ -91,6 +143,16 @@ This API allows interfacing the Green'Up Link software with any standard home au
 ---
 
 ## 🛠️ Action Endpoints (POST)
+
+> [!IMPORTANT]
+> **USB Connection Guard:** If the USB serial link with the station is not active (`serial.status != "usb_connected"`), all POST action endpoints immediately return HTTP `503 Service Unavailable` with a descriptive message:
+> ```json
+> {
+>   "status": "error",
+>   "error": "Command unavailable: USB cable disconnected (no USB adapter detected)",
+>   "serial_status": "usb_disconnected"
+> }
+> ```
 
 ### 3. Control charge state
 - **URL**: `/api/charge`
@@ -173,6 +235,16 @@ This API allows interfacing the Green'Up Link software with any standard home au
 - **Method**: `POST`
 - **Body (Plain text)**: the command to send (e.g., `State?`)
 - **Description**: Directly transmits the string on the serial port. Reserved for testing and debugging. See [`LEGRAND_SERIAL_PROTOCOL.md`](LEGRAND_SERIAL_PROTOCOL.md) for the list of known commands.
+- **Validation & Security**:
+  - Whitelist: only characters matching `[a-zA-Z0-9:?]` are accepted (strictly eliminates CRLF `\r`, `\n`, control characters, and injection attempts).
+  - Length: maximum 20 characters (`1..=20`).
+  - If invalid, returns HTTP `400 Bad Request`:
+    ```json
+    {
+      "status": "error",
+      "error": "Invalid command format. Allowed characters: [a-zA-Z0-9:?], length 1-20 characters."
+    }
+    ```
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Command sent" }

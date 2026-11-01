@@ -1,9 +1,10 @@
 use axum::{
-    extract::{Path, State},
+    extract::{DefaultBodyLimit, Path, Request, State},
     http::StatusCode,
+    middleware::Next,
     response::{
         sse::{Event, KeepAlive, Sse},
-        Html, IntoResponse,
+        Html, IntoResponse, Response,
     },
     routing::{get, post},
     Json, Router,
@@ -17,20 +18,45 @@ use greenup_driver::SharedState;
 use greenup_driver::serial::TicStartError;
 use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
 
-pub fn build_router(state: SharedState) -> Router {
-    Router::new()
-        .route("/", get(serve_ui))
-        .route("/locales/fr.json", get(serve_fr_json))
-        .route("/locales/en.json", get(serve_en_json))
-        .route("/css/style.css", get(serve_css))
-        .route("/js/dom.js", get(serve_js_dom))
-        .route("/js/i18n.js", get(serve_js_i18n))
-        .route("/js/linky.js", get(serve_js_linky))
-        .route("/js/controls.js", get(serve_js_controls))
-        .route("/js/visuals.js", get(serve_js_visuals))
-        .route("/js/api.js", get(serve_js_api))
-        .route("/js/console.js", get(serve_js_console))
-        .route("/js/main.js", get(serve_js_main))
+use std::sync::Arc;
+use axum::http::header::{HeaderValue, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS};
+use crate::auth::{self, SharedApiToken};
+
+/// Axum middleware appending standard defensive HTTP security headers to all responses.
+async fn security_headers_middleware(req: Request, next: Next) -> Response {
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+    headers.insert(X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    headers.insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    headers.insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
+    response
+}
+
+/// Axum middleware logging API requests at DEBUG level (or TRACE for high-frequency polling).
+async fn api_debug_logger(req: Request, next: Next) -> Response {
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+
+    // High frequency polling endpoints are logged at TRACE to avoid cluttering DEBUG logs
+    if path == "/api/telemetry" || path == "/api/logs/stream" {
+        logger::trace("API", &format!("{} {}", method, path));
+    } else {
+        logger::debug("API", &format!("→ {} {}", method, path));
+    }
+
+    let response = next.run(req).await;
+
+    if path != "/api/telemetry" && path != "/api/logs/stream" {
+        logger::debug("API", &format!("← {} {} [{}]", method, path, response.status()));
+    }
+
+    response
+}
+
+pub fn build_router(state: SharedState, api_token: Option<String>) -> Router {
+    let token_state: SharedApiToken = api_token.map(Arc::new);
+
+    let protected_api = Router::new()
         .route("/api/info", get(get_info))
         .route("/api/telemetry", get(get_telemetry))
         .route("/api/logs", get(get_logs))
@@ -45,6 +71,37 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/bluetooth", post(set_bluetooth))
         .route("/api/command", post(send_raw_command))
         .with_state(state)
+        .route_layer(axum::middleware::from_fn_with_state(
+            token_state.clone(),
+            auth::require_auth,
+        ));
+
+    let auth_router = Router::new()
+        .route("/api/auth/status", get(auth::auth_status))
+        .with_state(token_state);
+
+    let api_router = Router::new()
+        .merge(auth_router)
+        .merge(protected_api)
+        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_SIZE))
+        .layer(axum::middleware::from_fn(api_debug_logger));
+
+    Router::new()
+        .route("/", get(serve_ui))
+        .route("/favicon.ico", get(serve_favicon))
+        .route("/locales/fr.json", get(serve_fr_json))
+        .route("/locales/en.json", get(serve_en_json))
+        .route("/css/style.css", get(serve_css))
+        .route("/js/dom.js", get(serve_js_dom))
+        .route("/js/i18n.js", get(serve_js_i18n))
+        .route("/js/linky.js", get(serve_js_linky))
+        .route("/js/controls.js", get(serve_js_controls))
+        .route("/js/visuals.js", get(serve_js_visuals))
+        .route("/js/api.js", get(serve_js_api))
+        .route("/js/console.js", get(serve_js_console))
+        .route("/js/main.js", get(serve_js_main))
+        .merge(api_router)
+        .layer(axum::middleware::from_fn(security_headers_middleware))
 }
 
 #[derive(serde::Deserialize)]
@@ -55,6 +112,14 @@ pub struct BluetoothPayload {
 /// GET /
 async fn serve_ui() -> Html<&'static str> {
     Html(include_str!("index.html"))
+}
+
+/// GET /favicon.ico
+async fn serve_favicon() -> impl IntoResponse {
+    (
+        [(axum::http::header::CONTENT_TYPE, "image/x-icon")],
+        include_bytes!("web/favicon.ico"),
+    )
 }
 
 /// GET /locales/fr.json
@@ -114,11 +179,14 @@ async fn serve_js_console() -> impl IntoResponse {
 
 /// GET /api/logs
 async fn get_logs() -> impl IntoResponse {
-    Json(logger::get_recent_logs())
+    let logs = logger::get_recent_logs();
+    logger::debug("API", &format!("📋 Fetching recent logs buffer ({} entries)", logs.len()));
+    Json(logs)
 }
 
 /// GET /api/logs/stream (SSE)
 async fn stream_logs() -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
+    logger::debug("API", "📡 SSE log stream client connected");
     let rx = logger::subscribe();
     let stream = BroadcastStream::new(rx).filter_map(|res| match res {
         Ok(entry) => {
@@ -137,6 +205,7 @@ async fn stream_logs() -> Sse<impl tokio_stream::Stream<Item = Result<Event, Inf
 /// GET /api/logs/export
 async fn export_logs() -> impl IntoResponse {
     let (filename, content) = logger::get_current_log_content();
+    logger::debug("API", &format!("💾 Exporting log archive: {} ({} bytes)", filename, content.len()));
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(
         axum::http::header::CONTENT_TYPE,
@@ -156,6 +225,7 @@ pub struct LogLevelPayload {
 /// GET /api/logs/level
 async fn get_log_level_handler() -> impl IntoResponse {
     let current = logger::get_log_level();
+    logger::debug("API", &format!("🎚️ Log level requested: {}", current.as_str()));
     Json(json!({ "level": current.as_str() }))
 }
 
@@ -163,11 +233,13 @@ async fn get_log_level_handler() -> impl IntoResponse {
 async fn set_log_level_handler(Json(payload): Json<LogLevelPayload>) -> impl IntoResponse {
     if let Some(level) = logger::LogLevel::from_str_loose(&payload.level) {
         logger::set_log_level(level);
+        logger::log("API", &format!("⚙️ Log level set to: {}", level.as_str()));
         (
             StatusCode::OK,
             Json(json!({ "status": "success", "level": level.as_str() })),
         )
     } else {
+        logger::log("API", &format!("⚠️ Invalid log level requested: '{}'", payload.level));
         (
             StatusCode::BAD_REQUEST,
             Json(json!({ "error": format!("Invalid log level: '{}'. Expected ERROR, WARN, INFO, DEBUG, or TRACE", payload.level) })),
@@ -177,20 +249,50 @@ async fn set_log_level_handler(Json(payload): Json<LogLevelPayload>) -> impl Int
 
 /// GET /api/info
 async fn get_info(State(state): State<SharedState>) -> impl IntoResponse {
-    logger::log("API", "🔍 GET request /api/info");
-    let info = state.info.lock().unwrap().clone();
+    logger::debug("API", "🔍 GET request /api/info");
+    let info = state.info.lock().unwrap_or_else(|e| e.into_inner()).clone();
     Json(info)
 }
 
 /// GET /api/telemetry
 async fn get_telemetry(State(state): State<SharedState>) -> impl IntoResponse {
     logger::log("TRACE", "📡 GET request /api/telemetry");
-    let telemetry = state.telemetry.lock().unwrap().clone();
+    let telemetry = state.telemetry.lock().unwrap_or_else(|e| e.into_inner()).clone();
     Json(telemetry)
+}
+
+fn check_serial_connected(state: &SharedState) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    let tel = state.telemetry.lock().unwrap_or_else(|e| e.into_inner());
+    if tel.serial.status != greenup_driver::telemetry::SerialStatus::UsbConnected {
+        let err_msg = match tel.serial.status {
+            greenup_driver::telemetry::SerialStatus::UsbDisconnected => {
+                "USB cable disconnected (no USB adapter detected)"
+            }
+            greenup_driver::telemetry::SerialStatus::UsbConnecting => {
+                "USB serial link initializing (waiting for station board)"
+            }
+            greenup_driver::telemetry::SerialStatus::UsbNoResponse => {
+                "No response from station board (station powered off or ATmega frozen)"
+            }
+            _ => "USB serial link unavailable",
+        };
+        return Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "status": "error",
+                "error": format!("Command unavailable: {}", err_msg),
+                "serial_status": tel.serial.status,
+            })),
+        ));
+    }
+    Ok(())
 }
 
 /// POST /api/current/:amps
 async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     let cmd = match u8::try_from(amps).ok().map(Command::set_current_limit) {
         Some(Ok(cmd)) => cmd,
         _ => {
@@ -231,6 +333,9 @@ async fn set_current(State(state): State<SharedState>, Path(amps): Path<u32>) ->
 
 /// POST /api/init
 async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     logger::log("API", "🔄 Starting initialization sequence");
     tokio::spawn(async move {
         // TIC detection is never started automatically:
@@ -244,6 +349,9 @@ async fn init_sequence(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// POST /api/reset
 async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     logger::log("API", "⚠️ Hardware restart request (Reset)");
     if state.serial_tx.send(Command::Reset).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "ATmega board restart requested"})))
@@ -258,11 +366,41 @@ async fn reset_board(State(state): State<SharedState>) -> impl IntoResponse {
 
 
 
+/// Maximum allowed HTTP request body size (4 KB).
+const MAX_REQUEST_BODY_SIZE: usize = 4096;
+
+const MAX_RAW_COMMAND_LEN: usize = 20;
+
+fn is_valid_raw_command(cmd: &str) -> bool {
+    !cmd.is_empty()
+        && cmd.len() <= MAX_RAW_COMMAND_LEN
+        && cmd.chars().all(|c| c.is_ascii_alphanumeric() || c == ':' || c == '?')
+}
+
 /// POST /api/command
 async fn send_raw_command(State(state): State<SharedState>, body: String) -> impl IntoResponse {
-    let cmd = body.trim().to_string();
-    logger::log("API", &format!("🔧 Raw command: {}", body.trim()));
-    if state.serial_tx.send(Command::Raw(cmd)).await.is_ok() {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
+    let cmd = body.trim();
+    if !is_valid_raw_command(cmd) {
+        logger::warn("API", &format!("⛔ Rejected invalid raw command: '{}'", cmd));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "status": "error",
+                "error": "Invalid command format. Allowed characters: [a-zA-Z0-9:?], length 1-20 characters."
+            })),
+        );
+    }
+
+    if cmd.eq_ignore_ascii_case("service") {
+        logger::warn("API", "⚠️ Warning: ATmega interactive service menu triggered via raw command");
+    } else {
+        logger::info("API", &format!("🔧 Raw command: {}", cmd));
+    }
+
+    if state.serial_tx.send(Command::Raw(cmd.to_string())).await.is_ok() {
         (StatusCode::OK, Json(json!({"status": "success", "message": "Command sent"})))
     } else {
         (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial communication error"})))
@@ -271,6 +409,9 @@ async fn send_raw_command(State(state): State<SharedState>, body: String) -> imp
 
 /// POST /api/tic/refresh
 async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     logger::log("API", "🔄 Manual TIC detection request (TICTM:1)");
     match greenup_driver::serial::start_tic_detection(&state).await {
         Ok(()) => (StatusCode::OK, Json(json!({"status": "success", "message": "TIC detection started"}))),
@@ -287,6 +428,9 @@ async fn refresh_tic(State(state): State<SharedState>) -> impl IntoResponse {
 
 /// POST /api/bluetooth
 async fn set_bluetooth(State(state): State<SharedState>, Json(payload): Json<BluetoothPayload>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     let cmd = Command::SetBluetooth(payload.enabled);
     let log_msg = if payload.enabled { "🔵 Activating" } else { "⚪ Deactivating" };
     
@@ -312,6 +456,9 @@ pub struct ChargeActionPayload { action: String }
 
 /// POST /api/charge
 async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<ChargeActionPayload>) -> impl IntoResponse {
+    if let Err(res) = check_serial_connected(&state) {
+        return res;
+    }
     match payload.action.as_str() {
         "enable" => {
             logger::log("API", "⚡ Charge enable requested (T2COK + FM2:0 + DOK)");
@@ -348,9 +495,36 @@ async fn set_charge_state(State(state): State<SharedState>, Json(payload): Json<
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
             }
         },
-        _ => (StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid action"})))
+        _ => {
+            logger::log("API", &format!("⚠️ Invalid charge action received: '{}'", payload.action));
+            (StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid action"})))
+        }
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
 
+    #[test]
+    fn test_is_valid_raw_command() {
+        // Valid commands
+        assert!(is_valid_raw_command("service"));
+        assert!(is_valid_raw_command("0"));
+        assert!(is_valid_raw_command("1"));
+        assert!(is_valid_raw_command("WeekYearProduction?")); // 19 chars
+        assert!(is_valid_raw_command("FM2:0"));
+        assert!(is_valid_raw_command("TICTM:1"));
+        assert!(is_valid_raw_command("12345678901234567890")); // exactly 20 chars
 
-
+        // Invalid commands
+        assert!(!is_valid_raw_command("")); // empty
+        assert!(!is_valid_raw_command("123456789012345678901")); // 21 chars (> 20)
+        assert!(!is_valid_raw_command("FM2: 0")); // contains space
+        assert!(!is_valid_raw_command("cmd\n")); // newline injection
+        assert!(!is_valid_raw_command("cmd\r\n")); // CRLF injection
+        assert!(!is_valid_raw_command("test;rm")); // semicolon
+        assert!(!is_valid_raw_command("cmd|pipe")); // pipe
+        assert!(!is_valid_raw_command("$VAR")); // dollar sign
+        assert!(!is_valid_raw_command("cmd=val")); // equals sign
+    }
+}

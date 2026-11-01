@@ -28,6 +28,7 @@ pub enum ProtocolEvent {
     MacAddress(String),
     Side(String),
     Dip1(String),
+    ChargePhases(String),
     CommandNotUnderstood(String),
     Unknown(String),
 }
@@ -134,6 +135,8 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         } else {
             ProtocolEvent::Unknown(line.to_string())
         }
+    } else if let Some(val) = line.strip_prefix("CPh:").or_else(|| line.strip_prefix("Cph:")) {
+        ProtocolEvent::ChargePhases(val.trim().to_string())
     } else if let Some(cmd) = line.strip_prefix("Default:") {
         ProtocolEvent::CommandNotUnderstood(cmd.trim().to_string())
     } else {
@@ -170,6 +173,14 @@ mod tests {
         assert_eq!(
             parse_line("CCI:24.42;0.00;0.00"),
             ProtocolEvent::Current(24.42)
+        );
+        assert_eq!(
+            parse_line("CPh:Mono"),
+            ProtocolEvent::ChargePhases("Mono".into())
+        );
+        assert_eq!(
+            parse_line("Cph:Tri"),
+            ProtocolEvent::ChargePhases("Tri".into())
         );
     }
 }

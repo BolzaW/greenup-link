@@ -53,21 +53,28 @@ chargers:
     # The API natively returns the exact letter expected by EVCC
     status:
       source: http
-      uri: http://<GREENUP_IP>:3000/api/telemetry
+      uri: http://<GREENUP_IP>:8080/api/telemetry
+      # Uncomment headers if api_token is enabled in greenup.toml:
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
       jq: .iec_state
       timeout: 5s
       
     # 2. Real-time Power (Watts)
     power:
       source: http
-      uri: http://<GREENUP_IP>:3000/api/telemetry
+      uri: http://<GREENUP_IP>:8080/api/telemetry
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
       jq: .power
       timeout: 5s
       
     # 3. Session Energy (kWh)
     energy:
       source: http
-      uri: http://<GREENUP_IP>:3000/api/telemetry
+      uri: http://<GREENUP_IP>:8080/api/telemetry
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
       jq: .energy
       timeout: 5s
       
@@ -75,21 +82,25 @@ chargers:
     # Combines charge_authorized and !charge_paused directly in the API
     enabled:
       source: http
-      uri: http://<GREENUP_IP>:3000/api/telemetry
+      uri: http://<GREENUP_IP>:8080/api/telemetry
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
       jq: .charge_authorized
       timeout: 5s
       
     # 5. Start / Stop Action
     # Script setter with JSON body. EVCC replaces ${enable} with true/false
+    # (If api_token is enabled, add: -H 'Authorization: Bearer <YOUR_API_TOKEN>')
     enable:
       source: script
-      cmd: /bin/sh -c "if [ '${enable}' = 'true' ]; then curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"enable\"}' http://<GREENUP_IP>:3000/api/charge; else curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"disable\"}' http://<GREENUP_IP>:3000/api/charge; fi"
+      cmd: /bin/sh -c "if [ '${enable}' = 'true' ]; then curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"enable\"}' http://<GREENUP_IP>:8080/api/charge; else curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"disable\"}' http://<GREENUP_IP>:8080/api/charge; fi"
       
     # 6. Current Limiting Action (Amps)
     # Allows EVCC to modulate charging power (e.g., for solar surplus matching)
+    # (If api_token is enabled, add: -H 'Authorization: Bearer <YOUR_API_TOKEN>')
     maxcurrent:
       source: script
-      cmd: curl -s -X POST http://<GREENUP_IP>:3000/api/current/${maxcurrent}
+      cmd: curl -s -X POST http://<GREENUP_IP>:8080/api/current/${maxcurrent}
 ```
 
 ### Full Minimal Example
