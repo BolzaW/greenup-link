@@ -209,6 +209,8 @@
 
 .console-badge-rx { color: #34d399; font-weight: 700; white-space: nowrap; }
 .console-badge-tx { color: #38bdf8; font-weight: 700; white-space: nowrap; }
+.console-badge-side1 { color: #34d399; font-weight: 700; white-space: nowrap; }
+.console-badge-side2 { color: #c084fc; font-weight: 700; white-space: nowrap; }
 .console-badge-api { color: #fbbf24; font-weight: 700; white-space: nowrap; }
 .console-badge-dbg { color: #c084fc; font-weight: 700; white-space: nowrap; opacity: 0.8; }
 .console-badge-warn { color: #f59e0b; font-weight: 700; white-space: nowrap; }
@@ -220,6 +222,8 @@
 .console-msg-warn { color: #fcd34d; word-break: break-all; }
 .console-msg-rx { color: #6ee7b7; word-break: break-all; }
 .console-msg-tx { color: #7dd3fc; word-break: break-all; }
+.console-msg-side1 { color: #6ee7b7; word-break: break-all; }
+.console-msg-side2 { color: #d8b4fe; word-break: break-all; }
 .console-msg-api { color: #e2e8f0; word-break: break-all; }
 .console-msg-dbg { color: #94a3b8; word-break: break-all; }
 
@@ -744,4 +748,33 @@
 .config-input:focus {
     border-color: #38bdf8;
     box-shadow: 0 0 0 1px #38bdf8;
+}
+
+/* --- Dual Charge Point Switcher --- */
+.point-tab {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #94a3b8;
+    border-radius: 0.5rem;
+    border: 1px solid #1e293b;
+    background-color: #0b1120;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.point-tab:hover {
+    color: #f1f5f9;
+    background-color: #1e293b;
+}
+
+.point-tab.active {
+    color: #ffffff;
+    background-color: #1e293b;
+    border-color: #38bdf8;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
 }

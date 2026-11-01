@@ -40,7 +40,10 @@ sudo apt install evcc
 ## 3. EVCC Configuration (`evcc.yaml`)
 
 EVCC is configured using a YAML file, usually located at `/etc/evcc.yaml`. 
-Below is the exact `chargers` block required to communicate with Green'Up Link. 
+
+### 3.1 Single Charge Point Configuration
+
+Below is the standard `chargers` block required to communicate with Green'Up Link for a single-point station (or targeting the default Point 1).
 
 > **Important:** Replace `<GREENUP_IP>` with `127.0.0.1` if EVCC is running on the same Raspberry Pi, or with the actual IP address if EVCC is running remotely.
 
@@ -103,7 +106,87 @@ chargers:
       cmd: curl -s -X POST http://<GREENUP_IP>:8080/api/current/${maxcurrent}
 ```
 
-### Full Minimal Example
+### 3.2 Dual Charge Point Configuration (2 Independent Loadpoints)
+
+If your charging station is a dual-point model (e.g. Legrand references 058011, 058013, 058042, 058044, 059011...), you can define two independent chargers and loadpoints using the `?side=1` and `?side=2` query parameters:
+
+```yaml
+chargers:
+  # Charge Point 1 (Right / Côté Droit)
+  - name: greenup_point1
+    type: custom
+    status:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/telemetry?side=1
+      jq: .iec_state
+      timeout: 5s
+    power:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/telemetry?side=1
+      jq: .power
+      timeout: 5s
+    energy:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/telemetry?side=1
+      jq: .energy
+      timeout: 5s
+    enabled:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/telemetry?side=1
+      jq: .charge_authorized
+      timeout: 5s
+    enable:
+      source: script
+      cmd: /bin/sh -c "if [ '${enable}' = 'true' ]; then curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"enable\"}' 'http://<GREENUP_IP>:8080/api/charge?side=1'; else curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"disable\"}' 'http://<GREENUP_IP>:8080/api/charge?side=1'; fi"
+    maxcurrent:
+      source: script
+      cmd: curl -s -X POST "http://<GREENUP_IP>:8080/api/current/${maxcurrent}?side=1"
+
+  # Charge Point 2 (Left / Côté Gauche)
+  - name: greenup_point2
+    type: custom
+    status:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/telemetry?side=2
+      jq: .iec_state
+      timeout: 5s
+    power:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/telemetry?side=2
+      jq: .power
+      timeout: 5s
+    energy:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/telemetry?side=2
+      jq: .energy
+      timeout: 5s
+    enabled:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/telemetry?side=2
+      jq: .charge_authorized
+      timeout: 5s
+    enable:
+      source: script
+      cmd: /bin/sh -c "if [ '${enable}' = 'true' ]; then curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"enable\"}' 'http://<GREENUP_IP>:8080/api/charge?side=2'; else curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"disable\"}' 'http://<GREENUP_IP>:8080/api/charge?side=2'; fi"
+    maxcurrent:
+      source: script
+      cmd: curl -s -X POST "http://<GREENUP_IP>:8080/api/current/${maxcurrent}?side=2"
+
+loadpoints:
+  - title: Garage Point 1 (Right)
+    charger: greenup_point1
+    mode: pv
+    mincurrent: 7
+    maxcurrent: 32
+
+  - title: Garage Point 2 (Left)
+    charger: greenup_point2
+    mode: pv
+    mincurrent: 7
+    maxcurrent: 32
+```
+
+### 3.3 Full Minimal Example (Single Charger)
 
 To make EVCC work, you must link the charger to a `loadpoint` and a `site`. Here is a complete minimal `evcc.yaml`:
 
@@ -153,4 +236,3 @@ sudo systemctl start evcc
 ```
 
 You can now open the EVCC Web Interface by navigating to `http://<EVCC_IP>:7070` in your browser.
-

@@ -32,8 +32,14 @@ impl Default for SerialConnection {
     }
 }
 
+fn default_side() -> u8 {
+    1
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Telemetry {
+    #[serde(default = "default_side")]
+    pub side: u8,
     pub serial: SerialConnection,
     pub voltage: f32,
     pub current: f32,
@@ -63,6 +69,7 @@ pub struct Telemetry {
 impl Default for Telemetry {
     fn default() -> Self {
         Self {
+            side: 1,
             serial: SerialConnection::default(),
             voltage: 0.0,
             current: 0.0,
@@ -101,4 +108,8 @@ pub struct BoardInfo {
     pub side: Option<u8>,
     pub link_version: String,
     pub capabilities: Option<HardwareCapabilities>,
+    #[serde(default)]
+    pub is_dual: bool,
+    #[serde(default)]
+    pub available_sides: Vec<u8>,
 }

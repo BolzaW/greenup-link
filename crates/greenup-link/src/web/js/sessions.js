@@ -100,7 +100,8 @@ async function loadSessionsData(isDefaultSelectionRequested = false) {
     if (window.isAuthRequired && !window.isAuthenticated) return;
 
     try {
-        const response = await apiFetch('/api/sessions');
+        const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
+        const response = await apiFetch(`/api/sessions${sideQuery}`);
         if (!response.ok) return;
         const data = await response.json();
         sessionsCache = data || { active_session: null, sessions: [] };
@@ -145,7 +146,8 @@ function updateSessionsDropdown(isDefaultSelectionRequested) {
     savedList.forEach(s => {
         const opt = document.createElement('option');
         opt.value = s.id;
-        opt.innerText = `📅 ${s.start_time} — ${s.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(s.charging_duration_seconds)})`;
+        const sideBadge = (window.isDualStation && s.side) ? `[P${s.side}] ` : '';
+        opt.innerText = `📅 ${sideBadge}${s.start_time} — ${s.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(s.charging_duration_seconds)})`;
         select.appendChild(opt);
     });
 

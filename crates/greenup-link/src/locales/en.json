@@ -184,5 +184,12 @@
     "token_saved_local": "Token saved locally",
     "token_invalid": "API token rejected by server",
     "token_cleared": "Token cleared from browser"
+  },
+  "dual": {
+    "selector_title": "Active Charge Point",
+    "point_1": "Point 1 (Right)",
+    "point_2": "Point 2 (Left)",
+    "badge_side_1": "Point 1",
+    "badge_side_2": "Point 2"
   }
-}
+}
