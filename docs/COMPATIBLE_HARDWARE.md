@@ -114,7 +114,47 @@ This document provides an exhaustive compatibility reference for the Legrand Gre
 
 ## 🔌 Communication Hardware
 
-| Name | Legrand Reference | Role | Compatibility |
-| :--- | :--- | :--- | :--- |
-| **Official Legrand IP Communication Kit** | **0 590 56** | Embedded Raspberry Pi 3 connected via internal USB cable(s) | 🟢 **Supported** (Original software replaced by Green'Up Link) |
-| **DIY Communication Kit** | — | Standard Raspberry Pi (Zero 2 W / 3 / 4) connected via USB cable(s) | 🟢 **Supported** (See [KIT_COMMUNICATION_DIY.md](KIT_COMMUNICATION_DIY.md)) |
+> [!IMPORTANT]
+> **Prerequisite for Green'Up Link operation:**
+> A Legrand Green'Up Premium charging station is **compatible with Green'Up Link if and only if** it is equipped with a communication kit. Green'Up Link is not installed onto the station's internal ATmega2560 power board, but runs directly on the communication kit's Raspberry Pi.
+> - **Option 1 (Official Kit):** The official Legrand IP Communication Kit (catalog reference **0 590 56**), sold as an optional add-on by Legrand.
+> - **Option 2 (DIY Alternative):** A custom DIY kit assembled with a standard Raspberry Pi (Pi Zero 2 W, Pi 3, Pi 4, Pi 5) running standard 64-bit Raspberry Pi OS Lite, connected via USB cable (see the [DIY Communication Kit Guide](KIT_COMMUNICATION_DIY.md)).
+
+### Official Legrand Communication Kits (KitCom) & Factory OS Images
+
+There are many unknowns regarding the various Linux OS versions shipped by Legrand on the official communication kit over the years. Crucially, **the underlying operating system is never maintained or upgraded by Legrand's official software update mechanism**. Legrand update archives only deploy Java JAR/WAR files, scripts, and select daemon packages, but never execute a full operating system upgrade (`dist-upgrade`). Consequently, **the factory OS image on a given kit remains frozen in the exact state it was originally flashed and delivered by Legrand**.
+
+#### Factory Image Release Hypothesis (Author Theory)
+A plausible hypothesis is that Legrand may have shipped a distinct factory OS image corresponding to each major official update release. Under this theory, Legrand qualified each update package on an updated base OS, and then flashed that newer OS image onto all physical communication kits manufactured from that qualification date until the next release. However, this remains an unconfirmed hypothesis.
+
+#### Official KitCom Archives Matrix
+
+The table below lists all 6 known official Legrand KitCom release archives identified in the field:
+
+| KitCom Version / Archive | Communication Software | Base OS | Apache Version | glibc Version | Compatibility with Green'Up Link | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **KitCom V01.15.00-legacy** (`KitCom-V01.15.00.zip`) | `SoftwareCommunication-V01.03.25.jar` | **Raspbian GNU/Linux 9 (Stretch) 32-bit** (Kernel 4.9, `armv7l`) | **2.4.25** | **2.24** | 🟢 **Fully Tested & Supported** | Author's baseline kit; fully operational with `armv7-legacy` binary |
+| **KitCom V01.15.00** (`KitCom.V01.15.00.zip`) | `SoftwareCommunication-V01.04.09.jar` | ❓ *Unknown* (likely Raspbian 9) | ❓ *Unknown* (likely 2.4.25) | ❓ *Unknown* (likely 2.24) | ❓ **Untested** | Distinct official archive from legacy; likely compatible |
+| **KitCom V01.17.00** (`KitCom.V01.17.00.zip`) | `SoftwareCommunication-V01.16.02.jar` | ❓ *Unknown* | ❓ *Unknown* (likely upgraded) | ❓ *Unknown* | ❓ **Untested** | Intermediate V01.17 release; exact OS unverified |
+| **KitCom V01.17.28** (`KitCom.V01.17.28.zip`) | `SoftwareCommunication-V01.17.27.jar` | ❓ *Unknown* (likely Debian 11 transition) | **≥ 2.4.56** *(via deb11 patch)* | ❓ *Unknown* | ❓ **Untested** | Includes `apache2_2.4.56-1~deb11u2_armhf.deb` package update |
+| **KitCom V01.18.04** (`KitCom-V01.18.04.zip`) | `SoftwareCommunication-V01.18.04.jar` | ❓ *Unknown* | **≥ 2.4.62** *(via deb11 patch)* | ❓ *Unknown* | ❓ **Untested** | Includes `apache2_2.4.62-1~deb11u2_armhf.deb` package update |
+| **KitCom V02.01.14 ("Gen2")** (`KitCom-V02.01.14.zip`) | `SoftwareCommunication-V02.01.14.jar` | ❓ *Unknown* (modern Debian / LUKS) | **≥ 2.4.62** *(via deb11 patch)* | ❓ *Unknown* | ❓ **Untested** | Major architecture redesign: LUKS encryption (`/run/bringup`), `bticino` user, Tomcat 9, new ZIP password |
+
+> [!NOTE]
+> - From version `V01.17.00` onwards, it is assumed that the Apache HTTP server and system libraries were upgraded compared to the baseline `2.4.25`.
+> - Notice that there are two distinct official archives for `V01.15.00`: the earlier baseline `KitCom-V01.15.00.zip` (with hyphen `-`, containing `SoftwareCommunication-V01.03.25.jar`), designated here as `1.15.0-legacy`, and `KitCom.V01.15.00.zip` (with dot `.`, containing `SoftwareCommunication-V01.04.09.jar`).
+> - The compatibility of factory KitCom images other than `1.15.0-legacy` remains untested and unknown at this stage.
+
+### 🤝 Call for Contributions: Help Us Map All KitCom Images
+
+We are actively seeking feedback from the community to map all physical KitCom versions in circulation!
+If you have an official Legrand KitCom running a different version, you can help by connecting via SSH and sharing the output of:
+```bash
+cat /etc/os-release
+uname -a
+ldd --version
+apache2 -v
+```
+
+**Need a dedicated build?**
+If a new or different factory OS version turns out to be incompatible with the current `armv7-legacy` binary (due to glibc version mismatches or architectural differences), **the build pipeline will be adapted to create a dedicated release binary** tailored specifically to that system. Please open an issue on GitHub with your system information!
