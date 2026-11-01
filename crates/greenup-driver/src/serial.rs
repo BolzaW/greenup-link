@@ -831,7 +831,10 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::TicTestInit => {}
         ProtocolEvent::Voltage(v) => {
             if let Ok(mut tel) = state.telemetry.lock() {
-                tel.voltage = v;
+                tel.evaluate_voltage();
+                if tel.voltage_source != "external" {
+                    tel.voltage = v;
+                }
                 if tel.greenup_state == "D" || tel.greenup_state == "E" {
                     tel.power = tel.voltage * tel.current;
                 } else {
@@ -841,10 +844,8 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         }
         ProtocolEvent::Current(c) => {
             if let Ok(mut tel) = state.telemetry.lock() {
+                tel.evaluate_voltage();
                 if tel.greenup_state == "D" || tel.greenup_state == "E" {
-                    if tel.voltage == 0.0 {
-                        tel.voltage = 230.0;
-                    }
                     let previous_power = tel.power;
                     tel.current = c;
                     tel.power = tel.voltage * tel.current;
