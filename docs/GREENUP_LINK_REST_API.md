@@ -88,7 +88,8 @@ Three standard authentication methods are supported simultaneously against the s
       "max_current_amps": 32,
       "has_schuko": false,
       "charging_points": 1,
-      "is_known": true
+      "is_known": true,
+      "has_tic": true
     }
   }
   ```
