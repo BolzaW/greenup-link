@@ -98,6 +98,7 @@ pub fn is_dual_station() -> bool {
 static LAST_WARNED_MB: AtomicU64 = AtomicU64::new(0);
 static WRITE_COUNT: AtomicU64 = AtomicU64::new(0);
 static IS_CHECKING_SIZE: AtomicBool = AtomicBool::new(false);
+static LOG_FILE_MUTEX: Mutex<()> = Mutex::new(());
 static CONFIGURED_LOG_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Info as u8);
 static CURRENT_LOG_DATE: Mutex<Option<String>> = Mutex::new(None);
 static RECENT_LOGS: Mutex<VecDeque<LogEntry>> = Mutex::new(VecDeque::new());
@@ -293,9 +294,11 @@ pub fn log_with_level_side(category: &str, side: Option<u8>, level: LogLevel, me
     let mut warning_to_emit: Option<(u64, f64)> = None;
 
     if should_output {
+        let _file_guard = LOG_FILE_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let path = get_or_rotate_daily_file();
         if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) {
             let _ = writeln!(f, "{}", entry_text);
+            let _ = f.flush();
 
             let count = WRITE_COUNT.fetch_add(1, Ordering::Relaxed);
             if count % 256 == 0 && !IS_CHECKING_SIZE.swap(true, Ordering::SeqCst) {

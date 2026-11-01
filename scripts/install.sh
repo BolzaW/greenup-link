@@ -20,6 +20,33 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_DIR="/opt/greenup-link"
 TARGET_BIN="$TARGET_DIR/greenup-link"
 
+# Parse optional command-line flags
+OFFLINE=false
+RECONFIGURE=false
+GENERATE_TOKEN=""
+CUSTOM_TOKEN=""
+
+for arg in "$@"; do
+    case "$arg" in
+        --reconfigure)
+            RECONFIGURE=true
+            OFFLINE=true
+            ;;
+        --offline|--no-download)
+            OFFLINE=true
+            ;;
+        --generate-token|--random-token)
+            GENERATE_TOKEN="yes"
+            ;;
+        --no-token|--open)
+            GENERATE_TOKEN="no"
+            ;;
+        --token=*)
+            CUSTOM_TOKEN="${arg#*=}"
+            ;;
+    esac
+done
+
 # Create dedicated unprivileged system user 'greenup' if it does not exist
 echo "  -> Setting up dedicated unprivileged system user 'greenup'..."
 if ! id -u greenup >/dev/null 2>&1; then
@@ -38,6 +65,12 @@ fi
 # Also add to 'gpio' group if present on Raspberry Pi OS
 if getent group gpio >/dev/null 2>&1; then
     usermod -a -G gpio greenup 2>/dev/null || true
+fi
+
+# Add the user who invoked sudo to the 'greenup' group for convenient access
+if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+    usermod -a -G greenup "$SUDO_USER" 2>/dev/null || true
+    echo "  -> Added '$SUDO_USER' to group 'greenup' (configuration and log access)"
 fi
 
 # 2. Environment check: Detect official Legrand software stack
@@ -76,7 +109,7 @@ EOF
         echo "  -> Neutralized $INIT_SCRIPT with 'exit 0'"
     fi
 
-    # C. Neutralize emergency DeletAll.sh script
+    # C. Neutralize emergency DeletAll.sh script on factory Legrand desktop
     DELETE_SCRIPT="/home/pi/Desktop/DeletAll.sh"
     if [ -f "$DELETE_SCRIPT" ]; then
         if [ ! -f "$DELETE_SCRIPT.old" ]; then
@@ -184,7 +217,7 @@ elif [ -f "./greenup-link-aarch64" ]; then
     verify_local_sha256 "./greenup-link-aarch64" "greenup-link-aarch64" || exit 1
     mv -f "./greenup-link-aarch64" "$TARGET_BIN"
     echo "  -> Moved ./greenup-link-aarch64 to $TARGET_BIN"
-elif [ -f "$TARGET_BIN" ] && { [ "$1" = "--reconfigure" ] || [ "$1" = "--offline" ] || [ "$1" = "--no-download" ]; }; then
+elif [ -f "$TARGET_BIN" ] && [ "$OFFLINE" = true ]; then
     echo "  -> Keeping existing binary at $TARGET_BIN (--offline/--reconfigure mode)"
 else
     if [ -f "$TARGET_BIN" ]; then
@@ -310,7 +343,7 @@ elif [ -f "./uninstall.sh" ] && [ "$(realpath ./uninstall.sh 2>/dev/null || echo
     cp -p "./uninstall.sh" "$UNINSTALL_TARGET"
     chmod +x "$UNINSTALL_TARGET"
     echo "  -> Installed uninstaller to $UNINSTALL_TARGET"
-elif [ -f "$UNINSTALL_TARGET" ] && { [ "$1" = "--reconfigure" ] || [ "$1" = "--offline" ] || [ "$1" = "--no-download" ]; }; then
+elif [ -f "$UNINSTALL_TARGET" ] && [ "$OFFLINE" = true ]; then
     chmod +x "$UNINSTALL_TARGET"
     echo "  -> Keeping existing uninstaller at $UNINSTALL_TARGET"
 else
@@ -327,8 +360,83 @@ else
 fi
 
 CONFIG_FILE="$TARGET_DIR/greenup.toml"
+TOKEN_SET=""
+DO_SET_TOKEN=false
+
+generate_random_token() {
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex 16
+    elif [ -r /dev/urandom ]; then
+        tr -dc 'a-f0-9' < /dev/urandom 2>/dev/null | head -c 32 || true
+    else
+        echo "gl_$(date +%s)_$RANDOM$RANDOM"
+    fi
+}
+
+CURRENT_TOKEN=""
+if [ -f "$CONFIG_FILE" ]; then
+    CURRENT_TOKEN=$(grep -E '^[[:space:]]*api_token[[:space:]]*=' "$CONFIG_FILE" 2>/dev/null | sed -E 's/^[[:space:]]*api_token[[:space:]]*=[[:space:]]*["'\'']?([^"'\'']*)["'\'']?.*$/\1/' || true)
+fi
+
+if [ -n "$CUSTOM_TOKEN" ]; then
+    TOKEN_SET="$CUSTOM_TOKEN"
+    DO_SET_TOKEN=true
+elif [ "$GENERATE_TOKEN" = "yes" ]; then
+    TOKEN_SET=$(generate_random_token)
+    DO_SET_TOKEN=true
+elif [ "$GENERATE_TOKEN" = "no" ]; then
+    TOKEN_SET=""
+    DO_SET_TOKEN=true
+elif [ -f "$CONFIG_FILE" ] && [ -n "$CURRENT_TOKEN" ] && [ "$RECONFIGURE" != true ]; then
+    TOKEN_SET="$CURRENT_TOKEN"
+    echo "  -> Keeping existing API token configured in $CONFIG_FILE"
+    DO_SET_TOKEN=false
+else
+    # Interactive prompt (new config, empty token in existing config, or --reconfigure)
+    IS_INTERACTIVE=false
+    if [ -t 0 ] || [ -r /dev/tty ]; then
+        IS_INTERACTIVE=true
+    fi
+
+    if [ "$IS_INTERACTIVE" = true ]; then
+        echo ""
+        echo "--------------------------------------------------------"
+        echo "  🔒 Security & Access Authentication"
+        echo "--------------------------------------------------------"
+        echo "  Green'Up Link can protect its Web GUI and REST API with an API Token."
+        echo "  - Yes [Y]: Generate a cryptographically strong random token (recommended)."
+        echo "  - No  [n]: Open LAN mode (no password required on trusted network)."
+        echo ""
+        PROMPT_TEXT="  Generate a secure random API token? [Y/n] (default: Y): "
+        REPLY_TOKEN=""
+        if [ -t 0 ]; then
+            read -r -p "$PROMPT_TEXT" REPLY_TOKEN
+        elif [ -r /dev/tty ]; then
+            read -r -p "$PROMPT_TEXT" REPLY_TOKEN < /dev/tty
+        else
+            REPLY_TOKEN="y"
+        fi
+
+        case "$REPLY_TOKEN" in
+            [nN]|[nN][oO])
+                TOKEN_SET=""
+                echo "  -> Open LAN mode (no API token configured)."
+                ;;
+            *)
+                TOKEN_SET=$(generate_random_token)
+                echo "  -> 🔑 Generated random API token: $TOKEN_SET"
+                ;;
+        esac
+        DO_SET_TOKEN=true
+    else
+        # Non-interactive default: keep empty unless explicitly requested
+        TOKEN_SET=""
+        DO_SET_TOKEN=true
+    fi
+fi
+
 if [ ! -f "$CONFIG_FILE" ]; then
-    cat << 'EOF' > "$CONFIG_FILE"
+    cat << EOF > "$CONFIG_FILE"
 # ==============================================================================
 # Green'Up Link - Configuration File
 # ==============================================================================
@@ -345,21 +453,33 @@ bind = "0.0.0.0:8080"
 #     * Bearer Token : Authorization: Bearer <api_token>  (EVCC, Home Assistant, Web GUI)
 #     * API Key      : X-API-Key: <api_token>
 #     * Basic Auth   : Authorization: Basic <base64(user:api_token)>  (curl -u :token)
-api_token = ""
+api_token = "$TOKEN_SET"
 EOF
-    chmod 640 "$CONFIG_FILE"
-    echo "  -> Created default configuration file at $CONFIG_FILE"
-else
-    chmod 640 "$CONFIG_FILE" 2>/dev/null || true
-    echo "  -> Keeping existing configuration file at $CONFIG_FILE"
+    echo "  -> Created configuration file at $CONFIG_FILE"
+elif [ "$DO_SET_TOKEN" = true ]; then
+    if grep -q -E '^[[:space:]]*api_token[[:space:]]*=' "$CONFIG_FILE"; then
+        sed -i -E "s/^[[:space:]]*api_token[[:space:]]*=.*/api_token = \"$TOKEN_SET\"/" "$CONFIG_FILE"
+    else
+        echo "" >> "$CONFIG_FILE"
+        echo "api_token = \"$TOKEN_SET\"" >> "$CONFIG_FILE"
+    fi
+    echo "  -> Updated configuration file at $CONFIG_FILE with api_token"
 fi
 
-# Ensure proper ownership and permissions for the dedicated user
-mkdir -p "$TARGET_DIR/logs"
+# Ensure proper ownership and standard permissions for the service
+mkdir -p "$TARGET_DIR/logs" "$TARGET_DIR/sessions"
 chown -R greenup:greenup "$TARGET_DIR"
-chmod 750 "$TARGET_DIR"
+
+# Standard Linux directory & file permissions
+chmod 755 "$TARGET_DIR"
+chmod 775 "$TARGET_DIR/logs" "$TARGET_DIR/sessions"
+chmod -R 664 "$TARGET_DIR/logs"/* 2>/dev/null || true
+chmod -R 664 "$TARGET_DIR/sessions"/* 2>/dev/null || true
 chmod 755 "$TARGET_BIN"
 [ -f "$UNINSTALL_TARGET" ] && chmod 755 "$UNINSTALL_TARGET"
+chmod 664 "$CONFIG_FILE"
+
+
 
 # 5. Configure and start Systemd service
 echo ""
@@ -402,13 +522,21 @@ echo ""
 echo "================================================="
 sleep 1
 if systemctl is-active --quiet greenup-link.service; then
-    IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "your-pi-ip")
+    IP_ADDR=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "your-ip")
     echo "🎉 Success: Green'Up Link is active and running!"
     echo "   Web Interface:   http://${IP_ADDR}:8080"
     echo "   Directory:       /opt/greenup-link"
-    echo "   Config & Auth:   /opt/greenup-link/greenup.toml"
+    echo "   Config File:     /opt/greenup-link/greenup.toml"
+    if [ -n "$TOKEN_SET" ]; then
+        echo "   API Token:       $TOKEN_SET"
+        echo "   👉 Authentication is ENABLED. Use this token to log into the Web GUI"
+        echo "      or in EVCC / Home Assistant headers."
+    else
+        echo "   Authentication:  DISABLED (open access on trusted local network)"
+    fi
     echo "   Logs:            /opt/greenup-link/logs/"
     echo "   Service User:    greenup (dialout group)"
+    echo "   Edit Config:     sudo nano /opt/greenup-link/greenup.toml"
     echo "   Service Status:  sudo systemctl status greenup-link"
     echo "   Live Logs:       sudo journalctl -u greenup-link -f"
     echo "   Rollback/Remove: sudo /opt/greenup-link/uninstall.sh"

@@ -10,10 +10,10 @@
 <body class="min-h-screen flex flex-col p-4 md:p-8 selection:bg-sky-500/30">
 
 <!-- Top Header -->
-<header class="max-w-6xl mx-auto w-full grid grid-cols-2 md:flex md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-4 gap-4 md:gap-0">
+<header class="app-header max-w-6xl mx-auto w-full mb-8 border-b border-slate-800 pb-4">
     
     <!-- Logo (Top Left on Mobile, Left on Desktop) -->
-    <div class="col-span-1 flex items-center space-x-2 md:space-x-3">
+    <div class="header-logo flex items-center space-x-2 md:space-x-3">
         <div class="p-1.5 md:p-2 bg-slate-800 rounded-lg shadow-inner">
             <svg class="w-5 h-5 md:w-6 md:h-6 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
         </div>
@@ -26,22 +26,22 @@
     </div>
 
     <!-- Navigation Tabs (Center on Desktop, Full-width Row on Mobile) -->
-    <div class="col-span-2 md:col-span-1 flex justify-center order-3 md:order-2 my-1 md:my-0">
+    <div class="header-nav flex justify-center">
         <div class="header-nav-tabs">
             <button id="tabBoard" class="header-tab active" data-tab="board">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                <svg class="w-3.5 h-3.5" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                 <span data-i18n="header.tab_board">Borne</span>
             </button>
             <button id="tabSessions" class="header-tab" data-tab="sessions">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+                <svg class="w-3.5 h-3.5" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
                 <span data-i18n="header.tab_sessions">Sessions</span>
             </button>
             <button id="tabConsole" class="header-tab" data-tab="console">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                <svg class="w-3.5 h-3.5" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
                 <span data-i18n="header.tab_console">Console</span>
             </button>
             <button id="tabSystem" class="header-tab relative" data-tab="system">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                <svg class="w-3.5 h-3.5" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 <span data-i18n="header.tab_system">Système</span>
                 <!-- Pastille d'alerte en cas de problème USB -->
                 <span id="tabSystemBadge" class="hidden absolute -top-1 -right-1 flex h-2.5 w-2.5 pointer-events-none">
@@ -52,18 +52,21 @@
         </div>
     </div>
 
-    <!-- Controls: Language & Auth (Top Right on Mobile, Right on Desktop) -->
-    <div class="col-span-1 flex items-center justify-end space-x-2 md:space-x-3 order-2 md:order-3">
+    <!-- Controls: Language & Auth Status (Top Right on Mobile, Right on Desktop) -->
+    <div class="header-controls flex items-center justify-end space-x-2 md:space-x-2.5">
         <!-- Language Selector -->
-        <select id="langSelector" class="bg-slate-800 text-[10px] md:text-xs text-slate-300 border border-slate-700 rounded px-2 py-1 outline-none cursor-pointer">
-            <option value="fr">🇫🇷 FR</option>
-            <option value="en">🇬🇧 EN</option>
+        <select id="langSelector" class="header-control-select">
+            <option value="fr">FR</option>
+            <option value="en">EN</option>
         </select>
 
-        <!-- Lock / Logout Button (shown only when API auth is enabled) -->
-        <button id="btnLogout" onclick="logoutApiToken()" class="header-btn-logout hidden" title="Verrouiller la session" data-i18n-title="auth.logout_title">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <!-- Lock / Auth Status Button -->
+        <button id="btnLogout" onclick="handleAuthButtonClick()" class="header-auth-btn hidden" title="Statut sécurité" data-i18n-title="auth.logout_title">
+            <svg id="iconLockClosed" class="w-3.5 h-3.5" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+            </svg>
+            <svg id="iconLockOpen" class="w-3.5 h-3.5 hidden" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path>
             </svg>
         </button>
     </div>
@@ -96,9 +99,6 @@
     <div class="lg:col-span-7 flex flex-col h-full">
         <!-- The Visualizer -->
         <div id="visualizerPanel" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-8 shadow-xl relative overflow-hidden flex flex-col justify-center flex-1 min-h-[380px]">
-            <!-- Subtle Grid Background Pattern -->
-            <div class="absolute inset-0 opacity-[0.02] bg-[linear-gradient(to_right,#ffffff_1px,transparent_1px),linear-gradient(to_bottom,#ffffff_1px,transparent_1px)] bg-[size:24px_24px]"></div>
-            
             <div class="relative z-10 w-full flex flex-col mx-auto mt-2 mb-4">
                 
                 <!-- 12-Column Grid Layout for perfect responsive wire routing without overlapping -->
@@ -111,10 +111,9 @@
                         <div id="linkyBox" class="relative z-20">
                             <div class="w-14 h-14 md:w-16 md:h-16 rounded-xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center transition-all duration-300 shadow-inner" id="linkyContainer">
                                 <svg class="w-6 h-6 md:w-8 md:h-8 text-slate-600 transition-colors" id="linkyIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                                 </svg>
                             </div>
-                            <div class="absolute -top-1 -right-1 w-3 h-3 md:w-4 md:h-4 rounded-full bg-slate-700 border-2 border-slate-900 transition-colors" id="linkyLed"></div>
                         </div>
                         <span class="mt-4 text-[10px] font-bold tracking-wide text-slate-400 uppercase text-center w-full">LINKY</span>
                     </div>
@@ -132,7 +131,11 @@
                     <div class="col-span-3 flex flex-col items-center relative z-20">
                         <div class="w-16 h-24 md:w-20 md:h-28 rounded-2xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center relative transition-all duration-500 shadow-2xl" id="chargerBox">
                             <svg class="w-8 h-8 md:w-10 md:h-10 text-slate-600 transition-colors duration-500" id="chargerIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
-                            <div class="w-6 h-1 md:w-8 md:h-1.5 rounded-full bg-slate-700 mt-4 transition-all duration-500" id="chargerLed"></div>
+                            <div class="charger-led-bar" id="chargerLedBar">
+                                <div class="charger-led led-white" id="chargerLed1"></div>
+                                <div class="charger-led led-white" id="chargerLed2"></div>
+                                <div class="charger-led led-white" id="chargerLed3"></div>
+                            </div>
                         </div>
                         <span class="mt-4 text-[10px] font-bold tracking-wide text-slate-300 uppercase text-center w-full">Green'Up</span>
                     </div>
@@ -154,17 +157,6 @@
                         <div class="w-full max-w-[250px] md:max-w-[400px] flex items-center justify-end relative transition-transform duration-500" id="carBox">
                             <!-- Custom Sedan EV Side Profile SVG from user -->
                             <svg class="w-full h-full text-slate-700 transition-all duration-500 drop-shadow-2xl" id="carIcon" viewBox="0 0 1280 671" fill="currentColor">
-                                <defs>
-                                    <linearGradient id="waveGradient" y1="0%" y2="0%">
-                                        <animate id="carAnimWave1" attributeName="x1" from="65%" to="-60%" dur="4s" repeatCount="indefinite" />
-                                        <animate id="carAnimWave2" attributeName="x2" from="125%" to="0%" dur="4s" repeatCount="indefinite" />
-                                        <stop offset="0%" stop-color="#065f46" />
-                                        <stop offset="48%" stop-color="#065f46" />
-                                        <stop offset="50%" stop-color="#34d399" />
-                                        <stop offset="80%" stop-color="#059669" />
-                                        <stop offset="100%" stop-color="#065f46" />
-                                    </linearGradient>
-                                </defs>
                                 <g transform="translate(0.000000,671.000000) scale(0.100000,-0.100000)" stroke="none">
                                     <path d="M8680 4669 c-1171 -47 -2223 -163 -2675 -295 -202 -58 -569 -246 -920 -469 -88 -56 -176 -110 -195 -120 -19 -9 -48 -30 -65 -45 -16 -15 -70 -54 -120 -87 l-90 -60 -207 -17 c-253 -20 -777 -85 -1028 -127 -685 -113 -995 -208 -1157 -353 -32 -29 -84 -71 -115 -94 -64 -47 -64 -48 -72 -177 -9 -141 -12 -152 -55 -162 -26 -7 -36 -14 -34 -27 1 -11 -11 -30 -26 -45 -20 -19 -31 -43 -40 -85 -6 -33 -22 -78 -36 -101 -21 -36 -23 -46 -13 -72 9 -23 6 -57 -12 -164 -27 -160 -27 -185 -2 -218 10 -14 19 -41 20 -59 0 -18 6 -40 13 -48 9 -11 9 -17 -1 -29 -8 -10 -11 -31 -7 -60 4 -26 3 -45 -3 -45 -15 0 -36 -51 -39 -92 -2 -47 34 -128 87 -195 37 -46 50 -54 109 -72 130 -38 321 -62 863 -107 41 -3 85 -13 98 -21 86 -54 286 -97 531 -113 211 -15 345 1 442 50 35 18 67 19 591 20 568 0 746 7 1288 56 106 10 185 13 187 8 12 -36 100 -152 162 -215 122 -122 199 -157 413 -189 290 -42 567 -52 673 -25 184 48 364 225 478 468 l42 89 50 -6 c35 -4 103 4 220 25 94 16 424 72 735 124 942 158 1255 212 1474 256 158 32 211 39 214 30 2 -7 26 -45 53 -85 47 -71 96 -114 151 -135 46 -17 234 -32 410 -33 163 0 168 0 212 26 108 63 190 221 232 445 15 78 21 91 63 141 71 81 117 153 141 218 38 99 52 371 27 482 -9 36 -18 97 -22 135 -17 178 -77 455 -107 492 -6 7 -83 48 -172 91 -207 101 -307 164 -530 332 -99 75 -215 159 -256 187 -155 103 -398 252 -475 291 -258 128 -531 213 -825 256 -92 14 -429 38 -470 34 -8 0 -103 -5 -210 -9z"/>
                                 </g>
@@ -195,9 +187,9 @@
 
         <!-- Sessions History Panel (Replaces visualizer in Sessions mode) -->
         <div id="sessionsPanel" class="hidden sessions-panel">
-            <!-- Top Toolbar: Selector + Download ZIP + Delete -->
-            <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800">
-                <div class="flex-1 min-w-0 flex items-center space-x-2">
+            <!-- Top Toolbar: Selector + Download ZIP + Delete (All on single row) -->
+            <div class="session-toolbar">
+                <div class="session-toolbar-selector">
                     <svg class="w-4 h-4 text-sky-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                     </svg>
@@ -205,64 +197,66 @@
                         <option value="" disabled selected data-i18n="sessions.loading">Chargement des sessions...</option>
                     </select>
                 </div>
-                <div class="flex items-center space-x-2 flex-shrink-0 justify-end">
-                    <!-- Download ZIP button -->
-                    <button id="btnSessionDownloadZip" class="session-btn session-btn-zip" title="Télécharger l'archive ZIP (CSV + fiche résumé)" data-i18n-title="sessions.download_zip_title">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="session-toolbar-actions">
+                    <!-- Download ZIP button (sober down arrow into tray, like console export) -->
+                    <button id="btnSessionDownloadZip" class="session-btn-tool session-btn-export" title="Télécharger l'archive ZIP (CSV + fiche résumé)" data-i18n-title="sessions.download_zip_title" disabled>
+                        <svg id="iconSessionDownloadZip" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                         </svg>
-                        <span id="lblSessionDownloadZip" data-i18n="sessions.download_zip">ZIP</span>
+                        <svg id="iconSessionDownloadSpinner" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" class="hidden animate-spin text-sky-400">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                        </svg>
                     </button>
-                    <!-- Delete button -->
-                    <button id="btnSessionDelete" class="session-btn session-btn-delete" title="Supprimer la session sélectionnée" data-i18n-title="sessions.delete_title">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <!-- Delete button (sober trash icon) -->
+                    <button id="btnSessionDelete" class="session-btn-tool session-btn-delete" title="Supprimer la session sélectionnée" data-i18n-title="sessions.delete_title" disabled>
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                         </svg>
-                        <span id="lblSessionDelete"></span>
+                        <span id="lblSessionDelete" class="hidden text-[10px] font-semibold"></span>
                     </button>
                 </div>
             </div>
 
             <!-- Session Summary Stat Cards (4 cards) -->
-            <div id="sessionSummaryCards" class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+            <div id="sessionSummaryCards" class="session-summary-grid">
                 <!-- Duration -->
                 <div class="session-stat-card">
-                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                    <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
                         <span>⏱️</span> <span data-i18n="sessions.stat_charge_duration">Durée charge</span>
                     </span>
-                    <span id="sessionValChargingDuration" class="text-sm font-bold text-slate-200 font-mono mt-0.5">--</span>
-                    <span id="sessionValTotalDuration" class="text-[9px] text-slate-500 font-mono">--</span>
+                    <span id="sessionValChargingDuration" class="text-sm sm:text-base font-bold text-slate-100 font-mono mt-1">--</span>
+                    <span id="sessionValTotalDuration" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
                 </div>
                 <!-- Energy -->
                 <div class="session-stat-card">
-                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                    <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
                         <span>⚡</span> <span data-i18n="sessions.stat_energy">Énergie</span>
                     </span>
-                    <span id="sessionValEnergy" class="text-sm font-bold text-sky-400 font-mono mt-0.5">--</span>
-                    <span id="sessionValPhase" class="text-[9px] text-slate-500 font-mono">--</span>
+                    <span id="sessionValEnergy" class="text-sm sm:text-base font-bold text-sky-400 font-mono mt-1">--</span>
+                    <span id="sessionValPhase" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
                 </div>
                 <!-- Power Peak / Avg -->
                 <div class="session-stat-card">
-                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                    <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
                         <span>📈</span> <span data-i18n="sessions.stat_power_max">P. Crête</span>
                     </span>
-                    <span id="sessionValMaxPower" class="text-sm font-bold text-emerald-400 font-mono mt-0.5">--</span>
-                    <span id="sessionValAvgPower" class="text-[9px] text-slate-500 font-mono">--</span>
+                    <span id="sessionValMaxPower" class="text-sm sm:text-base font-bold text-emerald-400 font-mono mt-1">--</span>
+                    <span id="sessionValAvgPower" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
                 </div>
                 <!-- Reason / Status -->
                 <div class="session-stat-card">
-                    <span class="text-[9px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
-                        <span>🛑</span> <span data-i18n="sessions.stat_reason">Fin</span>
+                    <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
+                        <span>ℹ️</span> <span data-i18n="sessions.stat_reason">Statut</span>
                     </span>
-                    <span id="sessionValReason" class="text-xs font-semibold text-slate-300 truncate mt-0.5" title="">--</span>
-                    <span id="sessionValEndTime" class="text-[9px] text-slate-500 font-mono">--</span>
+                    <span id="sessionValReason" class="text-xs sm:text-sm font-semibold text-slate-300 truncate mt-1" title="" data-i18n="sessions.no_sessions">Aucune session enregistrée</span>
+                    <span id="sessionValEndTime" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
                 </div>
             </div>
 
             <!-- Chart Container -->
             <div class="session-chart-wrap">
                 <!-- Header inside chart container -->
-                <div class="flex items-center justify-between px-2 pt-1 pb-1">
+                <div class="flex items-center justify-between px-3 pt-2 pb-2 mb-1 border-b border-slate-900/80">
                     <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
                         <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
                         <span data-i18n="sessions.chart_power_curve">Courbe de puissance</span>
@@ -271,7 +265,7 @@
                 </div>
 
                 <!-- Canvas -->
-                <div class="relative flex-1 w-full min-h-[200px] overflow-hidden">
+                <div class="relative flex-1 w-full min-h-[200px] overflow-hidden p-1">
                     <canvas id="sessionChartCanvas" class="w-full h-full block"></canvas>
                     <div id="sessionChartTooltip" class="chart-tooltip"></div>
                     <div id="sessionChartEmpty" class="absolute inset-0 flex items-center justify-center text-slate-500 text-xs hidden">
@@ -357,7 +351,7 @@
                         <span class="console-input-prefix">&gt;</span>
                         <input type="text" id="consoleCommandInput" maxlength="20" placeholder="Raw command (ex: State?, CC?, Side?...)" data-i18n-placeholder="console.prompt_placeholder" class="console-input"/>
                     </div>
-                    <button id="btnConsoleSend" class="console-btn-send">
+                    <button id="btnConsoleSend" type="button" class="console-btn-send">
                         <span data-i18n="console.send">Envoyer</span>
                     </button>
                 </div>
@@ -372,7 +366,7 @@
         <div id="systemPanel" class="hidden config-panel">
             <!-- Header Title -->
             <div class="flex items-center space-x-2 pb-3 mb-4 border-b border-slate-800">
-                <svg class="w-5 h-5 text-sky-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5 text-sky-400 flex-shrink-0" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                 </svg>
@@ -396,7 +390,7 @@
                 <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 sm:p-4 space-y-3">
                     <div class="flex items-center justify-between border-b border-slate-800/60 pb-2.5">
                         <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                            <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            <svg class="w-3.5 h-3.5 text-sky-400 flex-shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             <span data-i18n="system.serial_section">Liaison Série & Carte Borne</span>
                         </span>
                         <div class="flex items-center space-x-1.5">
@@ -406,7 +400,7 @@
                     </div>
 
                     <!-- USB Status detail text -->
-                    <div id="sysUsbDetails" class="text-[11px] font-mono text-slate-400 pl-1 truncate">Câble USB non détecté (/dev/ttyUSB0 introuvable)</div>
+                    <div id="sysUsbDetails" class="text-[11px] font-mono text-slate-400 pl-1 py-0.5 truncate">Câble USB non détecté (/dev/ttyUSB0 introuvable)</div>
 
                     <!-- Serial Port & Baudrate Grid -->
                     <div class="grid grid-cols-2 gap-2 text-xs font-mono">
@@ -425,11 +419,11 @@
                         <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1.5" data-i18n="system.actions_title">Maintenance & Dépannage liaison</div>
                         <div class="grid grid-cols-2 gap-2">
                             <button type="button" id="btnSerialInit" class="btn-system-action flex items-center justify-center gap-1.5" title="Relance la synchronisation et la détection automatique avec l'ATmega" data-i18n-title="system.btn_init_title">
-                                <svg id="iconSerialInit" class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                <svg id="iconSerialInit" class="w-3.5 h-3.5 text-sky-400 flex-shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                 <span data-i18n="system.btn_init">Réinitialiser liaison</span>
                             </button>
                             <button type="button" id="btnSerialReset" class="btn-system-action btn-system-action-danger flex items-center justify-center gap-1.5" title="Envoie une commande de redémarrage matériel (Reset) à la carte ATmega" data-i18n-title="system.btn_reset_title">
-                                <svg id="iconSerialReset" class="w-3.5 h-3.5 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                <svg id="iconSerialReset" class="w-3.5 h-3.5 text-rose-400 flex-shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 11-12.728 0M12 2v10"/></svg>
                                 <span data-i18n="system.btn_reset">Redémarrer carte (Reset)</span>
                             </button>
                         </div>
@@ -453,7 +447,7 @@
                 <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 sm:p-4 space-y-3">
                     <div class="border-b border-slate-800/60 pb-2">
                         <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                            <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>
+                            <svg class="w-3.5 h-3.5 text-amber-400 flex-shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>
                             <span data-i18n="system.modules_section">Périphériques & Modules</span>
                         </span>
                     </div>
@@ -464,7 +458,7 @@
                             <div class="flex items-start justify-between">
                                 <div>
                                     <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                                        <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7l10 10-5 5V2l5 5-10 10"/></svg>
+                                        <svg class="w-3.5 h-3.5 text-sky-400 flex-shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7l10 10-5 5V2l5 5-10 10"/></svg>
                                         <span data-i18n="system.ble_title">Module Bluetooth (BLE)</span>
                                     </span>
                                     <p class="text-[10px] text-slate-500 mt-1" data-i18n="system.ble_desc">Active ou désactive la communication Bluetooth sur la carte Legrand</p>
@@ -483,7 +477,7 @@
                             <div>
                                 <div class="flex items-center justify-between">
                                     <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                                        <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                        <svg class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                                         <span data-i18n="system.tic_title">Télé-Information Client (TIC)</span>
                                     </span>
                                     <span id="cfgTicSpeedBadge" class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700">--</span>
@@ -492,7 +486,7 @@
                             </div>
                             <div class="mt-2.5">
                                 <button type="button" id="btnRefreshTicConfig" class="btn-system-action flex items-center justify-center gap-1.5 w-full">
-                                    <svg id="iconRefreshTic" class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                    <svg id="iconRefreshTic" class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                                     <span data-i18n="system.btn_refresh_tic">Tester / Actualiser détection TIC</span>
                                 </button>
                                 <div id="cfgTicFeedback" class="text-[11px] font-medium text-center min-h-[14px] mt-1"></div>
@@ -505,7 +499,7 @@
                 <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 sm:p-4 space-y-3">
                     <div class="border-b border-slate-800/60 pb-2">
                         <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                            <svg class="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
+                            <svg class="w-3.5 h-3.5 text-sky-400 flex-shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
                             <span data-i18n="system.network_section">Service Green'Up Link & Réseau</span>
                         </span>
                     </div>
@@ -528,7 +522,7 @@
                     <div class="p-3 rounded-lg bg-slate-900/80 border border-slate-800/60 space-y-2 mt-2">
                         <div class="flex items-center justify-between flex-wrap gap-1">
                             <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                                <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                <svg class="w-3.5 h-3.5 text-amber-400 flex-shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                                 <span data-i18n="system.token_title">Authentification API Client</span>
                             </span>
                             <span id="cfgTokenStatusBadge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-400">--</span>
@@ -538,17 +532,17 @@
                         <div class="flex items-center gap-2 pt-1">
                             <div class="relative flex-1">
                                 <input type="password" id="cfgClientToken" class="config-input w-full pr-10 font-mono text-xs" placeholder="Clé API locale (Bearer token)..." data-i18n-placeholder="system.token_placeholder" autocomplete="current-password" />
-                                <button type="button" id="btnToggleTokenVisibility" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 p-1 transition-colors" title="Afficher / Masquer" data-i18n-title="system.toggle_token_visibility">
-                                    <svg id="iconEye" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-                                    <svg id="iconEyeSlash" class="w-4 h-4 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
+                                <button type="button" id="btnToggleTokenVisibility" class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 p-1 transition-colors flex items-center justify-center" title="Afficher / Masquer" data-i18n-title="system.toggle_token_visibility">
+                                    <svg id="iconEye" class="w-4 h-4 flex-shrink-0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                                    <svg id="iconEyeSlash" class="w-4 h-4 hidden flex-shrink-0" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
                                 </button>
                             </div>
                             <button type="button" id="btnSaveClientToken" class="btn-system-action flex items-center justify-center gap-1.5 flex-shrink-0" title="Enregistrer la clé dans le navigateur">
-                                <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                                <svg class="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
                                 <span data-i18n="system.btn_save_token">Appliquer</span>
                             </button>
                             <button type="button" id="btnClearClientToken" class="btn-system-action btn-system-action-danger flex items-center justify-center gap-1 flex-shrink-0" title="Effacer la clé enregistrée" data-i18n-title="system.btn_clear_token_title">
-                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                <svg class="w-3.5 h-3.5 flex-shrink-0" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
                                 <span data-i18n="system.btn_clear_token">Effacer</span>
                             </button>
                         </div>
@@ -664,6 +658,27 @@
         <input type="password" id="authTokenInput" class="auth-input" placeholder="Clé API / Token..." data-i18n-placeholder="auth.placeholder" autocomplete="current-password" />
         <div id="authErrorMsg" class="text-rose-500 text-xs font-medium mt-2 hidden" data-i18n="auth.invalid">Clé API invalide. Veuillez réessayer.</div>
         <button id="btnAuthSubmit" class="auth-btn-submit" data-i18n="auth.submit">Déverrouiller</button>
+    </div>
+</div>
+
+<!-- Open LAN Notice Modal (shown when clicking the open lock in unauthenticated LAN mode) -->
+<div id="openLanModal" class="auth-overlay hidden">
+    <div class="auth-card max-w-sm text-left">
+        <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 mb-3 mx-auto">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"></path>
+            </svg>
+        </div>
+        <h3 class="text-base font-bold text-white text-center mb-1.5" data-i18n="auth.open_lan_title">Accès libre (mode LAN)</h3>
+        <p class="text-xs text-slate-300 leading-relaxed text-center mb-4" data-i18n="auth.open_lan_desc">
+            L'authentification par clé API n'est pas activée. L'interface Web et les API REST sont actuellement accessibles sans mot de passe sur le réseau local conformément à la configuration.
+        </p>
+        <div class="p-3 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 mb-4 font-mono leading-relaxed">
+            <span class="text-amber-400 font-bold">ℹ️ Info :</span> <span data-i18n="auth.open_lan_hint">Pour sécuriser l'accès, définissez le paramètre api_token dans le fichier de configuration greenup.toml sur la machine hôte puis redémarrez le service greenup-link.</span>
+        </div>
+        <button id="btnOpenLanClose" class="w-full py-2.5 px-4 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all text-center" data-i18n="auth.open_lan_btn_close">
+            J'ai compris
+        </button>
     </div>
 </div>
 

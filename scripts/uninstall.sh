@@ -108,7 +108,7 @@ if [ "$IS_LEGRAND_STACK" = true ]; then
         echo "  -> Notice: $INIT_SCRIPT.old backup not found; leaving existing $INIT_SCRIPT."
     fi
 
-    # Restore emergency DeletAll.sh script
+    # Restore emergency DeletAll.sh script on factory Legrand desktop
     DELETE_SCRIPT="/home/pi/Desktop/DeletAll.sh"
     if [ -f "$DELETE_SCRIPT.old" ]; then
         mv -f "$DELETE_SCRIPT.old" "$DELETE_SCRIPT"

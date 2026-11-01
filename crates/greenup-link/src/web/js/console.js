@@ -11,6 +11,10 @@ let currentSearchTerm = '';
 let commandHistory = [];
 let commandHistoryIndex = -1;
 let logEventSource = null;
+let isStartingLogStream = false;
+let isSendingCommand = false;
+let consoleDomListenersAttached = false;
+const seenLogIds = new Set();
 
 const LOG_LEVEL_SEVERITY = {
     'TRACE': 1,
@@ -21,7 +25,7 @@ const LOG_LEVEL_SEVERITY = {
 };
 
 async function syncLogLevelFromServer() {
-    if (window.isAuthRequired && !window.isAuthenticated) return;
+    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
     try {
         const res = await apiFetch('/api/logs/level');
         if (res.ok) {
@@ -67,26 +71,42 @@ function setDebugMode(enabled) {
 }
 
 function startLogStream() {
-    if (logEventSource) return;
-    if (window.isAuthRequired && !window.isAuthenticated) return;
+    if (logEventSource || isStartingLogStream) return;
+    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
 
+    isStartingLogStream = true;
     apiFetch('/api/logs')
         .then(res => res.ok ? res.json() : [])
         .then(logs => {
             if (Array.isArray(logs)) {
                 logEntries = logs;
+                seenLogIds.clear();
+                for (const l of logs) {
+                    if (l.id) seenLogIds.add(l.id);
+                }
                 renderLogs();
             }
-            connectSse();
+            if (isStartingLogStream) {
+                connectSse();
+            }
         })
         .catch(err => {
             console.warn('Could not fetch /api/logs:', err);
-            connectSse();
+            if (typeof handleServerOffline === 'function') {
+                handleServerOffline();
+            }
+        })
+        .finally(() => {
+            isStartingLogStream = false;
         });
 }
 
 function connectSse() {
-    if (window.isAuthRequired && !window.isAuthenticated) return;
+    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    if (logEventSource) {
+        logEventSource.close();
+        logEventSource = null;
+    }
     try {
         logEventSource = new EventSource(buildAuthUrl('/api/logs/stream'));
         logEventSource.onmessage = function(event) {
@@ -99,7 +119,11 @@ function connectSse() {
             }
         };
         logEventSource.onerror = function() {
-            // EventSource automatically retries
+            // Server disconnected or error: close stream to prevent blind browser C++ retries
+            stopLogStream();
+            if (typeof handleServerOffline === 'function') {
+                handleServerOffline();
+            }
         };
     } catch (e) {
         console.warn('SSE not supported or connection error:', e);
@@ -107,6 +131,7 @@ function connectSse() {
 }
 
 function stopLogStream() {
+    isStartingLogStream = false;
     if (logEventSource) {
         logEventSource.close();
         logEventSource = null;
@@ -114,6 +139,20 @@ function stopLogStream() {
 }
 
 function addLogEntry(entry) {
+    if (entry && entry.id) {
+        if (seenLogIds.has(entry.id)) {
+            return;
+        }
+        seenLogIds.add(entry.id);
+        if (seenLogIds.size > 1000) {
+            const iter = seenLogIds.values();
+            for (let i = 0; i < 200; i++) {
+                const v = iter.next().value;
+                if (v !== undefined) seenLogIds.delete(v);
+            }
+        }
+    }
+
     logEntries.push(entry);
     if (logEntries.length > maxLogEntries) {
         logEntries.shift();
@@ -251,6 +290,9 @@ function updateLogCount() {
 }
 
 function setupConsoleDomListeners() {
+    if (consoleDomListenersAttached) return;
+    consoleDomListenersAttached = true;
+
     // Toggle debug header switch
     const toggleDebug = document.getElementById('toggleDebug');
     if (toggleDebug) {
@@ -325,6 +367,7 @@ function setupConsoleDomListeners() {
     if (btnClear) {
         btnClear.addEventListener('click', () => {
             logEntries = [];
+            seenLogIds.clear();
             renderLogs();
         });
     }
@@ -354,6 +397,7 @@ function setupConsoleDomListeners() {
     const inputPrompt = document.getElementById('consoleCommandInput');
     if (btnSend && inputPrompt) {
         const sendCmd = () => {
+            if (isSendingCommand) return;
             const raw = inputPrompt.value.trim();
             if (!raw) return;
             const feedback = document.getElementById('consoleCommandFeedback');
@@ -372,6 +416,7 @@ function setupConsoleDomListeners() {
         btnSend.addEventListener('click', sendCmd);
         inputPrompt.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
+                if (e.repeat) return;
                 e.preventDefault();
                 sendCmd();
             } else if (e.key === 'ArrowUp') {
@@ -386,6 +431,12 @@ function setupConsoleDomListeners() {
 }
 
 function sendCommandRaw(cmd) {
+    if (isSendingCommand) return;
+    isSendingCommand = true;
+
+    const btnSend = document.getElementById('btnConsoleSend');
+    if (btnSend) btnSend.disabled = true;
+
     const feedback = document.getElementById('consoleCommandFeedback');
     if (feedback) {
         feedback.textContent = `${t('console.sending')}${cmd}...`;
@@ -422,6 +473,10 @@ function sendCommandRaw(cmd) {
             feedback.textContent = `Error: ${err.message}`;
             feedback.className = 'text-[10px] font-mono text-rose-400';
         }
+    })
+    .finally(() => {
+        isSendingCommand = false;
+        if (btnSend) btnSend.disabled = false;
     });
 }
 

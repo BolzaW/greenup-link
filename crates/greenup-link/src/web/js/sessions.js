@@ -97,7 +97,7 @@ function switchMainTab(tabName) {
 // ==============================================================================
 
 async function loadSessionsData(isDefaultSelectionRequested = false) {
-    if (window.isAuthRequired && !window.isAuthenticated) return;
+    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
 
     try {
         const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
@@ -126,6 +126,7 @@ function updateSessionsDropdown(isDefaultSelectionRequested) {
         opt.value = '';
         opt.disabled = true;
         opt.selected = true;
+        opt.setAttribute('data-i18n', 'sessions.no_sessions');
         opt.innerText = t('sessions.no_sessions') || 'Aucune session enregistrée';
         select.appendChild(opt);
         renderEmptySessionView();
@@ -196,7 +197,12 @@ function renderEmptySessionView() {
     setElemText('sessionValPhase', '--');
     setElemText('sessionValMaxPower', '--');
     setElemText('sessionValAvgPower', '--');
-    setElemText('sessionValReason', t('sessions.no_sessions') || 'Aucune session');
+    const reasonEl = document.getElementById('sessionValReason');
+    if (reasonEl) {
+        reasonEl.setAttribute('data-i18n', 'sessions.no_sessions');
+        reasonEl.innerText = t('sessions.no_sessions') || 'Aucune session enregistrée';
+        reasonEl.title = '';
+    }
     setElemText('sessionValEndTime', '--');
 
     drawChart([]);
@@ -220,13 +226,18 @@ function onSessionSelected(id) {
         setElemText('sessionValPhase', act.phase || 'Mono');
         setElemText('sessionValMaxPower', `${(act.max_power_w / 1000).toFixed(2)} kW`);
         setElemText('sessionValAvgPower', `Max: ${act.max_current_a.toFixed(1)} A`);
-        setElemText('sessionValReason', `${t('sessions.active_reason') || 'En cours'} (État ${act.state})`);
+        const reasonEl = document.getElementById('sessionValReason');
+        if (reasonEl) {
+            reasonEl.removeAttribute('data-i18n');
+            reasonEl.innerText = `${t('sessions.active_reason') || 'En cours'} (État ${act.state})`;
+            reasonEl.title = '';
+        }
         setElemText('sessionValEndTime', `Inst: ${(act.power_w / 1000).toFixed(2)} kW (${act.current_a.toFixed(1)} A)`);
 
         if (btnZip) btnZip.disabled = false;
         if (btnDel) {
             btnDel.disabled = true;
-            btnDel.title = "Cannot delete currently active charging session";
+            btnDel.title = t('sessions.delete_disabled_active') || "Impossible de supprimer la session en cours de charge";
         }
 
         // Fetch active CSV data for live chart
@@ -242,11 +253,13 @@ function onSessionSelected(id) {
         setElemText('sessionValPhase', s.phase || 'Mono');
         setElemText('sessionValMaxPower', `${(s.max_power_w / 1000).toFixed(2)} kW`);
         setElemText('sessionValAvgPower', `Moy: ${(s.avg_power_w / 1000).toFixed(2)} kW`);
-        setElemText('sessionValReason', s.termination_reason || '--');
-        setElemText('sessionValEndTime', s.end_time || '--');
-
         const reasonElem = document.getElementById('sessionValReason');
-        if (reasonElem) reasonElem.title = s.termination_reason || '';
+        if (reasonElem) {
+            reasonElem.removeAttribute('data-i18n');
+            reasonElem.innerText = s.termination_reason || '--';
+            reasonElem.title = s.termination_reason || '';
+        }
+        setElemText('sessionValEndTime', s.end_time || '--');
 
         if (btnZip) btnZip.disabled = !s.has_csv && !s.has_txt;
         if (btnDel) {
@@ -577,11 +590,12 @@ async function downloadSelectedSessionZip() {
     if (!actualId) return;
 
     const btnZip = document.getElementById('btnSessionDownloadZip');
-    const lblZip = document.getElementById('lblSessionDownloadZip');
-    const origText = lblZip ? lblZip.innerText : 'ZIP';
+    const iconZip = document.getElementById('iconSessionDownloadZip');
+    const iconSpinner = document.getElementById('iconSessionDownloadSpinner');
 
     try {
-        if (lblZip) lblZip.innerText = '...';
+        if (iconZip) iconZip.classList.add('hidden');
+        if (iconSpinner) iconSpinner.classList.remove('hidden');
         if (btnZip) btnZip.disabled = true;
 
         const res = await apiFetch(`/api/sessions/${encodeURIComponent(actualId)}/export`, {
@@ -614,7 +628,8 @@ async function downloadSelectedSessionZip() {
         console.error('Download error:', e);
         alert('Download error: ' + e);
     } finally {
-        if (lblZip) lblZip.innerText = origText;
+        if (iconSpinner) iconSpinner.classList.add('hidden');
+        if (iconZip) iconZip.classList.remove('hidden');
         if (btnZip) btnZip.disabled = false;
     }
 }
@@ -631,7 +646,10 @@ function resetDeleteButton() {
     const btnDel = document.getElementById('btnSessionDelete');
     const lblDel = document.getElementById('lblSessionDelete');
     if (btnDel) btnDel.classList.remove('confirming');
-    if (lblDel) lblDel.innerText = '';
+    if (lblDel) {
+        lblDel.innerText = '';
+        lblDel.classList.add('hidden');
+    }
 }
 
 async function handleDeleteSessionClick() {
@@ -643,7 +661,10 @@ async function handleDeleteSessionClick() {
     if (!btnDel.classList.contains('confirming')) {
         // First click: ask for confirmation
         btnDel.classList.add('confirming');
-        if (lblDel) lblDel.innerText = t('sessions.delete_confirm') || 'Confirmer ?';
+        if (lblDel) {
+            lblDel.innerText = (typeof t === 'function' ? t('sessions.delete_confirm') : 'Confirmer ?') || 'Confirmer ?';
+            lblDel.classList.remove('hidden');
+        }
 
         deleteConfirmTimer = setTimeout(() => {
             resetDeleteButton();
@@ -681,43 +702,51 @@ async function handleDeleteSessionClick() {
 // INITIALIZATION
 // ==============================================================================
 
+let sessionsDomListenersAttached = false;
+
 function initSessions() {
-    // Navigation Tabs Listeners
-    const tabBoard = document.getElementById('tabBoard');
-    const tabSessions = document.getElementById('tabSessions');
-    const tabConsole = document.getElementById('tabConsole');
-    const tabSystem = document.getElementById('tabSystem') || document.getElementById('tabConfig');
+    if (!sessionsDomListenersAttached) {
+        sessionsDomListenersAttached = true;
+        // Navigation Tabs Listeners
+        const tabBoard = document.getElementById('tabBoard');
+        const tabSessions = document.getElementById('tabSessions');
+        const tabConsole = document.getElementById('tabConsole');
+        const tabSystem = document.getElementById('tabSystem') || document.getElementById('tabConfig');
 
-    if (tabBoard) tabBoard.addEventListener('click', () => switchMainTab('board'));
-    if (tabSessions) tabSessions.addEventListener('click', () => switchMainTab('sessions'));
-    if (tabConsole) tabConsole.addEventListener('click', () => switchMainTab('console'));
-    if (tabSystem) tabSystem.addEventListener('click', () => switchMainTab('system'));
+        if (tabBoard) tabBoard.addEventListener('click', () => switchMainTab('board'));
+        if (tabSessions) tabSessions.addEventListener('click', () => switchMainTab('sessions'));
+        if (tabConsole) tabConsole.addEventListener('click', () => switchMainTab('console'));
+        if (tabSystem) tabSystem.addEventListener('click', () => switchMainTab('system'));
 
-    // Dropdown change listener
-    const select = document.getElementById('sessionSelect');
-    if (select) {
-        select.addEventListener('change', (e) => {
-            onSessionSelected(e.target.value);
+        // Dropdown change listener
+        const select = document.getElementById('sessionSelect');
+        if (select) {
+            select.addEventListener('change', (e) => {
+                onSessionSelected(e.target.value);
+            });
+        }
+
+        // Action buttons listeners
+        const btnZip = document.getElementById('btnSessionDownloadZip');
+        if (btnZip) btnZip.addEventListener('click', downloadSelectedSessionZip);
+
+        const btnDel = document.getElementById('btnSessionDelete');
+        if (btnDel) btnDel.addEventListener('click', handleDeleteSessionClick);
+
+        // Chart interactions & resize
+        setupChartInteractions();
+        window.addEventListener('resize', () => {
+            const sessionsPanel = document.getElementById('sessionsPanel');
+            if (sessionsPanel && !sessionsPanel.classList.contains('hidden')) {
+                resizeAndRedrawChart();
+            }
         });
     }
-
-    // Action buttons listeners
-    const btnZip = document.getElementById('btnSessionDownloadZip');
-    if (btnZip) btnZip.addEventListener('click', downloadSelectedSessionZip);
-
-    const btnDel = document.getElementById('btnSessionDelete');
-    if (btnDel) btnDel.addEventListener('click', handleDeleteSessionClick);
-
-    // Chart interactions & resize
-    setupChartInteractions();
-    window.addEventListener('resize', () => {
-        const sessionsPanel = document.getElementById('sessionsPanel');
-        if (sessionsPanel && !sessionsPanel.classList.contains('hidden')) {
-            resizeAndRedrawChart();
-        }
-    });
 
     // Check stored active tab
     const savedTab = localStorage.getItem('greenup_active_tab') || 'board';
     switchMainTab(savedTab);
 }
+
+// Expose updateSessionsDropdown to global scope so i18n can trigger re-renders on language changes
+window.updateSessionsDropdown = updateSessionsDropdown;

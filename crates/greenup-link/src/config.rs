@@ -40,8 +40,8 @@ dual_point = "auto"
 baud_rate = 115200
 
 # Silence timeout before alerting on loss of communication (seconds).
-# Default: 6
-watchdog_timeout_secs = 6
+# Default: 60
+watchdog_timeout_secs = 60
 "#;
 
 #[derive(Debug, Clone)]
@@ -99,7 +99,7 @@ impl Default for SerialConfig {
             port: None,
             port2: None,
             baud_rate: 115_200,
-            watchdog_timeout_secs: 6,
+            watchdog_timeout_secs: 60,
         }
     }
 }

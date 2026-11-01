@@ -326,6 +326,7 @@ impl Command {
     }
 
     /// Determines whether this command expects an acknowledgment from the power board.
+    /// Note: Raw commands are non-blocking debug tools and never expect an explicit acknowledgment.
     pub fn expects_response(&self) -> bool {
         self.expected_rx_prefix().is_some()
     }
@@ -337,6 +338,10 @@ impl Command {
     ///   charging station is in `State:A` with no vehicle connected, the ATmega returns `SBF:0`.
     pub fn matches_response(&self, rx_line: &str) -> bool {
         match self {
+            Command::Ping => {
+                let trimmed = rx_line.trim();
+                trimmed.starts_with("pong")
+            }
             Command::SetStartButton(true) => {
                 rx_line.starts_with("SB:") || rx_line.starts_with("SBF:")
             }
@@ -453,5 +458,27 @@ mod tests {
         assert!(sbnok.matches_response("SB:0"));
         assert!(sbnok.matches_response("SB:1"));
         assert!(!sbnok.matches_response("SBF:0"));
+    }
+
+    #[test]
+    fn ping_matches_pong_strictly() {
+        let cmd = Command::Ping;
+        assert!(cmd.matches_response("pong"));
+        assert!(cmd.matches_response("pong\r"));
+        assert!(!cmd.matches_response("ping"));
+        assert!(!cmd.matches_response("State:A"));
+    }
+
+    #[test]
+    fn raw_commands_are_non_blocking_for_debug() {
+        let raw_query = Command::Raw("CC?".into());
+        assert!(!raw_query.expects_response());
+        assert!(!raw_query.matches_response("CC:23"));
+
+        let raw_ping = Command::Raw("ping".into());
+        assert!(!raw_ping.expects_response());
+
+        let raw_debug = Command::Raw("CUSTOM_DEBUG_FRAME".into());
+        assert!(!raw_debug.expects_response());
     }
 }

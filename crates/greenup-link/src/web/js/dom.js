@@ -17,7 +17,9 @@ const controlsPanel = document.getElementById('controlsPanel');
 // Visualizer Elements
 const chargerBox = document.getElementById('chargerBox');
 const chargerIcon = document.getElementById('chargerIcon');
-const chargerLed = document.getElementById('chargerLed');
+const chargerLed1 = document.getElementById('chargerLed1');
+const chargerLed2 = document.getElementById('chargerLed2');
+const chargerLed3 = document.getElementById('chargerLed3');
 const carIcon = document.getElementById('carIcon');
 const carBox = document.getElementById('carBox');
 const cableLabel = document.getElementById('cableLabel');
@@ -25,7 +27,7 @@ const cableLabel = document.getElementById('cableLabel');
 // Linky
 const linkyBox = document.getElementById('linkyBox');
 const linkyContainer = document.getElementById('linkyContainer');
-const linkyLed = document.getElementById('linkyLed');
+
 const linkyLabel = document.getElementById('linkyLabel');
 const linkyIcon = document.getElementById('linkyIcon');
 const animWireLinky = document.getElementById('animWireLinky');
