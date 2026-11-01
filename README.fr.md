@@ -36,9 +36,11 @@ Il communique avec la carte de puissance de la borne via un câble USB interne e
 
 ## 🤔 Pourquoi ce projet ?
 
-Le logiciel officiel fourni avec le kit est lourd, peu ergonomique et difficile à interfacer avec un système domotique tiers.
+Les bornes de recharge Legrand Green'Up Premium bénéficient d'une conception matérielle remarquable : la qualité de fabrication industrielle, la robustesse des composants, la fiabilité de l'électronique de puissance et le niveau de sécurité matérielle sont exemplaires. C'est un excellent hardware que j'apprécie tout particulièrement au quotidien.
 
-De plus, la pile logicielle d'origine Legrand (exécutant des versions obsolètes d'Apache Tomcat 9, un runtime Java ancien et des composants non maintenus sur Raspbian 9 "Stretch") comporte de **multiples vulnérabilités et CVE critiques**. Exposer le logiciel d'origine directement à Internet (ou même sur un réseau local non cloisonné) est extrêmement dangereux. Green'Up Link remplace complètement cette pile vulnérable par un unique binaire Rust autonome, sécurisé, sans runtime lourd, vous redonnant la pleine maîtrise de votre matériel.
+En revanche, le contraste avec la partie logicielle d'origine est criant. Le logiciel constructeur fourni avec le kit de communication ("KitCom") date d'une autre époque : il s'avère lourd, peu réactif et difficile à interfacer avec des solutions domotiques modernes. De plus, il repose sur un environnement vieillissant (Raspbian 9 "Stretch", Apache Tomcat 9 et un runtime Java non maintenus accumulant de nombreuses vulnérabilités connues).
+
+Green'Up Link est né de l'envie d'offrir à ce matériel de premier choix la couche logicielle moderne, légère, sécurisée et ouverte qu'il mérite : un unique binaire écrit en Rust, ultra-performant, sans runtime lourd, vous redonnant la pleine maîtrise locale de votre borne.
 
 ## ⚠️ Limitations actuelles
 
@@ -105,9 +107,6 @@ Suivez la **[documentation officielle Legrand](https://www.legrand.fr/pro/catalo
 
 ### 2. Accès SSH (Modification de la carte SD)
 
-> [!NOTE]
-> **Travaux en cours :** Des outils et procédures automatisées sont actuellement à l'étude pour permettre l'activation du SSH directement à distance via le réseau, sans nécessiter de démontage physique de la borne ni d'extraction de la carte SD.
-
 L'accès SSH étant désactivé par défaut sur l'image d'origine :
 
 1. Coupez le disjoncteur et retirez la carte microSD du Raspberry Pi.
@@ -131,6 +130,9 @@ L'accès SSH étant désactivé par défaut sur l'image d'origine :
 3. Désactivez l'authentification par mot de passe dans `/etc/ssh/sshd_config` (`PasswordAuthentication no`, `PermitRootLogin no`), puis rechargez le démon SSH : `sudo systemctl reload ssh`.
 
 ### 4. Installation de Green'Up Link
+
+> [!IMPORTANT]
+> **Bonne pratique de sécurité :** Exécuter un script avec des privilèges administrateur (`sudo`) ne doit jamais se faire à l'aveugle. Nous vous encourageons vivement à inspecter le code de [`scripts/install.sh`](scripts/install.sh) avant de l'exécuter, afin de vérifier en toute transparence les actions qu'il effectue sur votre système.
 
 #### Releases GitHub & Architectures supportées
 Des paquets pré-compilés et binaires autonomes sont disponibles sur la [page des Releases GitHub](https://github.com/BolzaW/greenup-link/releases) :
@@ -257,7 +259,9 @@ Consultez le [Guide du kit de communication alternatif DIY](docs/KIT_COMMUNICATI
 <details>
 <summary><strong>3. Y a-t-il un risque pour la sécurité électrique de ma borne ou de mon véhicule ?</strong></summary>
 
-**Non sur la partie puissance.** Green'Up Link ne remplace que la couche logicielle de communication sur le Raspberry Pi. La borne conserve l'intégralité de ses sécurités électriques matérielles, ses relais de puissance différentiels, sa surveillance de terre et son fonctionnement autonome grâce à sa carte de puissance ATmega2560 native. Green'Up Link ne fait qu'envoyer des consignes d'intensité (7A à 32A) et lire la télémétrie en liaison série USB.
+**Le développement a été pensé et conçu pour limiter au maximum les risques**, mais le **risque zéro n'existe pas** et le projet reste en constante évolution :
+- **Architecture de protection matérielle :** Green'Up Link ne remplace que la couche de communication exécutée sur le Raspberry Pi. La borne conserve l'intégralité de ses sécurités électriques matérielles d'origine, ses relais et contacteurs de puissance, sa surveillance de terre et son automate de sécurité autonome sur la carte interne ATmega2560. Green'Up Link ne fait que relayer des consignes d'intensité (7A à 32A) et lire la télémétrie sur la liaison série USB.
+- **Responsabilité de l'utilisateur :** Tout n'est pas encore documenté ni entièrement connu sur les subtilités du firmware de la borne ou certains cas limites électriques. L'installation et l'usage de Green'Up Link relèvent donc de votre propre responsabilité (cf. avertissement en tête de documentation).
 </details>
 
 <details>
@@ -290,7 +294,7 @@ En revanche, c'est le **pilotage à distance via l'interface Web et l'API** (lec
 <details>
 <summary><strong>7. Pourquoi remplacer le logiciel officiel Legrand ?</strong></summary>
 
-La pile logicielle constructeur sous Debian 9 Stretch comporte des composants obsolètes (Apache Tomcat 9, ancien runtime Java) présentant de multiples CVE critiques connues. Elle est également lente et fermée aux systèmes domotiques modernes. Green'Up Link propose une alternative légère, moderne, ultra-réactive et sécurisée écrite en Rust sans dépendance externe.
+Le matériel de la borne Green'Up Premium est d'excellente facture, mais sa suite logicielle d'origine accuse le poids des années : basée sur Debian 9 Stretch, Apache Tomcat 9 et un runtime Java ancien, elle manque d'ergonomie, n'est plus maintenue et reste fermée aux outils domotiques récents. Green'Up Link propose une alternative moderne, légère, ultra-réactive et sécurisée écrite en Rust sans dépendance externe pour tirer le plein potentiel de votre borne.
 </details>
 
 ---

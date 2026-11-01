@@ -36,9 +36,11 @@ It communicates with the charging station's power board via an internal USB cabl
 
 ## 🤔 Why this project?
 
-The software provided with the official Communication Kit is bloated, buggy, unresponsive, and very difficult to integrate with modern home automation systems.
+Legrand Green'Up Premium charging stations feature outstanding hardware engineering: the industrial build quality, electrical safety protections, power electronics reliability, and mechanical design are truly top-notch. It is a fantastic piece of hardware that I enjoy using daily.
 
-Moreover, the official Legrand software stack (running outdated versions of Apache Tomcat 9, an unmaintained Java runtime, and obsolete system components on Raspbian 9 "Stretch") contains **multiple known CVEs and critical vulnerabilities**. Exposing this official stack directly to the internet (or even on an untrusted local network) poses severe security risks. Green'Up Link eliminates this legacy stack entirely in favor of a minimal, memory-safe Rust binary with no external runtime dependencies, giving you back full control over your charging station.
+However, there is a striking contrast with the factory software. The official software stack bundled with the communication kit ("KitCom") comes from an earlier era: it feels heavy, sluggish, and difficult to interface with modern home automation systems. Furthermore, it relies on an aging software environment (Raspbian 9 "Stretch", Apache Tomcat 9, and an unmaintained Java runtime accumulating numerous known vulnerabilities).
+
+Green'Up Link was created to give this great hardware the modern, lightweight, secure, and open software companion it deserves: a single Rust binary that is lightning-fast, resource-efficient, and grants full local ownership over your station.
 
 ## ⚠️ Current Limitations
 
@@ -105,9 +107,6 @@ Follow the **[official Legrand documentation](https://www.legrand.fr/pro/catalog
    
 ### 2. Get SSH access (SD card modification)
 
-> [!NOTE]
-> **Work in progress:** Tools and automated procedures are currently being developed to enable SSH access directly over the network without requiring physical disassembly or SD card removal.
-
 The embedded Raspberry Pi 3 uses a standard installation, but SSH is closed and the default password was changed by Legrand:
 
 1. Turn off power and retrieve the microSD card from the Raspberry Pi.
@@ -134,6 +133,9 @@ The embedded Raspberry Pi 3 uses a standard installation, but SSH is closed and 
 3. Disable password authentication in `/etc/ssh/sshd_config` (`PasswordAuthentication no`, `PermitRootLogin no`), then reload ssh: `sudo systemctl reload ssh`.
 
 ### 4. Installation of Green'Up Link
+
+> [!IMPORTANT]
+> **Security best practice:** Running any script with elevated root privileges (`sudo`) should never be done blindly. We strongly encourage you to inspect the contents of [`scripts/install.sh`](scripts/install.sh) before executing it, so you can review the exact operations performed on your system.
 
 #### GitHub Releases & Supported Architectures
 Pre-compiled packages and standalone binaries are available on the [GitHub Releases page](https://github.com/BolzaW/greenup-link/releases):
@@ -260,7 +262,9 @@ See our step-by-step [DIY Communication Kit Guide](docs/KIT_COMMUNICATION_DIY.md
 <details>
 <summary><strong>3. Is there any risk to the electrical safety of my station or vehicle?</strong></summary>
 
-**No on the high-voltage/power side.** Green'Up Link only replaces the communication layer running on the Raspberry Pi. The station retains 100% of its native electrical safety features, physical protections, differential tripping, and autonomous control through its internal ATmega2560 microcontroller. Green'Up Link only transmits logical setpoint instructions (7A–32A) and reads telemetry over USB serial.
+**The software was designed and engineered to minimize risks as much as possible**, but **zero risk does not exist** and the project remains actively evolving:
+- **Hardware protective architecture:** Green'Up Link only replaces the communication layer running on the Raspberry Pi. The station retains 100% of its native electrical safety features, physical contactors, differential trip protections, ground monitoring, and autonomous state machine through its internal ATmega2560 microcontroller. Green'Up Link only transmits logical current setpoints (7A–32A) and reads telemetry frames over the internal USB serial link.
+- **User responsibility:** Not every subtle edge case or undocumented behavior of the proprietary firmware is known or mapped. Installing and operating Green'Up Link is done under your own discretion and responsibility (see the electrical safety disclaimer at the top of this documentation).
 </details>
 
 <details>
@@ -293,7 +297,7 @@ However, **remote control via the Web UI and API** (three-phase telemetry monito
 <details>
 <summary><strong>7. Why replace the official Legrand software?</strong></summary>
 
-The factory software running on Debian 9 Stretch contains obsolete packages (Apache Tomcat 9, legacy Java runtime) with multiple known critical CVEs. It is also slow, unmaintained, and closed to modern home automation. Green'Up Link provides a lightweight, secure, and modern alternative written in Rust with zero external dependencies.
+While the Green'Up Premium hardware is exceptionally well-engineered, its factory software stack shows its age: built on Debian 9 Stretch, Apache Tomcat 9, and legacy Java, it lacks responsiveness, is no longer maintained, and remains closed to modern home automation ecosystems. Green'Up Link provides a lightweight, secure, and ultra-responsive alternative written in Rust with zero external dependencies to unlock the full potential of your charging station.
 </details>
 
 ---
