@@ -22,6 +22,7 @@
 Il communique avec la carte de puissance de la borne via un câble USB interne et expose :
 - Une **interface Web locale** épurée et réactive avec visualiseur animé, contrôle de charge (7A à 32A), statut Linky TIC et console live intégrée (flux de logs temps réel SSE).
 - Une **API REST** complète et documentée, idéale pour l'intégration domotique (Home Assistant, Jeedom, Node-RED, etc.).
+- Un **historique des sessions de charge** avec enregistrement automatique haute fidélité (échantillonnage adaptatif au format CSV et résumé TXT), visualiseur graphique de courbe de puissance et export direct en un clic (CSV, TXT, ZIP) depuis l'interface Web ou l'API REST.
 - Une **gestion complète des logs** avec fichiers journaliers tournants (`greenup_YYYY-MM-DD.log`), rétention automatique de 7 jours et modification à chaud des niveaux (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
 - Le **support expérimental des bornes à double point de charge** avec auto-détection dynamique du second port USB et contrôle indépendant des deux côtés (*théorique, non testé sur matériel réel* — voir la [Matrice de compatibilité matériel](docs/COMPATIBLE_HARDWARE.md)).
 - Une compatibilité totale avec **EVCC** pour la charge solaire dynamique monosite ou multisite (voir le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md)).
@@ -303,10 +304,9 @@ Le matériel de la borne Green'Up Premium est d'excellente facture, mais sa suit
 
 Les fonctionnalités envisagées (sans calendrier contractuel) :
 - **Intégration MQTT native** avec **Home Assistant Auto-Discovery** (création automatique des entités : capteurs de télémétrie, interrupteurs et curseur de consigne de charge).
-- **Historique des sessions de charge** : Sauvegarde des sessions au format CSV, avec visualisation de l'historique et export CSV directement depuis l'interface Web.
 - Firmware custom ATmega avec télémétrie et capacités étendues.
 - Prise en charge du protocole OCPP.
-- Extension aux autres variantes de la gamme (prise domestique Schuko, bornes triphasées, bornes à double point de charge).
+- Extension aux autres variantes de la gamme (prise domestique Schuko, bornes triphasées).
 
 ---
 

@@ -22,6 +22,7 @@
 It communicates with the charging station's power board via an internal USB cable and exposes:
 - A clean, responsive **local Web GUI** with live visualizer, charging controls (7A–32A), Linky TIC status, and an integrated real-time debug console (SSE log streaming).
 - A comprehensive and documented **REST API**, perfect for home automation integration (Home Assistant, Jeedom, Node-RED, etc.).
+- Complete **charging session history & visualization**: automatic high-fidelity recording (adaptive sampling saved as CSV and TXT summary), power curve chart visualizer, and single-click export (CSV, TXT, ZIP) directly from the Web GUI or REST API.
 - Complete **log management** with daily rolling files (`greenup_YYYY-MM-DD.log`), 7-day automatic retention, and hot-reloadable log levels (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
 - **Experimental dual charge point support** with automatic USB discovery, dynamic serial workers, and independent loadpoint controls (*theoretical, untested on real hardware* — see [Hardware Compatibility Matrix](docs/COMPATIBLE_HARDWARE.md)).
 - Full compatibility with **EVCC** for single or multi-loadpoint solar smart charging (see the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md)).
@@ -306,10 +307,9 @@ While the Green'Up Premium hardware is exceptionally well-engineered, its factor
 
 The roadmap includes (with no guaranteed timeline):
 - **Native MQTT integration** with **Home Assistant Auto-Discovery** (automatic entity creation for sensors, switches, and charging current control).
-- **Charging session history**: Recording charging sessions in CSV format, with session visualization and CSV export directly from the Web GUI.
 - Custom ATmega firmware with enhanced telemetry and features.
 - Support for the OCPP communication protocol.
-- Extending compatibility to other station models in the range (domestic Schuko socket, three-phase equipment, dual charge points).
+- Extending compatibility to other station models in the range (domestic Schuko socket, three-phase equipment).
 
 ---
 
