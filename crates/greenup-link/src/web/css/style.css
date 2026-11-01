@@ -654,3 +654,94 @@
 .pulse-led-green {
     animation: pulseLedGreen 2.5s ease-in-out infinite;
 }
+
+
+/* --- Config Panel Styles --- */
+.config-panel {
+    display: flex;
+    flex-direction: column;
+    height: 550px;
+    max-height: 550px;
+    background-color: #0b1120;
+    border: 1px solid #1e293b;
+    border-radius: 1rem;
+    padding: 1.25rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+    position: relative;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+.config-btn {
+    width: 100%;
+    padding: 0.55rem 0.85rem;
+    border-radius: 0.5rem;
+    border: 1px solid #334155;
+    background-color: #1e293b;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.config-btn:hover {
+    color: #ffffff;
+    border-color: #475569;
+    background-color: #273549;
+}
+
+/* --- System Panel Action Buttons --- */
+.btn-system-action {
+    padding: 0.55rem 0.85rem;
+    border-radius: 0.5rem;
+    border: 1px solid #334155;
+    background-color: #1e293b;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-system-action:hover:not(:disabled) {
+    color: #ffffff;
+    border-color: #475569;
+    background-color: #273549;
+}
+
+.btn-system-action:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+.btn-system-action:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.btn-system-action-danger {
+    border-color: rgba(244, 63, 94, 0.3);
+    color: #fda4af;
+}
+
+.btn-system-action-danger:hover:not(:disabled) {
+    color: #ffffff;
+    background-color: rgba(225, 29, 72, 0.2);
+    border-color: rgba(244, 63, 94, 0.6);
+}
+
+.config-input {
+    background-color: #0b1120;
+    border: 1px solid #334155;
+    border-radius: 0.5rem;
+    padding: 0.55rem 0.85rem;
+    color: #f1f5f9;
+    font-size: 0.75rem;
+    outline: none;
+    transition: all 0.15s ease;
+}
+
+.config-input:focus {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 1px #38bdf8;
+}

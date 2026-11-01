@@ -171,6 +171,9 @@ function onAuthenticatedStart() {
     if (typeof initSessions === 'function') {
         initSessions();
     }
+    if (typeof initConfig === 'function') {
+        initConfig();
+    }
 }
 
 async function fetchInfo() {
@@ -196,7 +199,11 @@ async function fetchInfo() {
         subInfo.innerText = line2.length > 0 ? line2.join(' | ') : '';
 
         if (info.link_version) {
-            document.getElementById('lblLinkVersion').innerText = `v${info.link_version}`;
+            window.linkVersion = info.link_version;
+            const lbl = document.getElementById('lblLinkVersion');
+            if (lbl) lbl.innerText = `v${info.link_version}`;
+            const cfgVer = document.getElementById('cfgAppVersion');
+            if (cfgVer) cfgVer.innerText = `v${info.link_version}`;
         }
 
     } catch (err) {
@@ -210,12 +217,36 @@ function updateUsbStatus(serial) {
     const status = serial.status;
     window.isUsbConnected = (status === 'usb_connected');
 
+    const usbLed = document.getElementById('usbLed');
+    const usbStatusBadge = document.getElementById('usbStatusBadge');
+    const usbAlertBanner = document.getElementById('usbAlertBanner');
+    const usbAlertIcon = document.getElementById('usbAlertIcon');
+    const usbAlertText = document.getElementById('usbAlertText');
+    const controlsPanel = document.getElementById('controlsPanel');
+
+    // Pastille d'alerte sur l'onglet Système
+    const tabSystemBadge = document.getElementById('tabSystemBadge');
+    const tabSystemBadgePing = document.getElementById('tabSystemBadgePing');
+    const tabSystemBadgeDot = document.getElementById('tabSystemBadgeDot');
+
+    // Détails USB et ports dans le panneau Système
+    const sysUsbDetails = document.getElementById('sysUsbDetails');
+    const cfgSerialPort = document.getElementById('cfgSerialPort');
+    const cfgBaudRate = document.getElementById('cfgBaudRate');
+
+    if (cfgSerialPort && serial.port) {
+        cfgSerialPort.innerText = serial.port;
+    }
+    if (cfgBaudRate && serial.baud_rate) {
+        cfgBaudRate.innerText = `${serial.baud_rate} bauds`;
+    }
+
     if (!usbLed || !usbStatusBadge || !usbAlertBanner) return;
 
     // Base styling
     usbLed.className = 'w-2.5 h-2.5 rounded-full inline-block flex-shrink-0';
-    usbStatusBadge.className = 'font-bold text-[10px] md:text-[11px] flex-shrink-0';
-    usbAlertBanner.className = 'max-w-6xl mx-auto w-full mb-6 p-3 px-4 rounded-xl border flex items-center space-x-3 transition-all duration-300';
+    usbStatusBadge.className = 'font-bold text-xs flex-shrink-0';
+    usbAlertBanner.className = 'w-full mb-3 p-3 px-4 rounded-xl border flex items-center space-x-3 transition-all duration-300';
 
     if (status === 'usb_connected') {
         usbLed.classList.add('bg-emerald-500', 'shadow-[0_0_8px_rgba(16,185,129,0.8)]');
@@ -225,6 +256,15 @@ function updateUsbStatus(serial) {
         if (controlsPanel && !isActionPending) {
             controlsPanel.classList.remove('opacity-40', 'pointer-events-none');
             controlsPanel.removeAttribute('title');
+        }
+
+        // Hide alert badge on System tab
+        if (tabSystemBadge) tabSystemBadge.classList.add('hidden');
+
+        if (sysUsbDetails) {
+            const rxInfo = serial.last_rx_secs_ago != null ? ` (dernier échange : ${serial.last_rx_secs_ago}s)` : '';
+            sysUsbDetails.innerText = (serial.message || 'Liaison USB active avec la carte ATmega') + rxInfo;
+            sysUsbDetails.className = 'text-[11px] font-mono text-emerald-400/80 pl-1 truncate';
         }
     } else if (status === 'usb_connecting') {
         usbLed.classList.add('bg-amber-400', 'animate-pulse');
@@ -238,6 +278,16 @@ function updateUsbStatus(serial) {
             controlsPanel.classList.add('opacity-40', 'pointer-events-none');
             controlsPanel.title = t('usb.controls_disabled');
         }
+
+        // Show amber alert pastille on System tab
+        if (tabSystemBadge) tabSystemBadge.classList.remove('hidden');
+        if (tabSystemBadgePing) tabSystemBadgePing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75';
+        if (tabSystemBadgeDot) tabSystemBadgeDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500 border border-slate-900';
+
+        if (sysUsbDetails) {
+            sysUsbDetails.innerText = serial.message || t('usb.alert_connecting');
+            sysUsbDetails.className = 'text-[11px] font-mono text-amber-400/80 pl-1 truncate';
+        }
     } else if (status === 'usb_no_response') {
         usbLed.classList.add('bg-amber-500', 'animate-pulse');
         usbStatusBadge.classList.add('text-amber-400');
@@ -249,6 +299,16 @@ function updateUsbStatus(serial) {
         if (controlsPanel && !isActionPending) {
             controlsPanel.classList.add('opacity-40', 'pointer-events-none');
             controlsPanel.title = t('usb.controls_disabled');
+        }
+
+        // Show amber alert pastille on System tab
+        if (tabSystemBadge) tabSystemBadge.classList.remove('hidden');
+        if (tabSystemBadgePing) tabSystemBadgePing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75';
+        if (tabSystemBadgeDot) tabSystemBadgeDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500 border border-slate-900';
+
+        if (sysUsbDetails) {
+            sysUsbDetails.innerText = serial.message || t('usb.alert_no_response');
+            sysUsbDetails.className = 'text-[11px] font-mono text-amber-400/80 pl-1 truncate';
         }
     } else {
         // usb_disconnected
@@ -262,6 +322,16 @@ function updateUsbStatus(serial) {
         if (controlsPanel && !isActionPending) {
             controlsPanel.classList.add('opacity-40', 'pointer-events-none');
             controlsPanel.title = t('usb.controls_disabled');
+        }
+
+        // Show red alert pastille on System tab
+        if (tabSystemBadge) tabSystemBadge.classList.remove('hidden');
+        if (tabSystemBadgePing) tabSystemBadgePing.className = 'animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75';
+        if (tabSystemBadgeDot) tabSystemBadgeDot.className = 'relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 border border-slate-900';
+
+        if (sysUsbDetails) {
+            sysUsbDetails.innerText = serial.message || t('usb.alert_disconnected');
+            sysUsbDetails.className = 'text-[11px] font-mono text-rose-400/80 pl-1 truncate';
         }
     }
 }
@@ -318,7 +388,15 @@ async function fetchTelemetry() {
 }
 
 async function toggleBluetooth() {
+    const btToggle = document.getElementById('btToggle');
+    const btFeedback = document.getElementById('btToggleFeedback');
+    if (!btToggle) return;
     const desiredState = btToggle.checked;
+    btToggle.disabled = true;
+    if (btFeedback) {
+        btFeedback.innerText = (typeof t === 'function' ? t('system.ble_pending') : 'Commutation en cours...') || 'Commutation en cours...';
+        btFeedback.className = 'text-[10px] font-medium text-sky-400 min-h-[14px] mt-2 animate-pulse';
+    }
     try {
         const response = await apiFetch('/api/bluetooth', {
             method: 'POST',
@@ -328,13 +406,21 @@ async function toggleBluetooth() {
 
         if (!response.ok) {
             const data = await response.json();
-            alert(t('alert.error') + data.error);
+            alert(t('alert.error') + (data.error || 'Erreur'));
             btToggle.checked = !desiredState;
         }
         setTimeout(fetchInfo, 1000);
     } catch (error) {
         console.error(error);
         btToggle.checked = !desiredState;
+    } finally {
+        btToggle.disabled = false;
+        if (btFeedback) {
+            setTimeout(() => {
+                btFeedback.innerText = '';
+                btFeedback.className = 'text-[10px] font-medium text-sky-400 min-h-[14px] mt-2';
+            }, 2000);
+        }
     }
 }
 
