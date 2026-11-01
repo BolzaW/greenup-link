@@ -41,7 +41,7 @@ function Set-ProjectVersion([string]$NewVersion) {
         $lockContent = [System.IO.File]::ReadAllText($cargoLockPath)
         $lockContent = [regex]::Replace(
             $lockContent,
-            '(?m)(name\s*=\s*"greenup-(?:driver|everest|link|protocol)"\r?\nversion\s*=\s*)"[^"]+"',
+            '(?m)(name\s*=\s*"greenup-(?:driver|everest|link|protocol|simulator)"\r?\nversion\s*=\s*)"[^"]+"',
             "`${1}`"$NewVersion`""
         )
         [System.IO.File]::WriteAllText($cargoLockPath, $lockContent, $utf8NoBom)
