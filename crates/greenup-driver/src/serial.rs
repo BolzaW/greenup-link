@@ -36,14 +36,11 @@ const TICTM_MAX_ZEROS: u32 = 5;
 
 pub async fn trigger_init_sequence(state: &SharedState) {
     let _ = state.serial_tx.send(Command::RaspberryPiModeOk).await;
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
     for cmd in Command::startup_queries() {
         let _ = state.serial_tx.send(cmd).await;
-        tokio::time::sleep(Duration::from_millis(30)).await;
     }
 
-    tokio::time::sleep(Duration::from_millis(50)).await;
     let _ = start_tic_detection(state).await;
 }
 
@@ -224,14 +221,12 @@ pub fn send_init_sequence_sync(
     is_running: &AtomicBool,
 ) {
     send_command_sync(port, state, internal_rx, is_running, Command::RaspberryPiModeOk);
-    std::thread::sleep(Duration::from_millis(50));
 
     for cmd in Command::startup_queries() {
         if !is_running.load(Ordering::Relaxed) {
             break;
         }
         send_command_sync(port, state, internal_rx, is_running, cmd);
-        std::thread::sleep(Duration::from_millis(30));
     }
 
     if is_running.load(Ordering::Relaxed) {
@@ -373,8 +368,8 @@ pub fn run_serial_loop_with_options(
                                     tel.serial.last_rx_secs_ago = Some(0);
                                 }
 
-                                let _ = internal_tx.send(clean_line.to_string());
                                 parse_incoming_line(clean_line, &state_rx);
+                                let _ = internal_tx.send(clean_line.to_string());
                             }
                             byte_buf.clear();
                         } else if byte_buf.len() >= MAX_SERIAL_LINE_LEN {

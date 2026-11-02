@@ -303,7 +303,7 @@ impl Command {
             Command::ForceDomestic(false) => Some("2PF:0"),
             Command::SetSleep(_) => Some("Slp:"),
             Command::SetStartButton(_) => Some("SB:"),
-            Command::Unlock => None, // To verify
+            Command::Unlock => Some("Unlock"),
 
             Command::GetOcppParameters => Some("OCPPPS:"),
             Command::SetPlugAndCharge(_) => Some("OCPPPAC:"),
@@ -344,6 +344,9 @@ impl Command {
             }
             Command::SetStartButton(true) => {
                 rx_line.starts_with("SB:") || rx_line.starts_with("SBF:")
+            }
+            Command::RaspberryPiModeOk => {
+                rx_line.starts_with("DIP1:") || rx_line.starts_with("Side:")
             }
             _ => {
                 if let Some(prefix) = self.expected_rx_prefix() {
@@ -480,5 +483,134 @@ mod tests {
 
         let raw_debug = Command::Raw("CUSTOM_DEBUG_FRAME".into());
         assert!(!raw_debug.expects_response());
+    }
+
+    #[test]
+    fn raspberry_pi_mode_ok_matches_dip1_and_side_strictly_not_rpimode() {
+        let cmd = Command::RaspberryPiModeOk;
+        assert!(cmd.expects_response());
+        assert!(cmd.matches_response("DIP1:1"));
+        assert!(cmd.matches_response("DIP1:0"));
+        assert!(cmd.matches_response("Side:1"));
+        assert!(cmd.matches_response("Side:49"));
+        assert!(!cmd.matches_response("RPIMODE"));
+        assert!(!cmd.matches_response("RPIMODE:OK"));
+        assert!(!cmd.matches_response("State:A"));
+        assert!(!cmd.matches_response("CC:32"));
+    }
+
+    #[test]
+    fn unlock_expects_and_matches_unlock() {
+        let cmd = Command::Unlock;
+        assert!(cmd.expects_response());
+        assert_eq!(cmd.expected_rx_prefix(), Some("Unlock"));
+        assert!(cmd.matches_response("Unlock"));
+        assert!(cmd.matches_response("Unlock:ok"));
+        assert!(cmd.matches_response("Unlock:nok"));
+        assert!(!cmd.matches_response("State:A"));
+    }
+
+    #[test]
+    fn charge_control_commands_expect_matching_rx() {
+        // T2C
+        let t2c_on = Command::AuthorizeType2(true);
+        assert!(t2c_on.expects_response());
+        assert!(t2c_on.matches_response("T2C:1"));
+        assert!(!t2c_on.matches_response("T2C:0"));
+
+        let t2c_off = Command::AuthorizeType2(false);
+        assert!(t2c_off.expects_response());
+        assert!(t2c_off.matches_response("T2C:0"));
+        assert!(!t2c_off.matches_response("T2C:1"));
+
+        // FM2
+        let fm2_on = Command::SetExternalSignal(true);
+        assert!(fm2_on.expects_response());
+        assert!(fm2_on.matches_response("FM2:1"));
+        assert!(fm2_on.matches_response("FM2:0"));
+        assert!(!fm2_on.matches_response("FM:1"));
+
+        // D (derogation)
+        let d_on = Command::SetDerogation(true);
+        assert!(d_on.expects_response());
+        assert!(d_on.matches_response("D:1"));
+        assert!(!d_on.matches_response("DIP1:1"));
+
+        // Current limits
+        let cc = Command::SetCurrentLimit(16);
+        assert!(cc.expects_response());
+        assert!(cc.matches_response("CCEl:16"));
+        assert!(!cc.matches_response("CC:16"));
+    }
+
+    #[test]
+    fn all_commands_except_raw_and_factory_test_expect_response() {
+        let commands_to_test = vec![
+            Command::RaspberryPiModeOk,
+            Command::GetSoftwareVersion,
+            Command::GetHardwareVersion,
+            Command::GetSerialNumber,
+            Command::GetReference,
+            Command::GetWeekYearProduction,
+            Command::GetMacAddress,
+            Command::GetSide,
+            Command::Reset,
+            Command::Ping,
+            Command::GetState,
+            Command::GetErrors,
+            Command::GetCurrentLimit,
+            Command::GetEliotCurrentLimit,
+            Command::GetCpVoltage,
+            Command::GetT2CEnabled,
+            Command::GetSbState,
+            Command::GetTicCurrentLimit,
+            Command::SetTicTestMode(true),
+            Command::SetTicTestMode(false),
+            Command::GetInstantaneousCurrent,
+            Command::SetCurrentLimit(16),
+            Command::SetSchukoCurrentLimit(10),
+            Command::AuthorizeType2(true),
+            Command::AuthorizeType2(false),
+            Command::AuthorizeDomestic(true),
+            Command::AuthorizeDomestic(false),
+            Command::ForceType2(true),
+            Command::ForceType2(false),
+            Command::ForceDomestic(true),
+            Command::ForceDomestic(false),
+            Command::SetSleep(true),
+            Command::SetStartButton(true),
+            Command::SetStartButton(false),
+            Command::Unlock,
+            Command::GetOcppParameters,
+            Command::SetPlugAndCharge(true),
+            Command::SendRfidId("1234".into()),
+            Command::SendRfidAuthorization("1234".into()),
+            Command::SetOcppConnectionTimeout(30),
+            Command::GetBluetooth,
+            Command::SetBluetooth(true),
+            Command::GetFunctioningMode,
+            Command::SetFunctioningMode(FunctioningMode::DirectCharge),
+            Command::GetExternalSignal,
+            Command::SetExternalSignal(false),
+            Command::GetDerogation,
+            Command::SetDerogation(true),
+        ];
+
+        for cmd in commands_to_test {
+            assert!(
+                cmd.expects_response(),
+                "Command {:?} must expect a response according to architecture specification",
+                cmd
+            );
+            assert!(
+                cmd.expected_rx_prefix().is_some(),
+                "Command {:?} must define an expected_rx_prefix",
+                cmd
+            );
+        }
+
+        // Only Raw and FactoryTest do not expect response
+        assert!(!Command::Raw("anything".into()).expects_response());
+        assert!(!Command::FactoryTest.expects_response());
     }
 }

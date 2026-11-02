@@ -76,8 +76,8 @@ def add_mock_log(category, level, message):
 # Seed initial logs
 add_mock_log("SYS", "INFO", "=== GreenUp Link started in Mock Mode ===")
 add_mock_log("SERIAL", "INFO", "Serial port opened: /dev/mock_ttyUSB0 @ 115200 baud")
-add_mock_log("SERIAL_TX", "INFO", "RPIMODEOK")
-add_mock_log("SERIAL_RX", "INFO", "RPIMODE:OK")
+add_mock_log("SERIAL_TX", "INFO", "RaspberryPiModeOK")
+add_mock_log("SERIAL_RX", "INFO", "DIP1:1")
 add_mock_log("SERIAL_TX", "INFO", "!GET_REF")
 add_mock_log("SERIAL_RX", "INFO", "Ref:059001")
 add_mock_log("SERIAL_TX", "INFO", "!GET_SW_VER")
@@ -414,8 +414,8 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                     add_mock_log("SERIAL_RX", "INFO", "CC:32A")
                 elif cmd == "Side?":
                     add_mock_log("SERIAL_RX", "INFO", "Side:Left")
-                elif cmd == "RPIMODEOK":
-                    add_mock_log("SERIAL_RX", "INFO", "RPIMODE:OK")
+                elif cmd == "RaspberryPiModeOK" or cmd == "RPIMODEOK":
+                    add_mock_log("SERIAL_RX", "INFO", "DIP1:1")
                 else:
                     add_mock_log("SERIAL_RX", "INFO", "ACK")
             self.send_json({"status": "success", "message": "Command sent"})
