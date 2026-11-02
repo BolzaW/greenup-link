@@ -90,6 +90,16 @@ function formatTerminationReason(reason) {
     return r;
 }
 
+function formatPlugAndPhase(plugType, rawPhase) {
+    const plug = plugType || 'Type 2';
+    if (plug.toLowerCase().includes('domestique') || plug.toLowerCase().includes('domestic')) {
+        return `${plug} • 1-phase`;
+    }
+    const isTri = rawPhase && (rawPhase.includes('3') || rawPhase.toLowerCase().includes('tri'));
+    const phaseStr = isTri ? '3-phase' : '1-phase';
+    return `${plug} • ${phaseStr}`;
+}
+
 // ==============================================================================
 // TAB SWITCHING LOGIC (Board / Sessions / Console)
 // ==============================================================================
@@ -260,9 +270,7 @@ function renderMetricCard() {
             maxValEl.innerText = `${maxA.toFixed(1)} A`;
         }
         if (avgValEl) {
-            const avgA = (s.avg_current_a != null && s.avg_current_a > 0)
-                ? s.avg_current_a
-                : (s.avg_power_w && s.avg_power_w > 0 ? (s.avg_power_w / 230) : 0);
+            const avgA = (s.avg_current_a != null && s.avg_current_a > 0) ? s.avg_current_a : 0;
             avgValEl.innerText = avgA > 0 ? `Moy: ${avgA.toFixed(1)} A` : 'Moy: --';
         }
     } else {
@@ -364,9 +372,7 @@ function onSessionSelected(id) {
         setElemText('sessionValChargingDuration', formatSessionDuration(act.charging_duration_seconds));
         setElemText('sessionValTotalDuration', `Total: ${formatSessionDuration(act.elapsed_seconds)}`);
         setElemText('sessionValEnergy', `${act.total_energy_kwh.toFixed(2)} kWh`);
-        const plug = act.plug_type || 'Type 2';
-        const phase = act.phase || 'Mono';
-        setElemText('sessionValPhase', `${plug} • ${phase}`);
+        setElemText('sessionValPhase', formatPlugAndPhase(act.plug_type, act.phase));
 
         renderMetricCard();
 
@@ -396,9 +402,7 @@ function onSessionSelected(id) {
         setElemText('sessionValChargingDuration', formatSessionDuration(s.charging_duration_seconds));
         setElemText('sessionValTotalDuration', `Total: ${formatSessionDuration(s.total_duration_seconds)}`);
         setElemText('sessionValEnergy', `${s.total_energy_kwh.toFixed(2)} kWh`);
-        const plug = s.plug_type || 'Type 2';
-        const phase = s.phase || 'Mono';
-        setElemText('sessionValPhase', `${plug} • ${phase}`);
+        setElemText('sessionValPhase', formatPlugAndPhase(s.plug_type, s.phase));
 
         renderMetricCard();
 

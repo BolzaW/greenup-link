@@ -487,11 +487,15 @@ pub fn end_session_for_side(side: u8, reason: &str, tel: &Telemetry) {
 
     let idle_duration_secs = total_duration_secs.saturating_sub(active_duration_secs);
 
-    let phase_str = match session.phase.as_str() {
-        "Mono" | "1" => "Mono (1-Phase)",
-        "Tri" | "3" => "Tri (3-Phase)",
-        other if !other.is_empty() => other,
-        _ => "Mono (1-Phase)",
+    let plug_type_str = if session.plug_type.is_empty() { "Type 2" } else { &session.plug_type };
+
+    let phase_str = if plug_type_str == "Domestique" {
+        "1-phase"
+    } else {
+        match session.phase.as_str() {
+            "3-phase" | "Tri" | "3" => "3-phase",
+            _ => "1-phase",
+        }
     };
 
     let avg_active_power_w = if active_duration_secs > 0 && final_energy_kwh > 0.0 {
@@ -502,13 +506,9 @@ pub fn end_session_for_side(side: u8, reason: &str, tel: &Telemetry) {
 
     let avg_active_current_a = if active_duration_secs > 0 && session.cumulative_current_a_secs > 0.0 {
         (session.cumulative_current_a_secs / active_duration_secs as f64) as f32
-    } else if avg_active_power_w > 0.0 {
-        (avg_active_power_w / 230.0) as f32
     } else {
         0.0
     };
-
-    let plug_type_str = if session.plug_type.is_empty() { "Type 2" } else { &session.plug_type };
 
     let ticket_str = session.legrand_ticket.as_deref().unwrap_or("N/A (Ticket not emitted)");
     let side_label = if session.side == 2 {
@@ -692,7 +692,7 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
     let mut charging_duration_seconds = 0;
     let mut idle_duration_seconds = 0;
     let mut total_energy_kwh = 0.0;
-    let mut phase = "Mono (1-Phase)".to_string();
+    let mut phase = "1-phase".to_string();
     let mut plug_type = "Type 2".to_string();
     let mut max_current_a = 0.0f32;
     let mut avg_current_a = 0.0f32;
@@ -719,7 +719,10 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
                 "Active Charging" => charging_duration_seconds = extract_seconds_in_parens(val),
                 "Idle / Waiting" => idle_duration_seconds = extract_seconds_in_parens(val),
                 "Total Energy" => total_energy_kwh = extract_first_float(val),
-                "Phase Detection" => phase = val.to_string(),
+                "Phase Detection" => {
+                    let p = val.to_lowercase();
+                    phase = if p.contains('3') { "3-phase".to_string() } else { "1-phase".to_string() };
+                }
                 "Plug Type" | "Type de prise" => plug_type = val.to_string(),
                 "Max Current" => max_current_a = extract_first_float(val) as f32,
                 "Average Current" | "Courant moyen" => avg_current_a = extract_first_float(val) as f32,
@@ -728,10 +731,6 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
                 _ => {}
             }
         }
-    }
-
-    if avg_current_a == 0.0 && avg_power_w > 0.0 {
-        avg_current_a = (avg_power_w / 230.0).max(0.0);
     }
 
     if id.is_empty() {
@@ -830,10 +829,8 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
         } else {
             0.0
         };
-        let avg_current = if s.active_charging_duration_secs_f64 > 0.0 && s.cumulative_current_a_secs > 0.0 {
+        let avg_current = if s.active_charging_duration_secs_f64 > 0.0 {
             (s.cumulative_current_a_secs / s.active_charging_duration_secs_f64) as f32
-        } else if avg_power > 0.0 {
-            avg_power / 230.0
         } else {
             0.0
         };
@@ -853,11 +850,13 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
             avg_power_w: avg_power,
             state: tel.greenup_state.clone(),
             iec_state: tel.iec_state.clone(),
-            phase: match s.phase.as_str() {
-                "Mono" | "1" => "Mono (1-Phase)".to_string(),
-                "Tri" | "3" => "Tri (3-Phase)".to_string(),
-                other if !other.is_empty() => other.to_string(),
-                _ => "Mono (1-Phase)".to_string(),
+            phase: if s.plug_type == "Domestique" {
+                "1-phase".to_string()
+            } else {
+                match s.phase.as_str() {
+                    "3-phase" | "Tri" | "3" => "3-phase".to_string(),
+                    _ => "1-phase".to_string(),
+                }
             },
             plug_type: if s.plug_type.is_empty() { "Type 2".to_string() } else { s.plug_type.clone() },
         }
@@ -1050,7 +1049,7 @@ mod tests {
         assert!(txt_content.contains("GREENUP-LINK CHARGING SESSION SUMMARY"));
         assert!(txt_content.contains("Side 1 (Right / Droit)"));
         assert!(txt_content.contains("0.125 kWh"));
-        assert!(txt_content.contains("Mono (1-Phase)"));
+        assert!(txt_content.contains("1-phase"));
         assert!(txt_content.contains("WT:10:1138:50:CT:2:6:37:EVplug:5546.38:0.00:"));
 
         let _ = fs::remove_dir_all(&dir);
