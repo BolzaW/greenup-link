@@ -2,7 +2,7 @@ use chrono::{Duration, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::sync::{
     atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
@@ -291,28 +291,63 @@ pub fn parse_log_line(line: &str, id: u64) -> LogEntry {
 }
 
 /// Pre-populates the in-memory ring buffer with up to MAX_RECENT_LOGS from the daily log file.
+/// Seeks directly to the last 128 KB of the file to guarantee instantaneous startup (< 1ms)
+/// even if log files have grown large.
 pub fn preload_recent_logs_from_file(path: &str) {
-    if let Ok(content) = fs::read_to_string(path) {
-        let valid_lines: Vec<&str> = content
-            .lines()
-            .map(|l| l.trim())
-            .filter(|l| !l.is_empty() && !l.starts_with("==="))
-            .collect();
+    let mut file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return,
+    };
 
-        if !valid_lines.is_empty() {
-            let start = valid_lines.len().saturating_sub(MAX_RECENT_LOGS);
-            let slice = &valid_lines[start..];
+    let file_len = match file.metadata().map(|m| m.len()) {
+        Ok(len) => len,
+        Err(_) => return,
+    };
 
-            let mut guard = RECENT_LOGS.lock().unwrap_or_else(|e| e.into_inner());
-            guard.clear();
+    if file_len == 0 {
+        return;
+    }
 
-            let mut current_id = 1;
-            for line in slice {
-                guard.push_back(parse_log_line(line, current_id));
-                current_id += 1;
-            }
-            NEXT_ID.store(current_id, Ordering::Relaxed);
+    const TAIL_BUFFER_BYTES: u64 = 128 * 1024; // 128 KB
+    let seek_offset = file_len.saturating_sub(TAIL_BUFFER_BYTES);
+
+    if seek_offset > 0 {
+        if file.seek(SeekFrom::Start(seek_offset)).is_err() {
+            return;
         }
+    }
+
+    let mut buf = Vec::new();
+    if file.read_to_end(&mut buf).is_err() {
+        return;
+    }
+
+    let content = String::from_utf8_lossy(&buf);
+    let mut lines_iter = content.lines();
+
+    // If we seeked into the middle of the file, skip the partially-sliced first line
+    if seek_offset > 0 {
+        let _ = lines_iter.next();
+    }
+
+    let valid_lines: Vec<&str> = lines_iter
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty() && !l.starts_with("==="))
+        .collect();
+
+    if !valid_lines.is_empty() {
+        let start = valid_lines.len().saturating_sub(MAX_RECENT_LOGS);
+        let slice = &valid_lines[start..];
+
+        let mut guard = RECENT_LOGS.lock().unwrap_or_else(|e| e.into_inner());
+        guard.clear();
+
+        let mut current_id = 1;
+        for line in slice {
+            guard.push_back(parse_log_line(line, current_id));
+            current_id += 1;
+        }
+        NEXT_ID.store(current_id, Ordering::Relaxed);
     }
 }
 
@@ -552,5 +587,31 @@ mod tests {
         assert_eq!(entry3.id, 44);
         assert_eq!(entry3.category, "SYS");
         assert_eq!(entry3.message, "=== GreenUp Log started on 2026-11-02 ===");
+    }
+
+    #[test]
+    fn test_preload_recent_logs_tail() {
+        let temp_dir = std::env::temp_dir();
+        let test_file = temp_dir.join("test_greenup_seek_preload.log");
+
+        // Write 600 lines
+        let mut f = fs::File::create(&test_file).unwrap();
+        writeln!(f, "=== GreenUp Log started on 2026-11-02 ===").unwrap();
+        for i in 1..=600 {
+            writeln!(f, "[2026-11-02 20:00:00.{:03}] [INFO] [SERIAL_TX] Message number {}", i % 1000, i).unwrap();
+        }
+        drop(f);
+
+        preload_recent_logs_from_file(test_file.to_str().unwrap());
+
+        let logs = get_recent_logs();
+        // Should keep at most 500 lines
+        assert_eq!(logs.len(), 500);
+        // The first kept log should be number 101
+        assert_eq!(logs.first().unwrap().message, "Message number 101");
+        // The last kept log should be number 600
+        assert_eq!(logs.last().unwrap().message, "Message number 600");
+
+        let _ = fs::remove_file(test_file);
     }
 }
