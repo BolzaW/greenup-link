@@ -2,7 +2,7 @@
 // Accurately reflects Legrand firmware states (A, B, C, D, E, L, R, V, X...):
 // - 3 LEDs bar: independent hardware indicator simulation
 //   * State A & idle: 3 static white LEDs (matching Green'Up brand text)
-//   * State B & C: White LED sequential chase (4s cycle: 1s all off, 1s led1, 1s led1+2, 1s all on)
+//   * State B & C: White LED sequential chase (2s cycle: 500ms all off, 500ms led1, 500ms led1+2, 500ms all on)
 //   * State D & E (active charging): Green LED sequential chase with same pattern
 //   * Fault states: 3 solid red LEDs
 // - State B: Charger box pulses slowly in blue (waiting for station authorization)

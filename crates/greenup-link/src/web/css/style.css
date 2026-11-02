@@ -843,17 +843,17 @@
     box-shadow: 0 0 8px rgba(244, 63, 94, 0.75);
 }
 
-/* Legrand 3-LED Sequential Fill Pattern (4s cycle: 1s all off, 1s led1, 1s led1+2, 1s led1+2+3) */
+/* Legrand 3-LED Sequential Fill Pattern (2s cycle: 500ms all off, 500ms led1, 500ms led1+2, 500ms led1+2+3) */
 .charger-led.led-chase-1 {
-    animation: legrandLed1Chase 4s ease-in-out infinite;
+    animation: legrandLed1Chase 2s ease-in-out infinite;
 }
 
 .charger-led.led-chase-2 {
-    animation: legrandLed2Chase 4s ease-in-out infinite;
+    animation: legrandLed2Chase 2s ease-in-out infinite;
 }
 
 .charger-led.led-chase-3 {
-    animation: legrandLed3Chase 4s ease-in-out infinite;
+    animation: legrandLed3Chase 2s ease-in-out infinite;
 }
 
 @keyframes legrandLed1Chase {
