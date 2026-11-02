@@ -19,7 +19,7 @@ Three standard authentication methods are supported simultaneously against the s
    ```
 3. **HTTP Basic Auth** (with any username or empty username, and `<your_api_token>` as password):
    ```bash
-   curl -u :your_api_token http://<station_ip>:8080/api/telemetry
+   curl -u :your_api_token http://<station_ip>:8080/api/status
    ```
 
 *(Note: For browser Server-Sent Events `/api/logs/stream` and file downloads `/api/logs/export`, passing `?token=<your_api_token>` in the query string is also supported).*
@@ -56,12 +56,10 @@ Three standard authentication methods are supported simultaneously against the s
 | `GET` | `/api/status` | Real-time status for primary/queried side (`iec`, `ocpp`, `connected`, `charging`) |
 | `GET` | `/api/meter` | Real-time electrical metering for primary/queried side (`power_w`, `energy_kwh`, etc.) |
 
-### Legacy & Compatibility Endpoints
+### Authentication
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/api/auth/status` | Check if authentication is enabled and if the provided token is valid |
-| `GET` | `/api/info` | Hardware info (Firmware, Serial, Capabilities) |
-| `GET` | `/api/telemetry` | Real-time flat telemetry + Legrand / IEC states (polled by Web UI) |
 
 ### Control & Actions
 | Method | Endpoint | Description |
@@ -90,82 +88,7 @@ Three standard authentication methods are supported simultaneously against the s
 
 ## 📡 Read Endpoints (GET)
 
-### 1. Get hardware and software information
-- **URL**: `/api/info`
-- **Method**: `GET`
-- **Description**: Returns power board identification info (firmware version, serial number, production date...) as well as hardware capabilities deduced from the reference (`capabilities`). This info is queried at startup and cached.
-- **Typical Response**:
-  ```json
-  {
-    "software_version": "V01.18.10",
-    "hardware_version": "V02.01.01",
-    "serial_number": "015184",
-    "reference": "058001",
-    "week_year_production": "42W22",
-    "bluetooth_enabled": false,
-    "mac_address": "000000000000",
-    "side": 1,
-    "link_version": "0.1.0",
-    "capabilities": {
-      "phases": 1,
-      "max_power_kw": 7.4,
-      "max_current_amps": 32,
-      "has_schuko": false,
-      "charging_points": 1,
-      "is_known": true,
-      "has_tic": true
-    }
-  }
-  ```
-  - `side`: Active socket side (`1` or `2`), decoded from the ATmega `Side:` response (`49` -> `1`, `50` -> `2`).
-  - `mac_address`: Bluetooth controller MAC address (12-char hex or `"000000000000"` if BLE is disabled).
-  - *Note:* `capabilities` is `null` until the reference has been received.
-
-### 2. Get real-time telemetry
-- **URL**: `/api/telemetry`
-- **Method**: `GET`
-- **Description**: Returns real-time station data. Designed to be polled frequently (polling ~2s by the GUI). Calls are logged at `TRACE` level (log file only, not console).
-- **Typical Response**:
-  ```json
-  {
-    "serial": {
-      "status": "usb_connected",
-      "port": "/dev/ttyUSB0",
-      "message": "USB serial link active - Station connected",
-      "last_rx_secs_ago": 0
-    },
-    "voltage": 232.0,
-    "current": 15.6,
-    "power": 3619.2,
-    "energy": 12.5,
-    "frequency": 50.0,
-    "error_code": "0000",
-    "limit_amps": 16,
-    "eliot_limit_amps": 16,
-    "cp_voltage": 6,
-    "charge_authorized": true,
-    "charge_paused": false,
-    "greenup_state": "C",
-    "iec_state": "C",
-    "charge_complete": false,
-    "tic_mode": "9600"
-  }
-  ```
-  - `serial`: USB serial communication state with the ATmega2560 board:
-    - `status`: `"usb_connected"` (bidirectional link active), `"usb_connecting"` (port opened, waiting for board), `"usb_no_response"` (USB open but station board silent/frozen), `"usb_disconnected"` (USB cable unplugged or `/dev/ttyUSB0` missing).
-    - `port`: Port path (e.g. `"/dev/ttyUSB0"`).
-    - `message`: Human-readable status description.
-    - `last_rx_secs_ago`: Elapsed seconds since the last frame received from the board (or `null` if disconnected).
-  - `greenup_state`: Legrand proprietary state (`A`, `B`, `C`, `D`, `E`, `I`, `W`, `M`, `L`, `R`, `X`, `V`). Returns `"DISCONNECTED"` if USB is unplugged. See [`STATE_MACHINE.md`](STATE_MACHINE.md).
-  - `iec_state`: Deduced standard IEC 61851-1 state (`A`, `B`, `C`, `E`, `F`). Returns `null` if it cannot be deduced.
-  - `cp_voltage` (`CP?`): Control Pilot voltage in volts (`12`, `9`, `6`).
-  - `charge_authorized`: Indicates whether charging is currently authorized (`true`) or blocked (`false`).
-  - `charge_paused`: Indicates whether charging has been paused via the Stop button (`true`).
-  - `eliot_limit_amps` (`CCEl?`): Effective current limit applied by the station.
-  - `charge_complete`: True if charging has terminated (vehicle battery full).
-  - `tic_mode`: `"0"` (absent), `"1200"` (historical), `"9600"` (standard), `"detecting"` (detection in progress) or `""` (unknown, no detection started).
-
-### 3. Get canonical station snapshot (OCPP 1.6-J & EVCC structured)
+### 1. Get canonical station snapshot (OCPP 1.6-J & EVCC structured)
 - **URL**: `/api/state`
 - **Method**: `GET`
 - **Description**: Returns the unified, clean hierarchical data model for the entire charging station, including station-level metadata and an array of individual connectors (`EVSEs`). Designed as the canonical backbone for OCPP 1.6-J, EVCC, and Home Assistant.
@@ -234,7 +157,7 @@ Three standard authentication methods are supported simultaneously against the s
   }
   ```
 
-### 4. Get station identity & capabilities
+### 2. Get station identity & capabilities
 - **URL**: `/api/station`
 - **Method**: `GET`
 - **Description**: Returns only the station-level metadata (vendor, model, serial, firmware, hardware capabilities, serial connection status). Formatted directly to populate an OCPP `BootNotification` payload.
@@ -255,7 +178,7 @@ Three standard authentication methods are supported simultaneously against the s
   }
   ```
 
-### 5. Get connector list & specific connector data
+### 3. Get connector list & specific connector data
 - **URLs**:
   - `GET /api/connectors`: List all connectors of the station (`Vec<ConnectorData>`).
   - `GET /api/connectors/:id`: Get full data for connector `:id` (`1` or `2`).
@@ -285,7 +208,7 @@ Three standard authentication methods are supported simultaneously against the s
   }
   ```
 
-### 6. Fast Status & Metering Endpoints (Optimized for EVCC & Home Assistant)
+### 4. Fast Status & Metering Endpoints (Optimized for EVCC & Home Assistant)
 - **URLs**:
   - `GET /api/status[?side=1|2]`
   - `GET /api/meter[?side=1|2]`
@@ -314,7 +237,7 @@ Three standard authentication methods are supported simultaneously against the s
   }
   ```
 
-### 7. Get supervision mode
+### 5. Get supervision mode
 - **URL**: `/api/mode`
 - **Method**: `GET`
 - **Description**: Returns the current runtime supervision mode (`"remote"` or `"local"`).
@@ -484,7 +407,7 @@ Three standard authentication methods are supported simultaneously against the s
     {
       "timestamp": "2026-10-16 00:15:21.050",
       "category": "API",
-      "message": "🔍 GET request /api/telemetry"
+      "message": "🔍 GET request /api/state"
     }
   ]
   ```

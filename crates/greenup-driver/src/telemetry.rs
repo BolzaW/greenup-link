@@ -238,6 +238,7 @@ pub struct ConnectorStatus {
     pub vehicle_connected: bool,
     pub charging: bool,
     pub paused: bool,
+    pub charge_complete: bool,
     pub error_code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_description: Option<String>,
@@ -251,6 +252,8 @@ pub struct ConnectorControl {
     pub min_allowed_amps: u32,
     pub max_hardware_amps: u32,
     pub charge_authorized: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pilot_voltage: Option<u32>,
 }
 
 /// Normalized electrical metering values (Watts, kWh, Volts, Amperes).
@@ -299,6 +302,14 @@ pub struct StationData {
     pub serial_connection: SerialConnection,
     pub is_dual: bool,
     pub available_connectors: Vec<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub production_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bluetooth_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mac_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<HardwareCapabilities>,
 }
 
 /// Unified station snapshot aggregating station metadata and all active connectors.
@@ -369,6 +380,7 @@ impl Telemetry {
             vehicle_connected,
             charging: is_charging,
             paused: self.charge_paused,
+            charge_complete: self.charge_complete,
             error_code,
             error_description,
         };
@@ -381,7 +393,8 @@ impl Telemetry {
             pilot_limit_amps: self.limit_amps,
             min_allowed_amps: 7,
             max_hardware_amps: max_hardware,
-            charge_authorized: self.charge_authorized,
+            charge_authorized: self.charge_authorized && !self.charge_paused,
+            pilot_voltage: self.cp_voltage,
         };
 
         let meter = ConnectorMeter {
@@ -517,7 +530,16 @@ mod tests {
         assert_eq!(conn.status.ocpp, OcppChargePointStatus::SuspendedEVSE);
         assert!(conn.status.paused);
         assert!(!conn.status.charging);
+        assert!(!conn.status.charge_complete);
         tel.charge_paused = false;
+
+        // 4b. Charge complete (vehicle battery full, vehicle connected)
+        tel.greenup_state = "B".to_string();
+        tel.charge_complete = true;
+        let conn_complete = tel.to_connector_data(&info);
+        assert_eq!(conn_complete.status.ocpp, OcppChargePointStatus::SuspendedEV);
+        assert!(conn_complete.status.charge_complete);
+        tel.charge_complete = false;
 
         // 5. Hardware Fault code 0003
         tel.error_code = "0003".to_string();

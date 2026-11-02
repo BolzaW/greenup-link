@@ -106,9 +106,6 @@ chargers:
       cmd: curl -s -X POST http://<GREENUP_IP>:8080/api/current/${maxcurrent}
 ```
 
-> [!NOTE]
-> **Backward Compatibility:** If upgrading from an older version of Green'Up Link, the legacy endpoint `GET /api/telemetry` with `jq: .iec_state`, `jq: .power`, `jq: .energy`, and `jq: .charge_authorized` continues to be 100% supported without changes.
-
 ### 3.2 Dual Charge Point Configuration (2 Independent Loadpoints)
 
 If your charging station is a dual-point model (e.g. Legrand references 058011, 058013, 058042, 058044, 059011...), you can define two independent chargers and loadpoints using the dedicated connector endpoints `/api/connectors/1/*` and `/api/connectors/2/*` (or `?side=1` and `?side=2`):

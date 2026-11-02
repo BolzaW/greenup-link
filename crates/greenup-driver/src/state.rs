@@ -203,6 +203,14 @@ impl StationManager {
             serial_connection: p1_tel.serial.clone(),
             is_dual,
             available_connectors,
+            production_date: if p1_info.week_year_production.is_empty() {
+                None
+            } else {
+                Some(p1_info.week_year_production.clone())
+            },
+            bluetooth_enabled: p1_info.bluetooth_enabled,
+            mac_address: p1_info.mac_address.clone(),
+            capabilities: p1_info.capabilities.clone(),
         };
 
         crate::telemetry::StationSnapshot {
