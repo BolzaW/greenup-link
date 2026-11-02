@@ -281,6 +281,7 @@ pub fn on_state_change_for_side(side: u8, new_state: &str, tel: &Telemetry) {
     if let Some(ref mut session) = lock[idx] {
         let now_instant = Instant::now();
         let now_local = Local::now();
+        session.last_tick_instant = now_instant;
 
         if new_state == "A" {
             if session.pending_state_a_since.is_none() {
@@ -350,6 +351,7 @@ pub fn on_telemetry_tick_for_side(side: u8, tel: &Telemetry) {
         // 1. Durations and energy integration
         let dt = now_instant.duration_since(session.last_tick_instant).as_secs_f64();
         session.last_tick_instant = now_instant;
+        let dt = dt.min(2.0);
 
         let is_charging = tel.greenup_state == "D" || tel.greenup_state == "E";
         let effective_voltage = if tel.voltage > 50.0 { tel.voltage } else { 230.0 };
@@ -1175,6 +1177,50 @@ mod tests {
         // Second delete returns Ok(false)
         assert_eq!(delete_session(&active_id), Ok(false));
 
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_idle_state_c_does_not_inflate_charging_duration() {
+        let dir = setup_test_dir();
+        let mut tel = Telemetry::default();
+        tel.greenup_state = "C".into();
+        tel.iec_state = Some("B".into());
+        tel.voltage = 230.0;
+        tel.current = 0.0;
+
+        // Start session in State C (EV plugged in, waiting for schedule / off-peak hours)
+        start_session("C", &tel);
+
+        // Simulate 3 hours passing in State C without any ticks
+        if let Some(ref mut session) = ACTIVE_SESSIONS.lock().unwrap()[0] {
+            session.start_instant = Instant::now() - Duration::from_secs(10800);
+            session.last_tick_instant = Instant::now() - Duration::from_secs(10800);
+        }
+
+        // Ticking in State C should NOT increase active charging duration
+        on_telemetry_tick(&tel);
+        let summary = get_active_session_summary(&tel).expect("active session");
+        assert_eq!(summary.charging_duration_seconds, 0);
+        assert!(summary.elapsed_seconds >= 10800);
+
+        // Transition from State C to State D (charging starts)
+        tel.greenup_state = "D".into();
+        tel.iec_state = Some("C".into());
+        on_state_change("D", &tel);
+
+        // First telemetry tick in State D with current = 32A
+        tel.current = 32.0;
+        tel.power = 7360.0;
+        on_telemetry_tick(&tel);
+
+        // Charging duration should still be ~0s (or at most clamped dt <= 2s), NOT 3h!
+        let summary_d = get_active_session_summary(&tel).expect("active session");
+        assert!(summary_d.charging_duration_seconds <= 2);
+        assert!(summary_d.elapsed_seconds >= 10800);
+
+        // End session
+        end_session("Test done", &tel);
         let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -416,6 +416,7 @@ pub fn run_serial_loop_with_options(
         let session_start = Instant::now();
         let mut last_watchdog_probe = Instant::now();
         let mut last_watchdog_warn = Instant::now();
+        let mut last_session_tick = Instant::now();
 
         while is_running.load(Ordering::Relaxed) {
             let cmd_opt = match rx_channel.try_recv() {
@@ -454,13 +455,20 @@ pub fn run_serial_loop_with_options(
 
             if let Ok(mut tel) = state.telemetry.lock() {
                 tel.serial.last_rx_secs_ago = Some(elapsed_since_rx.as_secs());
-                if crate::session::check_state_a_timeout(&tel) {
+                if crate::session::check_state_a_timeout_for_side(state.side(), &tel) {
                     tel.energy = 0.0;
                     tel.current = 0.0;
                     tel.power = 0.0;
                     tel.last_power_update = None;
                     tel.charge_complete = false;
                     reset_serial_filters();
+                }
+            }
+
+            if last_session_tick.elapsed() >= Duration::from_millis(1000) {
+                last_session_tick = Instant::now();
+                if let Ok(tel) = state.telemetry.lock() {
+                    crate::session::on_telemetry_tick_for_side(state.side(), &tel);
                 }
             }
 
@@ -730,6 +738,8 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
             if let Ok(mut tel) = state.telemetry.lock() {
                 let was_charging = tel.greenup_state == "D" || tel.greenup_state == "E";
                 let is_charging = state_val == "D" || state_val == "E";
+                tel.greenup_state = state_val.clone();
+                update_iec_state(&mut tel);
 
                 if is_charging && !was_charging {
                     // Resuming or starting charge: restart power integration timer
@@ -781,9 +791,6 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                         crate::session::on_state_change_for_side(side, &state_val, &tel);
                     }
                 }
-
-                tel.greenup_state = state_val.clone();
-                update_iec_state(&mut tel);
             }
         }
         ProtocolEvent::ErrorChange(e) => {
