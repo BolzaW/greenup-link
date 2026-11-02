@@ -30,6 +30,15 @@ api_token = ""
 #           settings) remain strictly protected by api_token.
 auth_ihm = true
 
+[storage]
+# Directory where daily log files are stored.
+# Default: "logs" (or "/var/log/greenup-link" if running as system service)
+log_dir = "logs"
+
+# Directory where charging sessions (CSV data and summaries) are stored.
+# Default: "sessions" (or "/var/lib/greenup-link/sessions")
+sessions_dir = "sessions"
+
 [serial]
 # Dual charge point mode:
 # - "auto"  : Automatically detects 1 or 2 charge points based on the station hardware reference (Default)
@@ -70,6 +79,21 @@ impl Default for HttpConfig {
             bind: "0.0.0.0:8080".to_string(),
             api_token: None,
             auth_ihm: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct StorageConfig {
+    pub log_dir: String,
+    pub sessions_dir: String,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            log_dir: "logs".to_string(),
+            sessions_dir: "sessions".to_string(),
         }
     }
 }
@@ -135,13 +159,14 @@ impl Default for StationConfig {
 #[derive(Debug, Clone, Default)]
 pub struct AppConfig {
     pub http: HttpConfig,
+    pub storage: StorageConfig,
     pub serial: SerialConfig,
     pub station: StationConfig,
 }
 
 impl AppConfig {
     /// Loads configuration from `greenup.toml` (or path in `GREENUP_CONFIG`)
-    /// and applies environment variable overrides (`GREENUP_BIND`, `GREENUP_API_TOKEN`).
+    /// and applies environment variable overrides (`GREENUP_API_TOKEN`).
     pub fn load() -> Self {
         let config_path = env::var("GREENUP_CONFIG")
             .unwrap_or_else(|_| {
@@ -182,48 +207,13 @@ impl AppConfig {
             Self::default()
         };
 
-        // Environment variable overrides
-        if let Ok(env_bind) = env::var("GREENUP_BIND") {
-            let trimmed = env_bind.trim();
-            if !trimmed.is_empty() {
-                config.http.bind = trimmed.to_string();
-            }
-        }
-
+        // Environment variable override (API token only, for security/secrets injection)
         if let Ok(env_token) = env::var("GREENUP_API_TOKEN") {
             let trimmed = env_token.trim();
             if trimmed.is_empty() {
                 config.http.api_token = None;
             } else {
                 config.http.api_token = Some(trimmed.to_string());
-            }
-        }
-
-        if let Ok(env_dp) = env::var("GREENUP_DUAL_POINT") {
-            match env_dp.trim().to_lowercase().as_str() {
-                "true" | "1" | "yes" => config.serial.dual_point = DualPointMode::True,
-                "false" | "0" | "no" => config.serial.dual_point = DualPointMode::False,
-                _ => config.serial.dual_point = DualPointMode::Auto,
-            }
-        }
-
-        if let Ok(env_port) = env::var("GREENUP_SERIAL_PORT") {
-            let trimmed = env_port.trim();
-            if !trimmed.is_empty() && trimmed != "auto" {
-                config.serial.port = Some(trimmed.to_string());
-            }
-        }
-
-        if let Ok(env_port2) = env::var("GREENUP_SERIAL_PORT2") {
-            let trimmed = env_port2.trim();
-            if !trimmed.is_empty() && trimmed != "auto" {
-                config.serial.port2 = Some(trimmed.to_string());
-            }
-        }
-
-        if let Ok(env_mode) = env::var("GREENUP_MODE") {
-            if let Some(m) = greenup_driver::telemetry::SupervisionMode::from_str(&env_mode) {
-                config.station.mode = m;
             }
         }
 
@@ -270,6 +260,20 @@ impl AppConfig {
                                 "false" | "0" | "no" => config.http.auth_ihm = false,
                                 "true" | "1" | "yes" => config.http.auth_ihm = true,
                                 _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                } else if current_section == "storage" {
+                    match key.as_str() {
+                        "log_dir" => {
+                            if !val.is_empty() {
+                                config.storage.log_dir = val;
+                            }
+                        }
+                        "sessions_dir" => {
+                            if !val.is_empty() {
+                                config.storage.sessions_dir = val;
                             }
                         }
                         _ => {}
@@ -373,6 +377,20 @@ mod tests {
         assert_eq!(cfg.http.bind, "0.0.0.0:8080");
         assert_eq!(cfg.http.api_token, None);
         assert!(cfg.http.auth_ihm, "Default auth_ihm should be true");
+        assert_eq!(cfg.storage.log_dir, "logs");
+        assert_eq!(cfg.storage.sessions_dir, "sessions");
+    }
+
+    #[test]
+    fn test_storage_config_parsing() {
+        let toml = r#"
+        [storage]
+        log_dir = "/var/log/greenup-link"
+        sessions_dir = "/var/lib/greenup-link/sessions"
+        "#;
+        let cfg = AppConfig::parse_toml(toml);
+        assert_eq!(cfg.storage.log_dir, "/var/log/greenup-link");
+        assert_eq!(cfg.storage.sessions_dir, "/var/lib/greenup-link/sessions");
     }
 
     #[test]

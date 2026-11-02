@@ -92,6 +92,11 @@ fn spawn_serial_worker(
 
 #[tokio::main]
 async fn main() {
+    let app_config = config::AppConfig::load();
+
+    // Configure storage directories from greenup.toml before logger initialization
+    greenup_driver::logger::set_custom_log_dir(Some(app_config.storage.log_dir.clone()));
+    greenup_driver::session::set_custom_sessions_dir(Some(std::path::PathBuf::from(&app_config.storage.sessions_dir)));
     greenup_driver::logger::init();
 
     let pkg_version = env!("CARGO_PKG_VERSION");
@@ -99,8 +104,10 @@ async fn main() {
     greenup_driver::logger::log("SYS", "===================================================");
     greenup_driver::logger::log("SYS", &format!("               GREEN'UP LINK v{:<15}     ", pkg_version));
     greenup_driver::logger::log("SYS", "===================================================");
-
-    let app_config = config::AppConfig::load();
+    greenup_driver::logger::log(
+        "SYS",
+        &format!("📁 Storage paths: logs = {}, sessions = {}", app_config.storage.log_dir, app_config.storage.sessions_dir),
+    );
     if app_config.http.api_token.is_some() {
         let auth_desc = if app_config.http.auth_ihm {
             "STRICT (Web GUI & REST APIs protected)"

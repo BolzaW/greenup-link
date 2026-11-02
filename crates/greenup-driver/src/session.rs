@@ -42,13 +42,10 @@ pub fn set_custom_sessions_dir(dir: Option<PathBuf>) {
 }
 
 /// Returns the configured sessions directory path.
-/// Checks custom override, `GREENUP_SESSIONS_DIR` env var, `/opt/greenup-link/sessions`, or local `sessions/`.
+/// Checks custom override, `/opt/greenup-link/sessions`, or local `sessions/`.
 pub fn get_sessions_dir() -> PathBuf {
     if let Some(ref dir) = *CUSTOM_SESSIONS_DIR.lock().unwrap_or_else(|e| e.into_inner()) {
         return dir.clone();
-    }
-    if let Ok(dir) = std::env::var("GREENUP_SESSIONS_DIR") {
-        return PathBuf::from(dir);
     }
     if Path::new("/opt/greenup-link/sessions").exists() {
         return PathBuf::from("/opt/greenup-link/sessions");

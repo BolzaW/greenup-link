@@ -18,8 +18,7 @@ pub struct SerialOptions {
 impl Default for SerialOptions {
     fn default() -> Self {
         Self {
-            port: std::env::var("GREENUP_SERIAL_PORT")
-                .unwrap_or_else(|_| "/dev/ttyUSB0".to_string()),
+            port: "/dev/ttyUSB0".to_string(),
             baud_rate: 115_200,
             timeout_ms: 100,
             watchdog_timeout_secs: 60,

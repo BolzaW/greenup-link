@@ -135,11 +135,18 @@ pub fn get_recent_logs() -> Vec<LogEntry> {
     guard.iter().cloned().collect()
 }
 
+static CUSTOM_LOG_DIR: Mutex<Option<String>> = Mutex::new(None);
+
+/// Overrides the log directory (primarily for testing or custom configuration from greenup.toml).
+pub fn set_custom_log_dir(dir: Option<String>) {
+    *CUSTOM_LOG_DIR.lock().unwrap_or_else(|e| e.into_inner()) = dir;
+}
+
 /// Returns the configured log directory.
-/// Checks `GREENUP_LOG_DIR` env var, local `logs/`, or `/opt/greenup-link/logs/`.
+/// Checks custom override, local `logs/`, or `/opt/greenup-link/logs/`.
 pub fn get_log_dir() -> String {
-    if let Ok(dir) = std::env::var("GREENUP_LOG_DIR") {
-        return dir;
+    if let Some(ref dir) = *CUSTOM_LOG_DIR.lock().unwrap_or_else(|e| e.into_inner()) {
+        return dir.clone();
     }
     if Path::new("logs").exists() {
         return "logs".to_string();
