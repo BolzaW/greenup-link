@@ -327,7 +327,9 @@ function setElemText(id, text) {
 
 async function loadAndDisplayChart(sessionId) {
     const statusElem = document.getElementById('sessionChartStatus');
-    if (statusElem) statusElem.innerText = t('sessions.chart_loading') || 'Chargement...';
+    if (statusElem && currentChartPoints.length === 0) {
+        statusElem.innerText = t('sessions.chart_loading') || 'Chargement...';
+    }
 
     if (sessionCsvCache.has(sessionId)) {
         const cachedPoints = sessionCsvCache.get(sessionId);
@@ -370,11 +372,14 @@ function parseCsvPoints(csvText) {
     const lines = csvText.trim().split('\n');
     if (lines.length < 2) return [];
 
-    const headers = lines[0].split(',').map(h => h.trim());
-    const elapsedIdx = headers.indexOf('Elapsed_s');
-    const powerIdx = headers.indexOf('Power_W');
-    const currentIdx = headers.indexOf('Current_A');
-    const stateIdx = headers.indexOf('State');
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    let elapsedIdx = headers.indexOf('elapsed_s');
+    if (elapsedIdx === -1) elapsedIdx = headers.indexOf('elapsed');
+    let powerIdx = headers.indexOf('power_w');
+    if (powerIdx === -1) powerIdx = headers.indexOf('power');
+    let currentIdx = headers.indexOf('current_a');
+    if (currentIdx === -1) currentIdx = headers.indexOf('current');
+    let stateIdx = headers.indexOf('state');
 
     if (elapsedIdx === -1 || powerIdx === -1) return [];
 
