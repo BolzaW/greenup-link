@@ -236,11 +236,17 @@
                     <span id="sessionValEnergy" class="text-sm sm:text-base font-bold text-sky-400 font-mono mt-1">--</span>
                     <span id="sessionValPhase" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
                 </div>
-                <!-- Power Peak / Avg -->
+                <!-- Power / Current Peak & Avg with Toggle -->
                 <div class="session-stat-card">
-                    <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
-                        <span>📈</span> <span data-i18n="sessions.stat_power_max">P. Crête</span>
-                    </span>
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
+                            <span id="sessionMetricIcon">📈</span>
+                            <span id="sessionMetricTitle" data-i18n="sessions.stat_power_max">Puissance</span>
+                        </span>
+                        <button id="btnSessionMetricToggle" type="button" class="session-unit-toggle" title="Basculer Puissance (kW) / Courant (A)" data-i18n-title="sessions.toggle_unit_title">
+                            <span id="toggleKwLabel" class="active">kW</span><span class="text-slate-600 font-mono">/</span><span id="toggleAmpsLabel">A</span>
+                        </button>
+                    </div>
                     <span id="sessionValMaxPower" class="text-sm sm:text-base font-bold text-emerald-400 font-mono mt-1">--</span>
                     <span id="sessionValAvgPower" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
                 </div>
@@ -259,10 +265,16 @@
                 <!-- Header inside chart container -->
                 <div class="flex items-center justify-between px-3 pt-2 pb-2 mb-1 border-b border-slate-900/80">
                     <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
-                        <span data-i18n="sessions.chart_power_curve">Courbe de puissance</span>
+                        <span id="sessionChartDot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block transition-colors"></span>
+                        <span id="sessionChartTitle" data-i18n="sessions.chart_power_curve">Courbe de puissance</span>
                     </span>
-                    <span id="sessionChartStatus" class="text-[10px] font-mono text-slate-500"></span>
+                    <div class="flex items-center gap-2">
+                        <div class="session-chart-pill">
+                            <button id="btnChartModeKw" type="button" class="chart-pill-btn active">kW</button>
+                            <button id="btnChartModeAmps" type="button" class="chart-pill-btn">A</button>
+                        </div>
+                        <span id="sessionChartStatus" class="text-[10px] font-mono text-slate-500"></span>
+                    </div>
                 </div>
 
                 <!-- Canvas -->

@@ -81,8 +81,10 @@ pub struct ActiveSession {
     pub max_power: f32,
     pub cumulative_energy_wh: f64,
     pub active_charging_duration_secs_f64: f64,
+    pub cumulative_current_a_secs: f64,
     pub last_tick_instant: Instant,
     pub phase: String,
+    pub plug_type: String,
     pub legrand_ticket: Option<String>,
     pub csv_path: PathBuf,
     pub txt_path: PathBuf,
@@ -253,8 +255,10 @@ pub fn start_session_for_side(side: u8, initial_state: &str, tel: &Telemetry) {
         max_power: tel.power,
         cumulative_energy_wh: 0.0,
         active_charging_duration_secs_f64: 0.0,
+        cumulative_current_a_secs: 0.0,
         last_tick_instant: now_instant,
         phase: "Mono".to_string(),
+        plug_type: "Type 2".to_string(),
         legrand_ticket: None,
         csv_path,
         txt_path,
@@ -287,6 +291,7 @@ pub fn on_state_change_for_side(side: u8, new_state: &str, tel: &Telemetry) {
         if was_charging && session.last_sample_current > 0.05 {
             let dt = now_instant.duration_since(session.last_tick_instant).as_secs_f64().min(2.0);
             session.active_charging_duration_secs_f64 += dt;
+            session.cumulative_current_a_secs += (session.last_sample_current as f64) * dt;
         }
         session.last_tick_instant = now_instant;
 
@@ -372,6 +377,7 @@ pub fn on_telemetry_tick_for_side(side: u8, tel: &Telemetry) {
 
         if is_charging && tel.current > 0.05 {
             session.active_charging_duration_secs_f64 += dt;
+            session.cumulative_current_a_secs += (tel.current as f64) * dt;
             let wh = (live_power as f64) * (dt / 3600.0);
             session.cumulative_energy_wh += wh;
         }
@@ -494,6 +500,16 @@ pub fn end_session_for_side(side: u8, reason: &str, tel: &Telemetry) {
         0.0
     };
 
+    let avg_active_current_a = if active_duration_secs > 0 && session.cumulative_current_a_secs > 0.0 {
+        (session.cumulative_current_a_secs / active_duration_secs as f64) as f32
+    } else if avg_active_power_w > 0.0 {
+        (avg_active_power_w / 230.0) as f32
+    } else {
+        0.0
+    };
+
+    let plug_type_str = if session.plug_type.is_empty() { "Type 2" } else { &session.plug_type };
+
     let ticket_str = session.legrand_ticket.as_deref().unwrap_or("N/A (Ticket not emitted)");
     let side_label = if session.side == 2 {
         "Side 2 (Left / Gauche)"
@@ -523,7 +539,9 @@ ENERGY & ELECTRICAL METRICS
 --------------------------------------------------------------------------------
 Total Energy:         {:.3} kWh
 Phase Detection:      {}
+Plug Type:            {}
 Max Current:          {:.2} A
+Average Current:      {:.2} A
 Max Power:            {:.0} W
 Average Active Power: {:.0} W
 
@@ -546,7 +564,9 @@ RAW LEGRAND TICKET
         idle_duration_secs,
         final_energy_kwh,
         phase_str,
+        plug_type_str,
         session.max_current,
+        avg_active_current_a,
         session.max_power,
         avg_active_power_w,
         ticket_str
@@ -582,6 +602,10 @@ pub fn is_valid_session_id(id: &str) -> bool {
         && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
+fn default_plug_type() -> String {
+    "Type 2".to_string()
+}
+
 /// Structured summary of a saved session.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionSummary {
@@ -596,7 +620,11 @@ pub struct SessionSummary {
     pub idle_duration_seconds: u64,
     pub total_energy_kwh: f64,
     pub phase: String,
+    #[serde(default = "default_plug_type")]
+    pub plug_type: String,
     pub max_current_a: f32,
+    #[serde(default)]
+    pub avg_current_a: f32,
     pub max_power_w: f32,
     pub avg_power_w: f32,
     pub has_csv: bool,
@@ -617,11 +645,17 @@ pub struct ActiveSessionSummary {
     pub current_a: f32,
     pub power_w: f32,
     pub max_current_a: f32,
+    #[serde(default)]
+    pub avg_current_a: f32,
     pub max_power_w: f32,
+    #[serde(default)]
+    pub avg_power_w: f32,
     pub state: String,
     #[serde(default)]
     pub iec_state: Option<String>,
     pub phase: String,
+    #[serde(default = "default_plug_type")]
+    pub plug_type: String,
 }
 
 fn extract_seconds_in_parens(s: &str) -> u64 {
@@ -659,7 +693,9 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
     let mut idle_duration_seconds = 0;
     let mut total_energy_kwh = 0.0;
     let mut phase = "Mono (1-Phase)".to_string();
+    let mut plug_type = "Type 2".to_string();
     let mut max_current_a = 0.0f32;
+    let mut avg_current_a = 0.0f32;
     let mut max_power_w = 0.0f32;
     let mut avg_power_w = 0.0f32;
 
@@ -684,12 +720,18 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
                 "Idle / Waiting" => idle_duration_seconds = extract_seconds_in_parens(val),
                 "Total Energy" => total_energy_kwh = extract_first_float(val),
                 "Phase Detection" => phase = val.to_string(),
+                "Plug Type" | "Type de prise" => plug_type = val.to_string(),
                 "Max Current" => max_current_a = extract_first_float(val) as f32,
+                "Average Current" | "Courant moyen" => avg_current_a = extract_first_float(val) as f32,
                 "Max Power" => max_power_w = extract_first_float(val) as f32,
                 "Average Active Power" => avg_power_w = extract_first_float(val) as f32,
                 _ => {}
             }
         }
+    }
+
+    if avg_current_a == 0.0 && avg_power_w > 0.0 {
+        avg_current_a = (avg_power_w / 230.0).max(0.0);
     }
 
     if id.is_empty() {
@@ -723,7 +765,9 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
         idle_duration_seconds,
         total_energy_kwh,
         phase,
+        plug_type,
         max_current_a,
+        avg_current_a,
         max_power_w,
         avg_power_w,
         has_csv,
@@ -781,6 +825,19 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
             0.0
         };
 
+        let avg_power = if charging > 0 && energy_kwh > 0.0 {
+            ((energy_kwh * 1000.0) / (charging as f64 / 3600.0)) as f32
+        } else {
+            0.0
+        };
+        let avg_current = if s.active_charging_duration_secs_f64 > 0.0 && s.cumulative_current_a_secs > 0.0 {
+            (s.cumulative_current_a_secs / s.active_charging_duration_secs_f64) as f32
+        } else if avg_power > 0.0 {
+            avg_power / 230.0
+        } else {
+            0.0
+        };
+
         ActiveSessionSummary {
             session_id: s.session_id.clone(),
             side: s.side,
@@ -791,7 +848,9 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
             current_a: tel.current,
             power_w: live_power,
             max_current_a: s.max_current,
+            avg_current_a: avg_current,
             max_power_w: s.max_power,
+            avg_power_w: avg_power,
             state: tel.greenup_state.clone(),
             iec_state: tel.iec_state.clone(),
             phase: match s.phase.as_str() {
@@ -800,6 +859,7 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
                 other if !other.is_empty() => other.to_string(),
                 _ => "Mono (1-Phase)".to_string(),
             },
+            plug_type: if s.plug_type.is_empty() { "Type 2".to_string() } else { s.plug_type.clone() },
         }
     })
 }
@@ -903,8 +963,10 @@ mod tests {
             max_power: 3680.0,
             cumulative_energy_wh: 100.0,
             active_charging_duration_secs_f64: 60.0,
+            cumulative_current_a_secs: 960.0,
             last_tick_instant: now,
             phase: "Mono".into(),
+            plug_type: "Type 2".into(),
             legrand_ticket: None,
             csv_path: PathBuf::new(),
             txt_path: PathBuf::new(),

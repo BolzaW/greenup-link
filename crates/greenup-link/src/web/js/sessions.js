@@ -6,6 +6,7 @@ let selectedSessionId = null;
 let sessionCsvCache = new Map();
 let currentChartPoints = [];
 let deleteConfirmTimer = null;
+let sessionMetricMode = localStorage.getItem('greenup_session_metric_mode') || 'power';
 
 function formatSessionDuration(totalSeconds, includeSeconds = true) {
     if (totalSeconds == null || isNaN(totalSeconds)) return '--';
@@ -45,10 +46,10 @@ function formatChartTimeLabel(totalSeconds) {
     return `${m}${mLabel}`;
 }
 
-function formatSessionState(st, currentA, iecState) {
+function formatSessionState(st, iecState) {
     if (!st) return '--';
     const s = st.toUpperCase();
-    if (s === 'D' || s === 'E' || (currentA && currentA > 0.5) || iecState === 'C') {
+    if (s === 'D' || s === 'E' || iecState === 'C') {
         return `${t('sessions.state_charging') || 'En charge'} (${s})`;
     } else if (s === 'C') {
         return `${t('sessions.state_waiting_car') || 'Attente véhicule'} (${s})`;
@@ -231,6 +232,97 @@ function updateSessionsDropdown(isDefaultSelectionRequested) {
     }
 }
 
+function renderMetricCard() {
+    const act = (selectedSessionId === 'active') ? sessionsCache.active_session : null;
+    const savedList = sessionsCache.sessions || [];
+    const s = act || savedList.find(item => item.id === selectedSessionId);
+
+    const titleEl = document.getElementById('sessionMetricTitle');
+    const maxValEl = document.getElementById('sessionValMaxPower');
+    const avgValEl = document.getElementById('sessionValAvgPower');
+    const iconEl = document.getElementById('sessionMetricIcon');
+
+    if (!s) {
+        if (maxValEl) maxValEl.innerText = '--';
+        if (avgValEl) avgValEl.innerText = '--';
+        return;
+    }
+
+    if (sessionMetricMode === 'current') {
+        if (titleEl) {
+            titleEl.setAttribute('data-i18n', 'sessions.stat_current_max');
+            titleEl.innerText = t('sessions.stat_current_max') || 'Courant';
+        }
+        if (iconEl) iconEl.innerText = '⚡';
+        if (maxValEl) {
+            maxValEl.className = 'text-sm sm:text-base font-bold text-sky-400 font-mono mt-1';
+            const maxA = s.max_current_a != null ? s.max_current_a : 0;
+            maxValEl.innerText = `${maxA.toFixed(1)} A`;
+        }
+        if (avgValEl) {
+            const avgA = (s.avg_current_a != null && s.avg_current_a > 0)
+                ? s.avg_current_a
+                : (s.avg_power_w && s.avg_power_w > 0 ? (s.avg_power_w / 230) : 0);
+            avgValEl.innerText = avgA > 0 ? `Moy: ${avgA.toFixed(1)} A` : 'Moy: --';
+        }
+    } else {
+        // power mode
+        if (titleEl) {
+            titleEl.setAttribute('data-i18n', 'sessions.stat_power_max');
+            titleEl.innerText = t('sessions.stat_power_max') || 'Puissance';
+        }
+        if (iconEl) iconEl.innerText = '📈';
+        if (maxValEl) {
+            maxValEl.className = 'text-sm sm:text-base font-bold text-emerald-400 font-mono mt-1';
+            const maxW = s.max_power_w != null ? s.max_power_w : 0;
+            maxValEl.innerText = `${(maxW / 1000).toFixed(2)} kW`;
+        }
+        if (avgValEl) {
+            const avgW = (s.avg_power_w != null && s.avg_power_w > 0) ? s.avg_power_w : 0;
+            avgValEl.innerText = avgW > 0 ? `Moy: ${(avgW / 1000).toFixed(2)} kW` : 'Moy: --';
+        }
+    }
+}
+
+function setSessionMetricMode(mode) {
+    if (mode !== 'current' && mode !== 'power') mode = 'power';
+    sessionMetricMode = mode;
+    localStorage.setItem('greenup_session_metric_mode', mode);
+
+    const toggleKw = document.getElementById('toggleKwLabel');
+    const toggleAmps = document.getElementById('toggleAmpsLabel');
+    if (toggleKw) toggleKw.classList.toggle('active', mode === 'power');
+    if (toggleAmps) toggleAmps.classList.toggle('active', mode === 'current');
+
+    const btnKw = document.getElementById('btnChartModeKw');
+    const btnAmps = document.getElementById('btnChartModeAmps');
+    if (btnKw) btnKw.classList.toggle('active', mode === 'power');
+    if (btnAmps) {
+        btnAmps.classList.toggle('active', mode === 'current');
+        btnAmps.classList.toggle('amps-mode', mode === 'current');
+    }
+
+    const chartTitle = document.getElementById('sessionChartTitle');
+    const chartDot = document.getElementById('sessionChartDot');
+    if (chartTitle) {
+        const key = mode === 'current' ? 'sessions.chart_current_curve' : 'sessions.chart_power_curve';
+        chartTitle.setAttribute('data-i18n', key);
+        chartTitle.innerText = t(key) || (mode === 'current' ? 'Courbe de courant' : 'Courbe de puissance');
+    }
+    if (chartDot) {
+        if (mode === 'current') {
+            chartDot.classList.remove('bg-emerald-400');
+            chartDot.classList.add('bg-sky-400');
+        } else {
+            chartDot.classList.remove('bg-sky-400');
+            chartDot.classList.add('bg-emerald-400');
+        }
+    }
+
+    renderMetricCard();
+    drawChart(currentChartPoints);
+}
+
 function renderEmptySessionView() {
     selectedSessionId = null;
     currentChartPoints = [];
@@ -245,8 +337,7 @@ function renderEmptySessionView() {
     setElemText('sessionValTotalDuration', '--');
     setElemText('sessionValEnergy', '--');
     setElemText('sessionValPhase', '--');
-    setElemText('sessionValMaxPower', '--');
-    setElemText('sessionValAvgPower', '--');
+    renderMetricCard();
     const reasonEl = document.getElementById('sessionValReason');
     if (reasonEl) {
         reasonEl.setAttribute('data-i18n', 'sessions.no_sessions');
@@ -273,17 +364,21 @@ function onSessionSelected(id) {
         setElemText('sessionValChargingDuration', formatSessionDuration(act.charging_duration_seconds));
         setElemText('sessionValTotalDuration', `Total: ${formatSessionDuration(act.elapsed_seconds)}`);
         setElemText('sessionValEnergy', `${act.total_energy_kwh.toFixed(2)} kWh`);
-        setElemText('sessionValPhase', act.phase || 'Mono');
-        setElemText('sessionValMaxPower', `${(act.max_power_w / 1000).toFixed(2)} kW`);
-        setElemText('sessionValAvgPower', `Max: ${act.max_current_a.toFixed(1)} A`);
+        const plug = act.plug_type || 'Type 2';
+        const phase = act.phase || 'Mono';
+        setElemText('sessionValPhase', `${plug} • ${phase}`);
+
+        renderMetricCard();
+
         const reasonEl = document.getElementById('sessionValReason');
         if (reasonEl) {
             reasonEl.removeAttribute('data-i18n');
-            reasonEl.innerText = formatSessionState(act.state, act.current_a, act.iec_state);
+            reasonEl.innerText = formatSessionState(act.state, act.iec_state);
             const iecPart = act.iec_state ? ` • IEC 61851: État ${act.iec_state}` : '';
             reasonEl.title = `État Legrand: ${act.state}${iecPart}`;
         }
-        setElemText('sessionValEndTime', `Inst: ${(act.power_w / 1000).toFixed(2)} kW (${act.current_a.toFixed(1)} A)`);
+        // Supprime toute référence aux données instantanées
+        setElemText('sessionValEndTime', t('sessions.active_ongoing') || 'Session en cours');
 
         if (btnZip) btnZip.disabled = false;
         if (btnDel) {
@@ -301,16 +396,19 @@ function onSessionSelected(id) {
         setElemText('sessionValChargingDuration', formatSessionDuration(s.charging_duration_seconds));
         setElemText('sessionValTotalDuration', `Total: ${formatSessionDuration(s.total_duration_seconds)}`);
         setElemText('sessionValEnergy', `${s.total_energy_kwh.toFixed(2)} kWh`);
-        setElemText('sessionValPhase', s.phase || 'Mono');
-        setElemText('sessionValMaxPower', `${(s.max_power_w / 1000).toFixed(2)} kW`);
-        setElemText('sessionValAvgPower', `Moy: ${(s.avg_power_w / 1000).toFixed(2)} kW`);
+        const plug = s.plug_type || 'Type 2';
+        const phase = s.phase || 'Mono';
+        setElemText('sessionValPhase', `${plug} • ${phase}`);
+
+        renderMetricCard();
+
         const reasonElem = document.getElementById('sessionValReason');
         if (reasonElem) {
             reasonElem.removeAttribute('data-i18n');
             reasonElem.innerText = formatTerminationReason(s.termination_reason);
             reasonElem.title = s.termination_reason || '';
         }
-        setElemText('sessionValEndTime', s.end_time || '--');
+        setElemText('sessionValEndTime', s.end_time ? `Fin: ${s.end_time}` : '--');
 
         if (btnZip) btnZip.disabled = !s.has_csv && !s.has_txt;
         if (btnDel) {
@@ -455,16 +553,26 @@ function drawChart(points, hoverIndex = -1) {
     const plotH = Math.max(10, height - padTop - padBottom);
 
     const maxT = Math.max(points[points.length - 1].t, 60);
-    let maxKw = 0;
+    const isCurrentMode = sessionMetricMode === 'current';
+
+    let maxVal = 0;
     for (let p of points) {
-        if (p.kw > maxKw) maxKw = p.kw;
+        const val = isCurrentMode ? p.amps : p.kw;
+        if (val > maxVal) maxVal = val;
     }
-    // Round maxKw up to next pleasant step (e.g. 4.0, 7.5, 11.0, 22.0)
-    let yMax = Math.ceil(Math.max(maxKw * 1.15, 3.7));
+
+    let yMax;
+    if (isCurrentMode) {
+        yMax = Math.ceil(Math.max(maxVal * 1.15, 16));
+        if (yMax > 16 && yMax <= 32) yMax = 32;
+        else if (yMax > 32 && yMax <= 40) yMax = 40;
+    } else {
+        yMax = Math.ceil(Math.max(maxVal * 1.15, 3.7));
+    }
 
     // Coordinates mapping
     const getX = (t) => padLeft + (t / maxT) * plotW;
-    const getY = (kw) => padTop + plotH - (kw / yMax) * plotH;
+    const getY = (val) => padTop + plotH - (val / yMax) * plotH;
 
     // 1. Draw horizontal grid lines & Y labels (3 divisions)
     ctx.lineWidth = 1;
@@ -484,7 +592,8 @@ function drawChart(points, hoverIndex = -1) {
         ctx.stroke();
 
         ctx.fillStyle = '#64748b';
-        ctx.fillText(`${stepVal.toFixed(1)}k`, padLeft - 6, y);
+        const labelText = isCurrentMode ? `${Math.round(stepVal)} A` : `${stepVal.toFixed(1)}k`;
+        ctx.fillText(labelText, padLeft - 6, y);
     }
 
     // 2. Draw X axis time labels (4 intervals)
@@ -500,14 +609,21 @@ function drawChart(points, hoverIndex = -1) {
 
     // 3. Draw gradient filled area under the curve
     const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
-    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
-    gradient.addColorStop(0.7, 'rgba(14, 165, 233, 0.15)');
-    gradient.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+    if (isCurrentMode) {
+        gradient.addColorStop(0, 'rgba(14, 165, 233, 0.35)');
+        gradient.addColorStop(0.7, 'rgba(56, 189, 248, 0.15)');
+        gradient.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+    } else {
+        gradient.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
+        gradient.addColorStop(0.7, 'rgba(14, 165, 233, 0.15)');
+        gradient.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+    }
 
     ctx.beginPath();
     ctx.moveTo(getX(points[0].t), getY(0));
     for (let i = 0; i < points.length; i++) {
-        ctx.lineTo(getX(points[i].t), getY(points[i].kw));
+        const val = isCurrentMode ? points[i].amps : points[i].kw;
+        ctx.lineTo(getX(points[i].t), getY(val));
     }
     ctx.lineTo(getX(points[points.length - 1].t), getY(0));
     ctx.closePath();
@@ -516,13 +632,13 @@ function drawChart(points, hoverIndex = -1) {
 
     // 4. Draw curve line
     ctx.beginPath();
-    ctx.strokeStyle = '#10b981';
+    ctx.strokeStyle = isCurrentMode ? '#0ea5e9' : '#10b981';
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     for (let i = 0; i < points.length; i++) {
         const x = getX(points[i].t);
-        const y = getY(points[i].kw);
+        const y = getY(isCurrentMode ? points[i].amps : points[i].kw);
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     }
@@ -532,11 +648,11 @@ function drawChart(points, hoverIndex = -1) {
     if (hoverIndex >= 0 && hoverIndex < points.length) {
         const p = points[hoverIndex];
         const hx = getX(p.t);
-        const hy = getY(p.kw);
+        const hy = getY(isCurrentMode ? p.amps : p.kw);
 
         // Vertical dashed line
         ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+        ctx.strokeStyle = isCurrentMode ? 'rgba(56, 189, 248, 0.8)' : 'rgba(52, 211, 153, 0.8)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(hx, padTop);
@@ -547,13 +663,13 @@ function drawChart(points, hoverIndex = -1) {
         // Outer glow
         ctx.beginPath();
         ctx.arc(hx, hy, 6, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.fillStyle = isCurrentMode ? 'rgba(14, 165, 233, 0.35)' : 'rgba(16, 185, 129, 0.35)';
         ctx.fill();
 
         // Inner solid point
         ctx.beginPath();
         ctx.arc(hx, hy, 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = '#38bdf8';
+        ctx.fillStyle = isCurrentMode ? '#38bdf8' : '#34d399';
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
@@ -601,12 +717,19 @@ function setupChartInteractions() {
 
         if (tooltip) {
             const timeStr = formatSessionDuration(p.t);
-            const stateLabel = p.state ? formatSessionState(p.state, p.amps) : '';
+            const stateLabel = p.state ? formatSessionState(p.state) : '';
             const stateStr = stateLabel ? ` • ${stateLabel}` : '';
-            tooltip.innerHTML = `
-                <div class="font-bold text-sky-400 font-mono">${p.kw.toFixed(2)} kW <span class="text-slate-300 font-normal">(${p.amps.toFixed(1)} A)</span></div>
-                <div class="text-[9px] text-slate-400 font-mono mt-0.5">${timeStr}${stateStr}</div>
-            `;
+            if (sessionMetricMode === 'current') {
+                tooltip.innerHTML = `
+                    <div class="font-bold text-sky-400 font-mono">${p.amps.toFixed(1)} A <span class="text-slate-300 font-normal">(${p.kw.toFixed(2)} kW)</span></div>
+                    <div class="text-[9px] text-slate-400 font-mono mt-0.5">${timeStr}${stateStr}</div>
+                `;
+            } else {
+                tooltip.innerHTML = `
+                    <div class="font-bold text-emerald-400 font-mono">${p.kw.toFixed(2)} kW <span class="text-slate-300 font-normal">(${p.amps.toFixed(1)} A)</span></div>
+                    <div class="text-[9px] text-slate-400 font-mono mt-0.5">${timeStr}${stateStr}</div>
+                `;
+            }
             tooltip.style.display = 'block';
             tooltip.style.left = `${mouseX}px`;
             tooltip.style.top = `${mouseY}px`;
@@ -790,6 +913,29 @@ function initSessions() {
         const btnDel = document.getElementById('btnSessionDelete');
         if (btnDel) btnDel.addEventListener('click', handleDeleteSessionClick);
 
+        // Metric unit toggles (kW / A)
+        const btnToggleMetric = document.getElementById('btnSessionMetricToggle');
+        if (btnToggleMetric) {
+            btnToggleMetric.addEventListener('click', () => {
+                const nextMode = (sessionMetricMode === 'power') ? 'current' : 'power';
+                setSessionMetricMode(nextMode);
+            });
+        }
+
+        const btnChartKw = document.getElementById('btnChartModeKw');
+        if (btnChartKw) {
+            btnChartKw.addEventListener('click', () => {
+                setSessionMetricMode('power');
+            });
+        }
+
+        const btnChartAmps = document.getElementById('btnChartModeAmps');
+        if (btnChartAmps) {
+            btnChartAmps.addEventListener('click', () => {
+                setSessionMetricMode('current');
+            });
+        }
+
         // Chart interactions & resize
         setupChartInteractions();
         window.addEventListener('resize', () => {
@@ -800,10 +946,14 @@ function initSessions() {
         });
     }
 
+    // Apply stored metric mode (power / current)
+    setSessionMetricMode(sessionMetricMode);
+
     // Check stored active tab
     const savedTab = localStorage.getItem('greenup_active_tab') || 'board';
     switchMainTab(savedTab);
 }
 
-// Expose updateSessionsDropdown to global scope so i18n can trigger re-renders on language changes
+// Expose updateSessionsDropdown and setSessionMetricMode to global scope
 window.updateSessionsDropdown = updateSessionsDropdown;
+window.setSessionMetricMode = setSessionMetricMode;
