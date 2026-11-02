@@ -123,8 +123,8 @@ function buildAuthUrl(url) {
 
 async function apiFetch(url, options = {}) {
     const isMutation = options.method && options.method.toUpperCase() !== 'GET';
-    const isExportOrSpecial = url.includes('/export');
-    const isProtected = isMutation || isExportOrSpecial;
+    const isLogsExport = url.includes('/api/logs/export');
+    const isProtected = isMutation || isLogsExport;
 
     // If auth state is not yet resolved, or if client is not authenticated in strict mode,
     // or attempting a protected mutating action in kiosk mode without token, prevent outgoing call.

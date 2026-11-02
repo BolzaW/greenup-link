@@ -293,11 +293,7 @@ async function loadAndDisplayChart(sessionId) {
     }
 
     try {
-        const res = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/export`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ format: 'csv' })
-        });
+        const res = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/export?format=csv`);
 
         if (!res.ok) {
             currentChartPoints = [];
@@ -602,11 +598,7 @@ async function downloadSelectedSessionZip() {
         if (iconSpinner) iconSpinner.classList.remove('hidden');
         if (btnZip) btnZip.disabled = true;
 
-        const res = await apiFetch(`/api/sessions/${encodeURIComponent(actualId)}/export`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ format: 'zip' })
-        });
+        const res = await apiFetch(`/api/sessions/${encodeURIComponent(actualId)}/export?format=zip`);
 
         if (!res.ok) {
             let errMsg = 'Export failed';

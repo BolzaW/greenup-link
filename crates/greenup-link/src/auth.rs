@@ -185,6 +185,7 @@ pub fn is_kiosk_permitted(method: &axum::http::Method, path: &str) -> bool {
         || path == "/api/meter"
         || path == "/api/status"
         || path == "/api/sessions"
+        || (path.starts_with("/api/sessions/") && path.ends_with("/export"))
         || path == "/api/mode"
         || path == "/api/logs"
         || path == "/api/logs/stream"
@@ -336,6 +337,7 @@ mod tests {
         assert!(is_kiosk_permitted(&Method::GET, "/api/meter"));
         assert!(is_kiosk_permitted(&Method::GET, "/api/status"));
         assert!(is_kiosk_permitted(&Method::GET, "/api/sessions"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/sessions/123/export"));
         assert!(is_kiosk_permitted(&Method::GET, "/api/mode"));
         assert!(is_kiosk_permitted(&Method::GET, "/api/logs"));
         assert!(is_kiosk_permitted(&Method::GET, "/api/logs/stream"));

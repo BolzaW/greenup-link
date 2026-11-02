@@ -74,7 +74,7 @@ pub fn build_router(station: SharedStation, config: HttpConfig) -> Router {
 
     let protected_api = Router::new()
         .route("/api/sessions", get(list_sessions_handler))
-        .route("/api/sessions/:id/export", post(export_session_handler))
+        .route("/api/sessions/:id/export", get(export_session_handler))
         .route("/api/sessions/:id", axum::routing::delete(delete_session_handler))
         .route("/api/logs", get(get_logs))
         .route("/api/logs/stream", get(stream_logs))
@@ -949,15 +949,15 @@ async fn list_sessions_handler(
 }
 
 #[derive(serde::Deserialize)]
-pub struct ExportSessionPayload {
-    pub format: String,
+pub struct ExportSessionQuery {
+    pub format: Option<String>,
 }
 
-/// POST /api/sessions/:id/export
-/// Exports a session file in the requested format (csv, txt, zip).
+/// GET /api/sessions/:id/export?format=csv|txt|zip
+/// Exports a session file in the requested format (csv, txt, zip). Defaults to csv.
 async fn export_session_handler(
     Path(id): Path<String>,
-    Json(payload): Json<ExportSessionPayload>,
+    Query(query): Query<ExportSessionQuery>,
 ) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
     if !greenup_driver::session::is_valid_session_id(&id) {
         return Err((
@@ -970,7 +970,7 @@ async fn export_session_handler(
     let csv_path = sessions_dir.join(format!("{}.csv", id));
     let txt_path = sessions_dir.join(format!("{}.txt", id));
 
-    let fmt = payload.format.trim().to_lowercase();
+    let fmt = query.format.as_deref().unwrap_or("csv").trim().to_lowercase();
     logger::debug("API", &format!("Export requested for session '{}' in format '{}'", id, fmt));
 
     match fmt.as_str() {
@@ -1679,8 +1679,11 @@ mod tests {
         assert!(res_del_unknown.is_err());
         assert_eq!(res_del_unknown.unwrap_err().0, StatusCode::NOT_FOUND);
 
-        // 4. POST /api/sessions/:id/export with invalid format -> 400 Bad Request
-        let res_export_bad = export_session_handler(Path("some_session".to_string()), Json(ExportSessionPayload { format: "invalid_format".to_string() })).await;
+        // 4. GET /api/sessions/:id/export with invalid format -> 400 Bad Request
+        let res_export_bad = export_session_handler(
+            Path("some_session".to_string()),
+            Query(ExportSessionQuery { format: Some("invalid_format".to_string()) }),
+        ).await;
         assert!(res_export_bad.is_err());
         assert_eq!(res_export_bad.unwrap_err().0, StatusCode::BAD_REQUEST);
     }
@@ -1762,6 +1765,25 @@ mod tests {
                 .unwrap(),
         ).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
+
+        // GET /api/sessions/2026-11-02_12-00-00_point1/export without token -> reaches handler (404 Not Found, NOT 401)
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/sessions/2026-11-02_12-00-00_point1/export?format=csv")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        // DELETE /api/sessions/2026-11-02_12-00-00_point1 without token -> 401 Unauthorized!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .method("DELETE")
+                .uri("/api/sessions/2026-11-02_12-00-00_point1")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
 
         // Sensitive GET /api/logs/export without token -> 401 Unauthorized!
         let res = app_kiosk.clone().oneshot(
