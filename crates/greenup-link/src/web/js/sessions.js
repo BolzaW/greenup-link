@@ -7,7 +7,7 @@ let sessionCsvCache = new Map();
 let currentChartPoints = [];
 let deleteConfirmTimer = null;
 
-function formatSessionDuration(totalSeconds) {
+function formatSessionDuration(totalSeconds, includeSeconds = true) {
     if (totalSeconds == null || isNaN(totalSeconds)) return '--';
     const s = Math.max(0, Math.floor(totalSeconds));
     const h = Math.floor(s / 3600);
@@ -18,9 +18,15 @@ function formatSessionDuration(totalSeconds) {
     const sLabel = t('sessions.time_s') || 's';
 
     if (h > 0) {
-        return `${h}${hLabel} ${m.toString().padStart(2, '0')}${mLabel}`;
+        if (!includeSeconds) {
+            return `${h}${hLabel} ${m.toString().padStart(2, '0')}${mLabel}`;
+        }
+        return `${h}${hLabel} ${m.toString().padStart(2, '0')}${mLabel} ${sec.toString().padStart(2, '0')}${sLabel}`;
     }
     if (m > 0) {
+        if (!includeSeconds) {
+            return `${m}${mLabel}`;
+        }
         return `${m}${mLabel} ${sec.toString().padStart(2, '0')}${sLabel}`;
     }
     return `${sec}${sLabel}`;
@@ -183,7 +189,7 @@ function updateSessionsDropdown(isDefaultSelectionRequested) {
         const opt = document.createElement('option');
         opt.value = 'active';
         const prefix = t('sessions.active_prefix') || '⚡ [En cours]';
-        opt.innerText = `${prefix} ${act.start_time} — ${act.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(act.charging_duration_seconds)})`;
+        opt.innerText = `${prefix} ${act.start_time} — ${act.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(act.charging_duration_seconds, false)})`;
         select.appendChild(opt);
     }
 
@@ -192,7 +198,7 @@ function updateSessionsDropdown(isDefaultSelectionRequested) {
         const opt = document.createElement('option');
         opt.value = s.id;
         const sideBadge = (window.isDualStation && s.side) ? `[P${s.side}] ` : '';
-        opt.innerText = `📅 ${sideBadge}${s.start_time} — ${s.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(s.charging_duration_seconds)})`;
+        opt.innerText = `📅 ${sideBadge}${s.start_time} — ${s.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(s.charging_duration_seconds, false)})`;
         select.appendChild(opt);
     });
 
