@@ -131,11 +131,8 @@ pub fn subscribe() -> broadcast::Receiver<LogEntry> {
 
 /// Retrieves a snapshot of the most recent in-memory logs.
 pub fn get_recent_logs() -> Vec<LogEntry> {
-    if let Ok(guard) = RECENT_LOGS.lock() {
-        guard.iter().cloned().collect()
-    } else {
-        Vec::new()
-    }
+    let guard = RECENT_LOGS.lock().unwrap_or_else(|e| e.into_inner());
+    guard.iter().cloned().collect()
 }
 
 /// Returns the configured log directory.
@@ -235,6 +232,90 @@ fn get_or_rotate_daily_file() -> String {
     path
 }
 
+/// Parses a single formatted line from the daily log file into a [`LogEntry`].
+pub fn parse_log_line(line: &str, id: u64) -> LogEntry {
+    let trimmed = line.trim();
+    if trimmed.starts_with('[') {
+        if let Some(first_end) = trimmed.find(']') {
+            let full_ts = &trimmed[1..first_end];
+            let time_str = if let Some(space_idx) = full_ts.find(' ') {
+                full_ts[space_idx + 1..].to_string()
+            } else {
+                full_ts.to_string()
+            };
+
+            let rest = trimmed[first_end + 1..].trim();
+            if rest.starts_with('[') {
+                if let Some(second_end) = rest.find(']') {
+                    let level_str = &rest[1..second_end];
+                    let rest2 = rest[second_end + 1..].trim();
+
+                    if rest2.starts_with('[') {
+                        if let Some(third_end) = rest2.find(']') {
+                            let cat_str = &rest2[1..third_end];
+                            let mut remainder = rest2[third_end + 1..].trim();
+
+                            let mut side = None;
+                            if remainder.starts_with("[SIDE") {
+                                if let Some(side_end) = remainder.find(']') {
+                                    let side_str = &remainder[5..side_end];
+                                    side = side_str.parse::<u8>().ok();
+                                    remainder = remainder[side_end + 1..].trim();
+                                }
+                            }
+
+                            return LogEntry {
+                                id,
+                                timestamp: time_str,
+                                category: cat_str.to_string(),
+                                side,
+                                level: level_str.to_string(),
+                                message: remainder.to_string(),
+                            };
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback for non-standard lines
+    LogEntry {
+        id,
+        timestamp: Local::now().format("%H:%M:%S%.3f").to_string(),
+        category: "SYS".to_string(),
+        side: None,
+        level: "INFO".to_string(),
+        message: trimmed.to_string(),
+    }
+}
+
+/// Pre-populates the in-memory ring buffer with up to MAX_RECENT_LOGS from the daily log file.
+pub fn preload_recent_logs_from_file(path: &str) {
+    if let Ok(content) = fs::read_to_string(path) {
+        let valid_lines: Vec<&str> = content
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty() && !l.starts_with("==="))
+            .collect();
+
+        if !valid_lines.is_empty() {
+            let start = valid_lines.len().saturating_sub(MAX_RECENT_LOGS);
+            let slice = &valid_lines[start..];
+
+            let mut guard = RECENT_LOGS.lock().unwrap_or_else(|e| e.into_inner());
+            guard.clear();
+
+            let mut current_id = 1;
+            for line in slice {
+                guard.push_back(parse_log_line(line, current_id));
+                current_id += 1;
+            }
+            NEXT_ID.store(current_id, Ordering::Relaxed);
+        }
+    }
+}
+
 /// Initializes the logger and sets initial log level from environment.
 pub fn init() {
     let dir = get_log_dir();
@@ -253,6 +334,9 @@ pub fn init() {
 
     let initial_path = get_or_rotate_daily_file();
     println!("[Logger] 📝 Daily rolling log active: {} (level: {})", initial_path, get_log_level().as_str());
+
+    // Preload recent logs from daily log file so Web UI console has history after reboot/restart
+    preload_recent_logs_from_file(&initial_path);
 
     // Check if initial log file already exceeds threshold
     if let Ok(meta) = fs::metadata(&initial_path) {
@@ -323,7 +407,8 @@ pub fn log_with_level_side(category: &str, side: Option<u8>, level: LogLevel, me
     };
 
     // Store in in-memory ring buffer (up to 500 lines for the Web console)
-    if let Ok(mut guard) = RECENT_LOGS.lock() {
+    {
+        let mut guard = RECENT_LOGS.lock().unwrap_or_else(|e| e.into_inner());
         if guard.len() >= MAX_RECENT_LOGS {
             guard.pop_front();
         }
@@ -437,5 +522,35 @@ mod tests {
         assert_eq!(LogLevel::from_str_loose("error"), Some(LogLevel::Error));
         assert_eq!(LogLevel::from_str_loose("trace"), Some(LogLevel::Trace));
         assert_eq!(LogLevel::from_str_loose("invalid"), None);
+    }
+
+    #[test]
+    fn test_parse_log_line() {
+        // Standard line without side
+        let line1 = "[2026-11-02 20:04:26.927] [INFO] [SERIAL_TX] T2COK";
+        let entry1 = parse_log_line(line1, 42);
+        assert_eq!(entry1.id, 42);
+        assert_eq!(entry1.timestamp, "20:04:26.927");
+        assert_eq!(entry1.level, "INFO");
+        assert_eq!(entry1.category, "SERIAL_TX");
+        assert_eq!(entry1.side, None);
+        assert_eq!(entry1.message, "T2COK");
+
+        // Line with dual side tag
+        let line2 = "[2026-11-02 20:04:27.010] [INFO] [SERIAL_RX] [SIDE2] State:C";
+        let entry2 = parse_log_line(line2, 43);
+        assert_eq!(entry2.id, 43);
+        assert_eq!(entry2.timestamp, "20:04:27.010");
+        assert_eq!(entry2.level, "INFO");
+        assert_eq!(entry2.category, "SERIAL_RX");
+        assert_eq!(entry2.side, Some(2));
+        assert_eq!(entry2.message, "State:C");
+
+        // Fallback for header line or non-bracketed line
+        let line3 = "=== GreenUp Log started on 2026-11-02 ===";
+        let entry3 = parse_log_line(line3, 44);
+        assert_eq!(entry3.id, 44);
+        assert_eq!(entry3.category, "SYS");
+        assert_eq!(entry3.message, "=== GreenUp Log started on 2026-11-02 ===");
     }
 }

@@ -335,6 +335,11 @@ async function onAuthenticatedStart() {
     if (!consoleInitialized) {
         consoleInitialized = true;
         initConsole();
+    } else {
+        const consolePanel = document.getElementById('consolePanel');
+        if (consolePanel && !consolePanel.classList.contains('hidden') && typeof startLogStream === 'function') {
+            startLogStream();
+        }
     }
     if (!sessionsInitialized && typeof initSessions === 'function') {
         sessionsInitialized = true;
@@ -345,6 +350,19 @@ async function onAuthenticatedStart() {
         initConfig();
     }
 }
+
+// Global wake-up trigger for mobile browsers returning from sleep/background
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && window.isAuthResolved && (!window.isAuthRequired || window.isAuthenticated)) {
+        fetchTelemetry();
+        fetchInfo();
+    }
+});
+window.addEventListener('focus', () => {
+    if (window.isAuthResolved && (!window.isAuthRequired || window.isAuthenticated)) {
+        fetchTelemetry();
+    }
+});
 
 async function fetchInfo() {
     if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;

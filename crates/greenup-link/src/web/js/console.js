@@ -14,6 +14,7 @@ let logEventSource = null;
 let isStartingLogStream = false;
 let isSendingCommand = false;
 let consoleDomListenersAttached = false;
+let sseReconnectTimer = null;
 const seenLogIds = new Set();
 
 const LOG_LEVEL_SEVERITY = {
@@ -107,6 +108,10 @@ function connectSse() {
         logEventSource.close();
         logEventSource = null;
     }
+    if (sseReconnectTimer) {
+        clearTimeout(sseReconnectTimer);
+        sseReconnectTimer = null;
+    }
     try {
         logEventSource = new EventSource(buildAuthUrl('/api/logs/stream'));
         logEventSource.onmessage = function(event) {
@@ -119,9 +124,17 @@ function connectSse() {
             }
         };
         logEventSource.onerror = function() {
-            // Server disconnected or error: close stream to prevent blind browser C++ retries
             stopLogStream();
-            if (typeof handleServerOffline === 'function') {
+            // If the document is currently visible and console is open, schedule auto-reconnection
+            if (document.visibilityState === 'visible') {
+                const consolePanel = document.getElementById('consolePanel');
+                if (consolePanel && !consolePanel.classList.contains('hidden')) {
+                    if (sseReconnectTimer) clearTimeout(sseReconnectTimer);
+                    sseReconnectTimer = setTimeout(() => {
+                        refreshLogsAndReconnect();
+                    }, 2500);
+                }
+            } else if (typeof handleServerOffline === 'function') {
                 handleServerOffline();
             }
         };
@@ -132,10 +145,55 @@ function connectSse() {
 
 function stopLogStream() {
     isStartingLogStream = false;
+    if (sseReconnectTimer) {
+        clearTimeout(sseReconnectTimer);
+        sseReconnectTimer = null;
+    }
     if (logEventSource) {
         logEventSource.close();
         logEventSource = null;
     }
+}
+
+function refreshLogsAndReconnect() {
+    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    const consolePanel = document.getElementById('consolePanel');
+    if (!consolePanel || consolePanel.classList.contains('hidden')) return;
+
+    if (sseReconnectTimer) {
+        clearTimeout(sseReconnectTimer);
+        sseReconnectTimer = null;
+    }
+
+    // Catch up on logs missed while smartphone was asleep or tab backgrounded
+    apiFetch('/api/logs')
+        .then(res => res.ok ? res.json() : [])
+        .then(logs => {
+            if (Array.isArray(logs)) {
+                let hasNew = false;
+                for (const l of logs) {
+                    if (l && l.id && !seenLogIds.has(l.id)) {
+                        seenLogIds.add(l.id);
+                        logEntries.push(l);
+                        hasNew = true;
+                    }
+                }
+                if (hasNew) {
+                    if (logEntries.length > maxLogEntries) {
+                        logEntries = logEntries.slice(-maxLogEntries);
+                    }
+                    renderLogs();
+                }
+            }
+            if (!logEventSource || logEventSource.readyState === EventSource.CLOSED) {
+                connectSse();
+            }
+        })
+        .catch(() => {
+            if (!logEventSource || logEventSource.readyState === EventSource.CLOSED) {
+                connectSse();
+            }
+        });
 }
 
 function addLogEntry(entry) {
@@ -428,6 +486,16 @@ function setupConsoleDomListeners() {
             }
         });
     }
+
+    // Automatic reconnection & log catch-up when phone wakes up or browser tab becomes visible
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            refreshLogsAndReconnect();
+        }
+    });
+    window.addEventListener('focus', () => {
+        refreshLogsAndReconnect();
+    });
 }
 
 function sendCommandRaw(cmd) {
