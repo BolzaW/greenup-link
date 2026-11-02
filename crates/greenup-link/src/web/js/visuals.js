@@ -2,8 +2,8 @@
 // Accurately reflects Legrand firmware states (A, B, C, D, E, L, R, V, X...):
 // - 3 LEDs bar: independent hardware indicator simulation
 //   * State A & idle: 3 static white LEDs (matching Green'Up brand text)
-//   * State B & C: White LED chase (left solid ON, middle ON, right ON, then mid+right OFF, repeat)
-//   * State D & E (active charging): Green LED chase with same pattern
+//   * State B & C: White LED sequential chase (4s cycle: 1s all off, 1s led1, 1s led1+2, 1s all on)
+//   * State D & E (active charging): Green LED sequential chase with same pattern
 //   * Fault states: 3 solid red LEDs
 // - State B: Charger box pulses slowly in blue (waiting for station authorization)
 // - State C: Charger box solid green, Car pulses slowly in blue (waiting for vehicle request)
@@ -14,14 +14,14 @@ function updateChargerLeds(mode) {
     if (!chargerLed1 || !chargerLed2 || !chargerLed3) return;
     switch (mode) {
         case 'chase-white':
-            chargerLed1.className = 'charger-led led-white';
-            chargerLed2.className = 'charger-led led-white led-chase-mid';
-            chargerLed3.className = 'charger-led led-white led-chase-right';
+            chargerLed1.className = 'charger-led led-white led-chase-1';
+            chargerLed2.className = 'charger-led led-white led-chase-2';
+            chargerLed3.className = 'charger-led led-white led-chase-3';
             break;
         case 'chase-green':
-            chargerLed1.className = 'charger-led led-green';
-            chargerLed2.className = 'charger-led led-green led-chase-mid';
-            chargerLed3.className = 'charger-led led-green led-chase-right';
+            chargerLed1.className = 'charger-led led-green led-chase-1';
+            chargerLed2.className = 'charger-led led-green led-chase-2';
+            chargerLed3.className = 'charger-led led-green led-chase-3';
             break;
         case 'static-red':
             chargerLed1.className = 'charger-led led-red';

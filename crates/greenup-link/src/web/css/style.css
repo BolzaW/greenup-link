@@ -843,35 +843,51 @@
     box-shadow: 0 0 8px rgba(244, 63, 94, 0.75);
 }
 
-/* Chase animations for Middle and Right LEDs */
-.charger-led.led-chase-mid {
-    animation: legrandLedMidChase 1.2s ease-in-out infinite;
+/* Legrand 3-LED Sequential Fill Pattern (4s cycle: 1s all off, 1s led1, 1s led1+2, 1s led1+2+3) */
+.charger-led.led-chase-1 {
+    animation: legrandLed1Chase 4s ease-in-out infinite;
 }
 
-.charger-led.led-chase-right {
-    animation: legrandLedRightChase 1.2s ease-in-out infinite;
+.charger-led.led-chase-2 {
+    animation: legrandLed2Chase 4s ease-in-out infinite;
 }
 
-@keyframes legrandLedMidChase {
-    0%, 25% {
+.charger-led.led-chase-3 {
+    animation: legrandLed3Chase 4s ease-in-out infinite;
+}
+
+@keyframes legrandLed1Chase {
+    0%, 23% {
         opacity: 0.18;
     }
-    32%, 80% {
+    25%, 98% {
         opacity: 1;
     }
-    86%, 100% {
+    100% {
         opacity: 0.18;
     }
 }
 
-@keyframes legrandLedRightChase {
-    0%, 50% {
+@keyframes legrandLed2Chase {
+    0%, 48% {
         opacity: 0.18;
     }
-    57%, 80% {
+    50%, 98% {
         opacity: 1;
     }
-    86%, 100% {
+    100% {
+        opacity: 0.18;
+    }
+}
+
+@keyframes legrandLed3Chase {
+    0%, 73% {
+        opacity: 0.18;
+    }
+    75%, 98% {
+        opacity: 1;
+    }
+    100% {
         opacity: 0.18;
     }
 }
