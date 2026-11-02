@@ -26,7 +26,7 @@ const LOG_LEVEL_SEVERITY = {
 };
 
 async function syncLogLevelFromServer() {
-    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    if (!window.canReadData || !window.canReadData()) return;
     try {
         const res = await apiFetch('/api/logs/level');
         if (res.ok) {
@@ -73,7 +73,7 @@ function setDebugMode(enabled) {
 
 function startLogStream() {
     if (logEventSource || isStartingLogStream) return;
-    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    if (!window.canReadData || !window.canReadData()) return;
 
     isStartingLogStream = true;
     apiFetch('/api/logs')
@@ -103,7 +103,7 @@ function startLogStream() {
 }
 
 function connectSse() {
-    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    if (!window.canReadData || !window.canReadData()) return;
     if (logEventSource) {
         logEventSource.close();
         logEventSource = null;
@@ -156,7 +156,7 @@ function stopLogStream() {
 }
 
 function refreshLogsAndReconnect() {
-    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    if (!window.canReadData || !window.canReadData()) return;
     const consolePanel = document.getElementById('consolePanel');
     if (!consolePanel || consolePanel.classList.contains('hidden')) return;
 
@@ -416,6 +416,10 @@ function setupConsoleDomListeners() {
     const btnExport = document.getElementById('btnConsoleExport');
     if (btnExport) {
         btnExport.addEventListener('click', () => {
+            if (window.isAuthRequired && !window.isAuthenticated) {
+                if (typeof showAuthModal === 'function') showAuthModal(false);
+                return;
+            }
             window.location.href = buildAuthUrl('/api/logs/export');
         });
     }
@@ -499,6 +503,10 @@ function setupConsoleDomListeners() {
 }
 
 function sendCommandRaw(cmd) {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     if (isSendingCommand) return;
     isSendingCommand = true;
 

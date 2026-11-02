@@ -452,6 +452,20 @@
     box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
 }
 
+/* State: Secured with Kiosk / Consultation mode (unauthenticated guest) */
+.header-auth-btn.auth-kiosk {
+    color: #38bdf8;
+    background-color: rgba(56, 189, 248, 0.12);
+    border-color: rgba(56, 189, 248, 0.4);
+}
+
+.header-auth-btn.auth-kiosk:hover {
+    color: #0284c7;
+    background-color: rgba(56, 189, 248, 0.22);
+    border-color: rgba(56, 189, 248, 0.6);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+}
+
 /* State: Secured & Authenticated -> Subtle Emerald / Lock styling */
 .header-auth-btn.auth-locked-ok {
     color: #34d399;

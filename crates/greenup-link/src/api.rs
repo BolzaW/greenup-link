@@ -23,7 +23,8 @@ use std::sync::Arc;
 use axum::http::header::{
     HeaderValue, CACHE_CONTROL, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
 };
-use crate::auth::{self, SharedApiToken};
+use crate::auth::{self, AuthState, SharedAuthState};
+use crate::config::HttpConfig;
 
 /// Axum middleware appending standard defensive HTTP security headers to all responses.
 async fn security_headers_middleware(req: Request, next: Next) -> Response {
@@ -65,8 +66,11 @@ pub struct SideQuery {
     pub side: Option<u8>,
 }
 
-pub fn build_router(station: SharedStation, api_token: Option<String>) -> Router {
-    let token_state: SharedApiToken = api_token.map(Arc::new);
+pub fn build_router(station: SharedStation, config: HttpConfig) -> Router {
+    let auth_state: SharedAuthState = Arc::new(AuthState {
+        api_token: config.api_token.map(Arc::new),
+        auth_ihm: config.auth_ihm,
+    });
 
     let protected_api = Router::new()
         .route("/api/sessions", get(list_sessions_handler))
@@ -95,13 +99,13 @@ pub fn build_router(station: SharedStation, api_token: Option<String>) -> Router
         .route("/api/status", get(get_status))
         .with_state(station)
         .route_layer(axum::middleware::from_fn_with_state(
-            token_state.clone(),
+            auth_state.clone(),
             auth::require_auth,
         ));
 
     let auth_router = Router::new()
         .route("/api/auth/status", get(auth::auth_status))
-        .with_state(token_state);
+        .with_state(auth_state);
 
     let api_router = Router::new()
         .merge(auth_router)
@@ -1679,5 +1683,126 @@ mod tests {
         let res_export_bad = export_session_handler(Path("some_session".to_string()), Json(ExportSessionPayload { format: "invalid_format".to_string() })).await;
         assert!(res_export_bad.is_err());
         assert_eq!(res_export_bad.unwrap_err().0, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_auth_ihm_strict_vs_kiosk_router() {
+        use tower::ServiceExt;
+        use axum::body::Body;
+
+        let (station, _p1, _rx) = make_test_station();
+
+        // 1. Strict Mode (auth_ihm = true) with token
+        let strict_config = HttpConfig {
+            bind: "0.0.0.0:8080".to_string(),
+            api_token: Some("secret_pass_123".to_string()),
+            auth_ihm: true,
+        };
+        let app_strict = build_router(station.clone(), strict_config);
+
+        // GET /api/state without token -> 401 Unauthorized
+        let res = app_strict.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/state")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // GET /api/auth/status without token -> 200 OK (public endpoint)
+        let res = app_strict.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/auth/status")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // GET /api/state WITH Bearer token -> 200 OK
+        let res = app_strict.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/state")
+                .header("Authorization", "Bearer secret_pass_123")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // 2. Kiosk Mode (auth_ihm = false) with token
+        let kiosk_config = HttpConfig {
+            bind: "0.0.0.0:8080".to_string(),
+            api_token: Some("secret_pass_123".to_string()),
+            auth_ihm: false,
+        };
+        let app_kiosk = build_router(station.clone(), kiosk_config);
+
+        // GET /api/state without token -> 200 OK in Kiosk mode!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/state")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // GET /api/station without token -> 200 OK in Kiosk mode!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/station")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // GET /api/logs without token -> 200 OK in Kiosk mode!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/logs")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // Sensitive GET /api/logs/export without token -> 401 Unauthorized!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/logs/export")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // Sensitive POST /api/charge without token -> 401 Unauthorized!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/api/charge")
+                .header("Content-Type", "application/json")
+                .body(Body::from(r#"{"action":"enable"}"#))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // Sensitive POST /api/current/16 without token -> 401 Unauthorized!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/api/current/16")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // Sensitive POST /api/charge WITH Bearer token -> 200 OK in Kiosk mode!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/api/charge")
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer secret_pass_123")
+                .body(Body::from(r#"{"action":"enable"}"#))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
     }
 }

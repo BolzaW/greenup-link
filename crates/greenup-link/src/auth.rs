@@ -9,7 +9,22 @@ use serde_json::json;
 use std::sync::Arc;
 use greenup_driver::logger;
 
-pub type SharedApiToken = Option<Arc<String>>;
+#[derive(Debug, Clone)]
+pub struct AuthState {
+    pub api_token: Option<Arc<String>>,
+    pub auth_ihm: bool,
+}
+
+impl Default for AuthState {
+    fn default() -> Self {
+        Self {
+            api_token: None,
+            auth_ihm: true,
+        }
+    }
+}
+
+pub type SharedAuthState = Arc<AuthState>;
 
 /// Constant-time byte slice comparison to prevent timing side-channel attacks.
 pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
@@ -151,56 +166,96 @@ pub fn is_request_authorized(headers: &HeaderMap, query: Option<&str>, expected_
     false
 }
 
+/// Returns true if the HTTP request is permitted in open consultation mode ("kiosk", `auth_ihm = false`).
+pub fn is_kiosk_permitted(method: &axum::http::Method, path: &str) -> bool {
+    if method != axum::http::Method::GET {
+        return false;
+    }
+
+    // Explicitly exclude sensitive GET endpoints
+    if path == "/api/logs/export" {
+        return false;
+    }
+
+    // Allow read-only consultation endpoints
+    path == "/api/state"
+        || path == "/api/station"
+        || path == "/api/connectors"
+        || path.starts_with("/api/connectors/")
+        || path == "/api/meter"
+        || path == "/api/status"
+        || path == "/api/sessions"
+        || path == "/api/mode"
+        || path == "/api/logs"
+        || path == "/api/logs/stream"
+        || path == "/api/logs/level"
+        || path == "/api/auth/status"
+}
+
 /// Axum middleware enforcing API authentication when `api_token` is configured.
 /// Deliberately omits the `WWW-Authenticate: Basic` response header on 401 so that
 /// web browsers do not display their native basic-auth popup over the Web GUI.
 pub async fn require_auth(
-    State(api_token): State<SharedApiToken>,
+    State(auth_state): State<SharedAuthState>,
     req: Request,
     next: Next,
 ) -> Response {
-    let Some(expected) = api_token else {
+    let Some(ref expected) = auth_state.api_token else {
         return next.run(req).await;
     };
 
+    // If client supplied a valid token, allow the request unconditionally
     if is_request_authorized(req.headers(), req.uri().query(), expected.as_str()) {
-        next.run(req).await
-    } else {
-        logger::warn(
-            "API",
-            &format!("⚠️ 🔒 Unauthorized request rejected (401): {} {}", req.method(), req.uri().path()),
-        );
-        (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({
-                "error": "Unauthorized: valid API token required"
-            })),
-        )
-            .into_response()
+        return next.run(req).await;
     }
+
+    // In Kiosk / Consultation Libre mode (auth_ihm == false), permit read-only GET requests
+    if !auth_state.auth_ihm && is_kiosk_permitted(req.method(), req.uri().path()) {
+        return next.run(req).await;
+    }
+
+    logger::warn(
+        "API",
+        &format!("⚠️ 🔒 Unauthorized request rejected (401): {} {}", req.method(), req.uri().path()),
+    );
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({
+            "error": "Unauthorized: valid API token required"
+        })),
+    )
+        .into_response()
 }
 
 /// GET /api/auth/status
 /// Public endpoint allowing the Web GUI to check if authentication is enabled
 /// and whether the currently stored token is valid.
 pub async fn auth_status(
-    State(api_token): State<SharedApiToken>,
+    State(auth_state): State<SharedAuthState>,
     req: Request,
 ) -> impl IntoResponse {
-    match api_token {
+    match auth_state.api_token {
         None => {
             logger::debug("API", "🔐 Auth status check: authentication disabled (open access)");
             Json(json!({
                 "auth_required": false,
-                "authenticated": true
+                "authenticated": true,
+                "auth_ihm": false
             }))
         }
-        Some(expected) => {
+        Some(ref expected) => {
             let valid = is_request_authorized(req.headers(), req.uri().query(), expected.as_str());
-            logger::debug("API", &format!("🔐 Auth status check: required=true, authenticated={}", valid));
+            logger::debug(
+                "API",
+                &format!(
+                    "🔐 Auth status check: required=true, authenticated={}, auth_ihm={}",
+                    valid, auth_state.auth_ihm
+                ),
+            );
             Json(json!({
                 "auth_required": true,
-                "authenticated": valid
+                "authenticated": valid,
+                "auth_ihm": auth_state.auth_ihm
             }))
         }
     }
@@ -265,5 +320,41 @@ mod tests {
             Some("token=wrong"),
             "my token!"
         ));
+    }
+
+    #[test]
+    fn test_is_kiosk_permitted_rules() {
+        use axum::http::Method;
+
+        // Permitted GET consultation routes
+        assert!(is_kiosk_permitted(&Method::GET, "/api/state"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/station"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/connectors"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/connectors/1"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/connectors/1/meter"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/connectors/1/status"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/meter"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/status"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/sessions"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/mode"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/logs"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/logs/stream"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/logs/level"));
+        assert!(is_kiosk_permitted(&Method::GET, "/api/auth/status"));
+
+        // Strictly forbidden in Kiosk mode without auth
+        assert!(!is_kiosk_permitted(&Method::GET, "/api/logs/export"));
+        assert!(!is_kiosk_permitted(&Method::POST, "/api/charge"));
+        assert!(!is_kiosk_permitted(&Method::POST, "/api/current/16"));
+        assert!(!is_kiosk_permitted(&Method::POST, "/api/init"));
+        assert!(!is_kiosk_permitted(&Method::POST, "/api/reset"));
+        assert!(!is_kiosk_permitted(&Method::POST, "/api/tic/refresh"));
+        assert!(!is_kiosk_permitted(&Method::POST, "/api/bluetooth"));
+        assert!(!is_kiosk_permitted(&Method::POST, "/api/command"));
+        assert!(!is_kiosk_permitted(&Method::POST, "/api/voltage"));
+        assert!(!is_kiosk_permitted(&Method::POST, "/api/mode"));
+        assert!(!is_kiosk_permitted(&Method::POST, "/api/logs/level"));
+        assert!(!is_kiosk_permitted(&Method::POST, "/api/sessions/123/export"));
+        assert!(!is_kiosk_permitted(&Method::DELETE, "/api/sessions/123"));
     }
 }

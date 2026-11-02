@@ -97,7 +97,7 @@ function switchMainTab(tabName) {
 // ==============================================================================
 
 async function loadSessionsData(isDefaultSelectionRequested = false) {
-    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    if (!window.canReadData || !window.canReadData()) return;
 
     try {
         const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
@@ -581,6 +581,10 @@ function setupChartInteractions() {
 // ==============================================================================
 
 async function downloadSelectedSessionZip() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     if (!selectedSessionId) return;
 
     const actualId = (selectedSessionId === 'active')
@@ -653,6 +657,10 @@ function resetDeleteButton() {
 }
 
 async function handleDeleteSessionClick() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     if (!selectedSessionId || selectedSessionId === 'active') return;
 
     const btnDel = document.getElementById('btnSessionDelete');

@@ -102,7 +102,12 @@ async fn main() {
 
     let app_config = config::AppConfig::load();
     if app_config.http.api_token.is_some() {
-        greenup_driver::logger::log("SYS", "🔒 API authentication: ENABLED (Bearer token / Basic Auth)");
+        let auth_desc = if app_config.http.auth_ihm {
+            "STRICT (Web GUI & REST APIs protected)"
+        } else {
+            "KIOSK (Web GUI open for consultation, commands & settings protected)"
+        };
+        greenup_driver::logger::log("SYS", &format!("🔒 API authentication: ENABLED [{}]", auth_desc));
     } else {
         greenup_driver::logger::warn(
             "SYS",
@@ -218,7 +223,7 @@ async fn main() {
     }
 
     // Start the Axum HTTP server
-    let router = api::build_router(station, app_config.http.api_token);
+    let router = api::build_router(station, app_config.http.clone());
 
     let addr = &app_config.http.bind;
     greenup_driver::logger::log("SYS", &format!("🌍 Web server started: http://{}", addr));

@@ -3,6 +3,10 @@
 window.isAuthResolved = false;
 window.isAuthRequired = false;
 window.isAuthenticated = false;
+window.isAuthIhm = true;
+window.canReadData = function() {
+    return window.isAuthResolved && (!window.isAuthRequired || window.isAuthenticated || !window.isAuthIhm);
+};
 window.isDualStation = false;
 window.currentSide = 1;
 window.boardInfoComplete = false;
@@ -60,9 +64,10 @@ async function probeServerReconnection() {
         window.isAuthResolved = true;
         window.isAuthRequired = !!status.auth_required;
         window.isAuthenticated = !!status.authenticated;
+        window.isAuthIhm = status.auth_ihm !== false;
         updateLogoutButton();
 
-        if (window.isAuthRequired && !window.isAuthenticated) {
+        if (window.isAuthRequired && !window.isAuthenticated && window.isAuthIhm) {
             handleUnauthorized();
         } else {
             hideAuthModal();
@@ -117,14 +122,27 @@ function buildAuthUrl(url) {
 }
 
 async function apiFetch(url, options = {}) {
-    // If auth state is not yet resolved, or if authentication is required and client is not authenticated,
-    // prevent outgoing calls to protected endpoints that would trigger 401 warnings on server.
-    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) {
+    const isMutation = options.method && options.method.toUpperCase() !== 'GET';
+    const isExportOrSpecial = url.includes('/export');
+    const isProtected = isMutation || isExportOrSpecial;
+
+    // If auth state is not yet resolved, or if client is not authenticated in strict mode,
+    // or attempting a protected mutating action in kiosk mode without token, prevent outgoing call.
+    if (!window.isAuthResolved) {
         if (!url.includes('/api/auth/status')) {
             return new Response(JSON.stringify({ error: 'Unauthorized: valid API token required' }), {
                 status: 401,
                 headers: { 'Content-Type': 'application/json' }
             });
+        }
+    } else if (window.isAuthRequired && !window.isAuthenticated) {
+        if (window.isAuthIhm || isProtected) {
+            if (!url.includes('/api/auth/status')) {
+                return new Response(JSON.stringify({ error: 'Unauthorized: valid API token required' }), {
+                    status: 401,
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
         }
     }
 
@@ -149,11 +167,13 @@ async function apiFetch(url, options = {}) {
 
 function handleUnauthorized() {
     window.isAuthenticated = false;
-    stopTelemetryPolling();
-    updateLogoutButton();
-    if (typeof stopLogStream === 'function') {
-        stopLogStream();
+    if (window.isAuthIhm) {
+        stopTelemetryPolling();
+        if (typeof stopLogStream === 'function') {
+            stopLogStream();
+        }
     }
+    updateLogoutButton();
     showAuthModal(false);
 }
 
@@ -161,10 +181,18 @@ function showAuthModal(showError = false) {
     const modal = document.getElementById('authModal');
     const errMsg = document.getElementById('authErrorMsg');
     const input = document.getElementById('authTokenInput');
+    const btnCancel = document.getElementById('btnAuthCancel');
     if (modal) modal.classList.remove('hidden');
     if (errMsg) {
         if (showError) errMsg.classList.remove('hidden');
         else errMsg.classList.add('hidden');
+    }
+    if (btnCancel) {
+        if (!window.isAuthIhm) {
+            btnCancel.classList.remove('hidden');
+        } else {
+            btnCancel.classList.add('hidden');
+        }
     }
     if (input) {
         setTimeout(() => input.focus(), 50);
@@ -196,6 +224,12 @@ function updateLogoutButton() {
         // 🔒 Mode Authenticated: closed padlock in emerald
         btn.className = 'header-auth-btn auth-locked-ok';
         btn.title = (typeof t === 'function' ? t('auth.logout_title') : "Session authentifiée (cliquer pour verrouiller)") || "Session authentifiée (cliquer pour verrouiller)";
+        if (iconLockClosed) iconLockClosed.classList.remove('hidden');
+        if (iconLockOpen) iconLockOpen.classList.add('hidden');
+    } else if (!window.isAuthIhm) {
+        // 🔓 Mode Kiosk / Consultation Libre: sky blue padlock
+        btn.className = 'header-auth-btn auth-kiosk';
+        btn.title = (typeof t === 'function' ? t('auth.kiosk_tooltip') : "Mode consultation libre (cliquer pour vous authentifier)") || "Mode consultation libre (cliquer pour vous authentifier)";
         if (iconLockClosed) iconLockClosed.classList.remove('hidden');
         if (iconLockOpen) iconLockOpen.classList.add('hidden');
     } else {
@@ -247,19 +281,30 @@ function setupOpenLanModalListeners() {
 function logoutApiToken() {
     setApiToken('');
     window.isAuthenticated = false;
-    stopTelemetryPolling();
     updateLogoutButton();
-    if (typeof stopLogStream === 'function') {
-        stopLogStream();
-    }
     const input = document.getElementById('authTokenInput');
     if (input) input.value = '';
-    showAuthModal(false);
+    const cfgInput = document.getElementById('cfgClientToken');
+    if (cfgInput) cfgInput.value = '';
+    if (typeof updateClientTokenBadge === 'function') updateClientTokenBadge();
+
+    if (window.isAuthIhm) {
+        stopTelemetryPolling();
+        if (typeof stopLogStream === 'function') {
+            stopLogStream();
+        }
+        showAuthModal(false);
+    } else {
+        hideAuthModal();
+    }
 }
 
 function setupAuthModalListeners() {
     const btnSubmit = document.getElementById('btnAuthSubmit');
     const input = document.getElementById('authTokenInput');
+    const btnCancel = document.getElementById('btnAuthCancel');
+    const modal = document.getElementById('authModal');
+
     if (btnSubmit) {
         btnSubmit.addEventListener('click', submitAuthToken);
     }
@@ -271,6 +316,21 @@ function setupAuthModalListeners() {
             }
         });
     }
+    if (btnCancel) {
+        btnCancel.addEventListener('click', hideAuthModal);
+    }
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal && !window.isAuthIhm) {
+                hideAuthModal();
+            }
+        });
+    }
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !window.isAuthIhm) {
+            hideAuthModal();
+        }
+    });
     setupOpenLanModalListeners();
 }
 
@@ -291,8 +351,12 @@ async function submitAuthToken() {
             window.isAuthResolved = true;
             window.isAuthRequired = !!status.auth_required;
             window.isAuthenticated = true;
+            window.isAuthIhm = status.auth_ihm !== false;
             updateLogoutButton();
             hideAuthModal();
+            if (typeof updateClientTokenBadge === 'function') updateClientTokenBadge();
+            const cfgInput = document.getElementById('cfgClientToken');
+            if (cfgInput) cfgInput.value = candidate;
             await onAuthenticatedStart();
         } else {
             showAuthModal(true);
@@ -312,10 +376,16 @@ async function checkAuthAndStart() {
         window.isAuthResolved = true;
         window.isAuthRequired = !!status.auth_required;
         window.isAuthenticated = !!status.authenticated;
+        window.isAuthIhm = status.auth_ihm !== false;
         updateLogoutButton();
 
         if (window.isAuthRequired && !window.isAuthenticated) {
-            showAuthModal(false);
+            if (window.isAuthIhm) {
+                showAuthModal(false);
+            } else {
+                hideAuthModal();
+                await onAuthenticatedStart();
+            }
         } else {
             hideAuthModal();
             await onAuthenticatedStart();
@@ -353,19 +423,19 @@ async function onAuthenticatedStart() {
 
 // Global wake-up trigger for mobile browsers returning from sleep/background
 document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && window.isAuthResolved && (!window.isAuthRequired || window.isAuthenticated)) {
+    if (document.visibilityState === 'visible' && window.canReadData()) {
         fetchTelemetry();
         fetchInfo();
     }
 });
 window.addEventListener('focus', () => {
-    if (window.isAuthResolved && (!window.isAuthRequired || window.isAuthenticated)) {
+    if (window.canReadData()) {
         fetchTelemetry();
     }
 });
 
 async function fetchInfo() {
-    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    if (!window.canReadData()) return;
     try {
         const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
         const response = await apiFetch(`/api/station${sideQuery}`);
@@ -547,7 +617,7 @@ function updateUsbStatus(serial) {
 }
 
 async function fetchTelemetry() {
-    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    if (!window.canReadData()) return;
     try {
         const response = await apiFetch('/api/state');
         if (!response.ok) return;
@@ -675,6 +745,11 @@ async function toggleBluetooth() {
     const btToggle = document.getElementById('btToggle');
     const btFeedback = document.getElementById('btToggleFeedback');
     if (!btToggle) return;
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        btToggle.checked = !btToggle.checked;
+        showAuthModal(false);
+        return;
+    }
     const desiredState = btToggle.checked;
     updateBleStatusIndicator(desiredState);
     btToggle.disabled = true;
@@ -727,6 +802,10 @@ async function refreshTic() {
 }
 
 async function sendPostAction(url, bodyObj = null) {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        showAuthModal(false);
+        return;
+    }
     if (window.currentSupervisionMode === 'local') {
         alert(typeof t === 'function' ? t('controls.local_mode_notice') : 'Mode Passif actif : les commandes sont verrouillées.');
         return;

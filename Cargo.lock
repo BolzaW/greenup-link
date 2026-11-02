@@ -441,6 +441,7 @@ dependencies = [
  "serialport",
  "tokio",
  "tokio-stream",
+ "tower",
  "zip",
 ]
 

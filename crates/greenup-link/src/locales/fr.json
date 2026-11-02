@@ -19,7 +19,10 @@
     "open_lan_tooltip": "Accès libre (LAN) : les API REST ne sont pas protégées par un mot de passe.",
     "open_lan_desc": "L'authentification par clé API n'est pas activée. L'interface Web et les API REST sont actuellement accessibles sans mot de passe sur le réseau local conformément à la configuration.",
     "open_lan_hint": "Pour sécuriser l'accès, définissez le paramètre api_token dans le fichier de configuration greenup.toml sur la machine hôte puis redémarrez le service greenup-link.",
-    "open_lan_btn_close": "J'ai compris"
+    "open_lan_btn_close": "J'ai compris",
+    "kiosk_tooltip": "Mode consultation libre (cliquer pour vous authentifier)",
+    "btn_cancel": "Continuer en consultation seule",
+    "action_requires_auth": "Authentification requise pour effectuer cette action."
   },
   "console": {
     "title": "Console Live",
@@ -191,6 +194,7 @@
     "token_status_auth": "Authentifié",
     "token_status_unauth": "Non authentifié",
     "token_status_missing": "Token manquant",
+    "token_status_kiosk": "Mode consultation",
     "token_status_no_auth": "Accès libre (pas d'auth)",
     "token_saved_valid": "Clé API enregistrée & validée",
     "token_saved_local": "Clé enregistrée localement",

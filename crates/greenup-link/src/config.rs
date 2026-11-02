@@ -23,6 +23,13 @@ bind = "0.0.0.0:8080"
 #     * Basic Auth   : Authorization: Basic <base64(user:api_token)>  (curl -u :token)
 api_token = ""
 
+# Web GUI authentication mode:
+# - true  : (Default) Full authentication required to view and interact with the Web GUI.
+# - false : Open consultation mode ("Kiosk"). Allows browsing dashboard, logs, sessions,
+#           and station metrics without login. Control actions (charge, current, commands,
+#           settings) remain strictly protected by api_token.
+auth_ihm = true
+
 [serial]
 # Dual charge point mode:
 # - "auto"  : Automatically detects 1 or 2 charge points based on the station hardware reference (Default)
@@ -54,6 +61,7 @@ mode = "remote"
 pub struct HttpConfig {
     pub bind: String,
     pub api_token: Option<String>,
+    pub auth_ihm: bool,
 }
 
 impl Default for HttpConfig {
@@ -61,6 +69,7 @@ impl Default for HttpConfig {
         Self {
             bind: "0.0.0.0:8080".to_string(),
             api_token: None,
+            auth_ihm: true,
         }
     }
 }
@@ -190,6 +199,14 @@ impl AppConfig {
             }
         }
 
+        if let Ok(env_auth_ihm) = env::var("GREENUP_AUTH_IHM") {
+            match env_auth_ihm.trim().to_lowercase().as_str() {
+                "false" | "0" | "no" => config.http.auth_ihm = false,
+                "true" | "1" | "yes" => config.http.auth_ihm = true,
+                _ => {}
+            }
+        }
+
         if let Ok(env_dp) = env::var("GREENUP_DUAL_POINT") {
             match env_dp.trim().to_lowercase().as_str() {
                 "true" | "1" | "yes" => config.serial.dual_point = DualPointMode::True,
@@ -254,6 +271,13 @@ impl AppConfig {
                                 config.http.api_token = None;
                             } else {
                                 config.http.api_token = Some(trimmed.to_string());
+                            }
+                        }
+                        "auth_ihm" => {
+                            match val.trim().to_lowercase().as_str() {
+                                "false" | "0" | "no" => config.http.auth_ihm = false,
+                                "true" | "1" | "yes" => config.http.auth_ihm = true,
+                                _ => {}
                             }
                         }
                         _ => {}
@@ -356,6 +380,33 @@ mod tests {
         let cfg = AppConfig::parse_toml(DEFAULT_CONFIG_TEMPLATE);
         assert_eq!(cfg.http.bind, "0.0.0.0:8080");
         assert_eq!(cfg.http.api_token, None);
+        assert!(cfg.http.auth_ihm, "Default auth_ihm should be true");
+    }
+
+    #[test]
+    fn test_auth_ihm_parsing() {
+        let toml_false = r#"
+        [http]
+        api_token = "secret123"
+        auth_ihm = false
+        "#;
+        let cfg1 = AppConfig::parse_toml(toml_false);
+        assert_eq!(cfg1.http.api_token.as_deref(), Some("secret123"));
+        assert!(!cfg1.http.auth_ihm);
+
+        let toml_true = r#"
+        [http]
+        auth_ihm = "true"
+        "#;
+        let cfg2 = AppConfig::parse_toml(toml_true);
+        assert!(cfg2.http.auth_ihm);
+
+        let toml_zero = r#"
+        [http]
+        auth_ihm = "0"
+        "#;
+        let cfg3 = AppConfig::parse_toml(toml_zero);
+        assert!(!cfg3.http.auth_ihm);
     }
 
     #[test]

@@ -14,6 +14,9 @@ function updateClientTokenBadge() {
         } else if (token) {
             badge.className = 'sys-badge sys-badge-rose';
             badge.innerText = (typeof t === 'function' ? t('system.token_status_unauth') : 'Non authentifié') || 'Non authentifié';
+        } else if (!window.isAuthIhm) {
+            badge.className = 'sys-badge sys-badge-sky';
+            badge.innerText = (typeof t === 'function' ? t('system.token_status_kiosk') : 'Mode consultation') || 'Mode consultation';
         } else {
             badge.className = 'sys-badge sys-badge-amber';
             badge.innerText = (typeof t === 'function' ? t('system.token_status_missing') : 'Token manquant') || 'Token manquant';
@@ -57,6 +60,7 @@ async function saveClientToken() {
 
         window.isAuthRequired = !!status.auth_required;
         window.isAuthenticated = !!status.authenticated;
+        window.isAuthIhm = status.auth_ihm !== false;
         if (typeof updateLogoutButton === 'function') updateLogoutButton();
         updateClientTokenBadge();
 
@@ -116,6 +120,7 @@ async function clearClientToken() {
         const status = await res.json();
         window.isAuthRequired = !!status.auth_required;
         window.isAuthenticated = !!status.authenticated;
+        window.isAuthIhm = status.auth_ihm !== false;
         if (typeof updateLogoutButton === 'function') updateLogoutButton();
     } catch (_) {}
 
@@ -129,7 +134,7 @@ async function clearClientToken() {
 }
 
 async function loadConfigData() {
-    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    if (!window.canReadData || !window.canReadData()) return;
 
     try {
         // Sync hardware / BLE state from /api/station
@@ -184,6 +189,10 @@ async function loadConfigData() {
 }
 
 async function refreshTicFromConfig() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     const feedback = document.getElementById('cfgTicFeedback');
     const btn = document.getElementById('btnRefreshTicConfig');
     const icon = document.getElementById('iconRefreshTic');
@@ -245,6 +254,10 @@ async function refreshTicFromConfig() {
 }
 
 async function handleSerialInit() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     const btn = document.getElementById('btnSerialInit');
     const icon = document.getElementById('iconSerialInit');
     const feedback = document.getElementById('serialActionFeedback');
@@ -285,6 +298,10 @@ async function handleSerialInit() {
 }
 
 async function handleSerialReset() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     const btn = document.getElementById('btnSerialReset');
     const icon = document.getElementById('iconSerialReset');
     const feedback = document.getElementById('serialActionFeedback');
@@ -437,6 +454,10 @@ function updateSupervisionModeUi(mode, can_switch) {
 }
 
 async function switchSupervisionMode(targetMode) {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     if (window.currentSupervisionMode === targetMode) return;
 
     if (lastReportedState && lastReportedState !== 'A' && lastReportedState !== 'DISCONNECTED') {
