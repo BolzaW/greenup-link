@@ -199,14 +199,6 @@ impl AppConfig {
             }
         }
 
-        if let Ok(env_auth_ihm) = env::var("GREENUP_AUTH_IHM") {
-            match env_auth_ihm.trim().to_lowercase().as_str() {
-                "false" | "0" | "no" => config.http.auth_ihm = false,
-                "true" | "1" | "yes" => config.http.auth_ihm = true,
-                _ => {}
-            }
-        }
-
         if let Ok(env_dp) = env::var("GREENUP_DUAL_POINT") {
             match env_dp.trim().to_lowercase().as_str() {
                 "true" | "1" | "yes" => config.serial.dual_point = DualPointMode::True,
