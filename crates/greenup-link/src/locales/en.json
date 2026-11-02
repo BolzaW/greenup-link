@@ -151,7 +151,19 @@
     "chart_no_data": "No curve data available",
     "time_h": "h",
     "time_m": "m",
-    "time_s": "s"
+    "time_s": "s",
+    "state_charging": "Charging",
+    "state_waiting_car": "Waiting for EV",
+    "state_waiting_station": "Waiting for station",
+    "state_complete": "Charge complete (Standby)",
+    "state_disconnected": "Disconnected (Ending soon)",
+    "state_unlatched": "Cable unlatched",
+    "state_fault": "Station fault",
+    "reason_unplugged": "Vehicle disconnected",
+    "reason_unlatched": "Cable unlatched",
+    "reason_fault": "Station fault",
+    "reason_shutdown": "Connection / Service closed",
+    "reason_superseded": "New session detected"
   },
   "system": {
     "title": "System",

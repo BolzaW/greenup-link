@@ -151,7 +151,19 @@
     "chart_no_data": "Aucune donnée de courbe disponible",
     "time_h": "h",
     "time_m": "m",
-    "time_s": "s"
+    "time_s": "s",
+    "state_charging": "En charge",
+    "state_waiting_car": "Attente véhicule",
+    "state_waiting_station": "Attente borne",
+    "state_complete": "Charge terminée (Veille)",
+    "state_disconnected": "Débranché (Fin imminente)",
+    "state_unlatched": "Câble déverrouillé",
+    "state_fault": "Défaut borne",
+    "reason_unplugged": "Véhicule débranché",
+    "reason_unlatched": "Câble déverrouillé",
+    "reason_fault": "Défaut borne",
+    "reason_shutdown": "Arrêt liaison / service",
+    "reason_superseded": "Nouvelle session détectée"
   },
   "system": {
     "title": "Système",

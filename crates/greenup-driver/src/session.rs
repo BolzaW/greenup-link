@@ -610,6 +610,8 @@ pub struct ActiveSessionSummary {
     pub max_current_a: f32,
     pub max_power_w: f32,
     pub state: String,
+    #[serde(default)]
+    pub iec_state: Option<String>,
     pub phase: String,
 }
 
@@ -782,6 +784,7 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
             max_current_a: s.max_current,
             max_power_w: s.max_power,
             state: tel.greenup_state.clone(),
+            iec_state: tel.iec_state.clone(),
             phase: match s.phase.as_str() {
                 "Mono" | "1" => "Mono (1-Phase)".to_string(),
                 "Tri" | "3" => "Tri (3-Phase)".to_string(),
@@ -1136,10 +1139,16 @@ mod tests {
         tel.voltage = 230.0;
 
         // 1. Create a session
+        let mut tel = Telemetry::default();
+        tel.greenup_state = "B".to_string();
+        tel.iec_state = Some("B".to_string());
         start_session("B", &tel);
         let active = get_active_session_summary(&tel);
         assert!(active.is_some());
-        let active_id = active.unwrap().session_id;
+        let act = active.unwrap();
+        assert_eq!(act.state, "B");
+        assert_eq!(act.iec_state, Some("B".to_string()));
+        let active_id = act.session_id;
 
         // Trying to delete active session should fail
         assert!(delete_session(&active_id).is_err());

@@ -39,6 +39,50 @@ function formatChartTimeLabel(totalSeconds) {
     return `${m}${mLabel}`;
 }
 
+function formatSessionState(st, currentA, iecState) {
+    if (!st) return '--';
+    const s = st.toUpperCase();
+    if (s === 'D' || s === 'E' || (currentA && currentA > 0.5) || iecState === 'C') {
+        return `${t('sessions.state_charging') || 'En charge'} (${s})`;
+    } else if (s === 'C') {
+        return `${t('sessions.state_waiting_car') || 'Attente véhicule'} (${s})`;
+    } else if (s === 'B') {
+        return `${t('sessions.state_waiting_station') || 'Attente borne'} (${s})`;
+    } else if (s === 'I') {
+        return `${t('sessions.state_complete') || 'Charge terminée (Veille)'} (${s})`;
+    } else if (s === 'A') {
+        return `${t('sessions.state_disconnected') || 'Débranché'} (${s})`;
+    } else if (s === 'L') {
+        return `${t('sessions.state_unlatched') || 'Câble déverrouillé'} (${s})`;
+    } else if (['R', 'V', 'X', 'ST', 'S', 'T', 'U', 'Y', 'Z'].includes(s) || iecState === 'E' || iecState === 'F') {
+        return `${t('sessions.state_fault') || 'Défaut borne'} (${s})`;
+    }
+    return `${t('state.connected') || 'Connecté'} (${s})`;
+}
+
+function formatTerminationReason(reason) {
+    if (!reason || reason === '--') return '--';
+    const r = reason.trim();
+    if (r.includes('State: A') || r.toLowerCase().includes('state: a') || r.toLowerCase().includes('disconnected')) {
+        return t('sessions.reason_unplugged') || 'Véhicule débranché';
+    }
+    if (r.includes('State: L') || r.toLowerCase().includes('unlocked') || r.toLowerCase().includes('unlatched')) {
+        return t('sessions.reason_unlatched') || 'Câble déverrouillé';
+    }
+    if (r.toLowerCase().includes('fault') || r.toLowerCase().includes('safety')) {
+        const match = r.match(/State:\s*([A-Za-z0-9_-]+)/i);
+        const codeSuffix = match ? ` (${match[1]})` : '';
+        return `${t('sessions.reason_fault') || 'Défaut borne'}${codeSuffix}`;
+    }
+    if (r.toLowerCase().includes('shutdown')) {
+        return t('sessions.reason_shutdown') || 'Arrêt liaison / service';
+    }
+    if (r.toLowerCase().includes('superseded')) {
+        return t('sessions.reason_superseded') || 'Nouvelle session détectée';
+    }
+    return r;
+}
+
 // ==============================================================================
 // TAB SWITCHING LOGIC (Board / Sessions / Console)
 // ==============================================================================
@@ -229,8 +273,9 @@ function onSessionSelected(id) {
         const reasonEl = document.getElementById('sessionValReason');
         if (reasonEl) {
             reasonEl.removeAttribute('data-i18n');
-            reasonEl.innerText = `${t('sessions.active_reason') || 'En cours'} (État ${act.state})`;
-            reasonEl.title = '';
+            reasonEl.innerText = formatSessionState(act.state, act.current_a, act.iec_state);
+            const iecPart = act.iec_state ? ` • IEC 61851: État ${act.iec_state}` : '';
+            reasonEl.title = `État Legrand: ${act.state}${iecPart}`;
         }
         setElemText('sessionValEndTime', `Inst: ${(act.power_w / 1000).toFixed(2)} kW (${act.current_a.toFixed(1)} A)`);
 
@@ -256,7 +301,7 @@ function onSessionSelected(id) {
         const reasonElem = document.getElementById('sessionValReason');
         if (reasonElem) {
             reasonElem.removeAttribute('data-i18n');
-            reasonElem.innerText = s.termination_reason || '--';
+            reasonElem.innerText = formatTerminationReason(s.termination_reason);
             reasonElem.title = s.termination_reason || '';
         }
         setElemText('sessionValEndTime', s.end_time || '--');
@@ -545,7 +590,8 @@ function setupChartInteractions() {
 
         if (tooltip) {
             const timeStr = formatSessionDuration(p.t);
-            const stateStr = p.state ? ` • État ${p.state}` : '';
+            const stateLabel = p.state ? formatSessionState(p.state, p.amps) : '';
+            const stateStr = stateLabel ? ` • ${stateLabel}` : '';
             tooltip.innerHTML = `
                 <div class="font-bold text-sky-400 font-mono">${p.kw.toFixed(2)} kW <span class="text-slate-300 font-normal">(${p.amps.toFixed(1)} A)</span></div>
                 <div class="text-[9px] text-slate-400 font-mono mt-0.5">${timeStr}${stateStr}</div>
