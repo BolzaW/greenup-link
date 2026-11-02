@@ -533,12 +533,14 @@ function updateUsbStatus(serial) {
         cfgBaudRate.innerText = `${serial.baud_rate} bauds`;
     }
 
-    if (!usbLed || !usbStatusBadge || !usbAlertBanner) return;
+    if (!usbLed || !usbAlertBanner) return;
 
     if (status === 'usb_connected') {
         usbLed.className = 'sys-led sys-led-emerald';
-        usbStatusBadge.className = 'sys-usb-status-text text-emerald-400';
-        usbStatusBadge.innerText = t('usb.status_connected');
+        if (usbStatusBadge) {
+            usbStatusBadge.className = 'sys-usb-status-text text-emerald-400';
+            usbStatusBadge.innerText = t('usb.status_connected');
+        }
         usbAlertBanner.className = 'sys-alert-banner hidden';
         if (controlsPanel && !isActionPending && window.currentSupervisionMode !== 'local') {
             controlsPanel.classList.remove('opacity-40', 'pointer-events-none');
@@ -554,8 +556,10 @@ function updateUsbStatus(serial) {
         }
     } else if (status === 'usb_connecting') {
         usbLed.className = 'sys-led sys-led-amber animate-pulse';
-        usbStatusBadge.className = 'sys-usb-status-text text-amber-400';
-        usbStatusBadge.innerText = t('usb.status_connecting');
+        if (usbStatusBadge) {
+            usbStatusBadge.className = 'sys-usb-status-text text-amber-400';
+            usbStatusBadge.innerText = t('usb.status_connecting');
+        }
         usbAlertBanner.className = 'sys-alert-banner sys-alert-warn';
         if (usbAlertIcon) usbAlertIcon.innerText = '⏳';
         if (usbAlertText) usbAlertText.innerText = t('usb.alert_connecting');
@@ -574,8 +578,10 @@ function updateUsbStatus(serial) {
         }
     } else if (status === 'usb_no_response') {
         usbLed.className = 'sys-led sys-led-amber animate-pulse';
-        usbStatusBadge.className = 'sys-usb-status-text text-amber-400';
-        usbStatusBadge.innerText = t('usb.status_no_response');
+        if (usbStatusBadge) {
+            usbStatusBadge.className = 'sys-usb-status-text text-amber-400';
+            usbStatusBadge.innerText = t('usb.status_no_response');
+        }
         usbAlertBanner.className = 'sys-alert-banner sys-alert-warn';
         if (usbAlertIcon) usbAlertIcon.innerText = '⚠️';
         if (usbAlertText) usbAlertText.innerText = t('usb.alert_no_response');
@@ -595,8 +601,10 @@ function updateUsbStatus(serial) {
     } else {
         // usb_disconnected
         usbLed.className = 'sys-led sys-led-rose animate-pulse';
-        usbStatusBadge.className = 'sys-usb-status-text text-rose-400';
-        usbStatusBadge.innerText = t('usb.status_disconnected');
+        if (usbStatusBadge) {
+            usbStatusBadge.className = 'sys-usb-status-text text-rose-400';
+            usbStatusBadge.innerText = t('usb.status_disconnected');
+        }
         usbAlertBanner.className = 'sys-alert-banner';
         if (usbAlertIcon) usbAlertIcon.innerText = '🔴';
         if (usbAlertText) usbAlertText.innerText = t('usb.alert_disconnected');
@@ -743,7 +751,6 @@ function updateBleStatusIndicator(enabled) {
 
 async function toggleBluetooth() {
     const btToggle = document.getElementById('btToggle');
-    const btFeedback = document.getElementById('btToggleFeedback');
     if (!btToggle) return;
     if (window.isAuthRequired && !window.isAuthenticated) {
         btToggle.checked = !btToggle.checked;
@@ -751,12 +758,14 @@ async function toggleBluetooth() {
         return;
     }
     const desiredState = btToggle.checked;
-    updateBleStatusIndicator(desiredState);
     btToggle.disabled = true;
-    if (btFeedback) {
-        btFeedback.innerText = (typeof t === 'function' ? t('system.ble_pending') : 'Commutation en cours...') || 'Commutation en cours...';
-        btFeedback.className = 'sys-feedback sys-feedback-info animate-pulse';
-    }
+
+    // Show temporary transition status directly inside bleStatusBar (keeps height fixed and compact)
+    const bleTxt = document.getElementById('bleStatusText');
+    const bleDot = document.getElementById('bleStatusDot');
+    if (bleTxt) bleTxt.innerText = (typeof t === 'function' ? t('system.ble_pending') : 'Commutation en cours...') || 'Commutation en cours...';
+    if (bleDot) bleDot.className = 'sys-led sys-led-sky animate-ping';
+
     try {
         const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
         const response = await apiFetch(`/api/bluetooth${sideQuery}`, {
@@ -770,6 +779,8 @@ async function toggleBluetooth() {
             alert(t('alert.error') + (data.error || 'Erreur'));
             btToggle.checked = !desiredState;
             updateBleStatusIndicator(!desiredState);
+        } else {
+            updateBleStatusIndicator(desiredState);
         }
         setTimeout(fetchInfo, 1000);
     } catch (error) {
@@ -778,12 +789,6 @@ async function toggleBluetooth() {
         updateBleStatusIndicator(!desiredState);
     } finally {
         btToggle.disabled = false;
-        if (btFeedback) {
-            setTimeout(() => {
-                btFeedback.innerText = '';
-                btFeedback.className = 'sys-feedback';
-            }, 2000);
-        }
     }
 }
 

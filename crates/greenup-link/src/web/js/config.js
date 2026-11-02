@@ -44,6 +44,52 @@ function toggleTokenVisibility() {
     }
 }
 
+async function copyClientToken() {
+    const input = document.getElementById('cfgClientToken');
+    const token = input ? input.value : (typeof getApiToken === 'function' ? getApiToken() : '');
+    if (!token) return;
+
+    const iconCopy = document.getElementById('iconTokenCopy');
+    const iconCheck = document.getElementById('iconTokenCopyCheck');
+    const feedback = document.getElementById('cfgTokenFeedback');
+
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(token);
+        } else if (input) {
+            const prevType = input.type;
+            input.type = 'text';
+            input.select();
+            document.execCommand('copy');
+            input.type = prevType;
+        }
+
+        if (iconCopy) iconCopy.classList.add('hidden');
+        if (iconCheck) iconCheck.classList.remove('hidden');
+        if (feedback) {
+            feedback.innerText = (typeof t === 'function' ? t('system.token_copied') : 'Clé copiée dans le presse-papier !') || 'Clé copiée !';
+            feedback.className = 'sys-feedback sys-feedback-ok';
+        }
+        setTimeout(() => {
+            if (iconCopy) iconCopy.classList.remove('hidden');
+            if (iconCheck) iconCheck.classList.add('hidden');
+            if (feedback && feedback.innerText.includes('copiée')) {
+                feedback.innerText = '';
+                feedback.className = 'sys-feedback';
+            }
+        }, 1500);
+    } catch (e) {
+        console.warn('Clipboard write failed:', e);
+        if (input) {
+            const prevType = input.type;
+            input.type = 'text';
+            input.select();
+            document.execCommand('copy');
+            input.type = prevType;
+        }
+    }
+}
+
 async function saveClientToken() {
     const input = document.getElementById('cfgClientToken');
     const feedback = document.getElementById('cfgTokenFeedback');
@@ -358,6 +404,9 @@ function initConfig() {
 
     const btnToggleEye = document.getElementById('btnToggleTokenVisibility');
     if (btnToggleEye) btnToggleEye.addEventListener('click', toggleTokenVisibility);
+
+    const btnCopyToken = document.getElementById('btnCopyClientToken');
+    if (btnCopyToken) btnCopyToken.addEventListener('click', copyClientToken);
 
     const btnSaveToken = document.getElementById('btnSaveClientToken');
     if (btnSaveToken) btnSaveToken.addEventListener('click', saveClientToken);

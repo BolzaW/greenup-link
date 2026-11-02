@@ -380,22 +380,22 @@
                         <svg width="15" height="15" class="text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                         <span data-i18n="system.serial_section">Liaison Série & Carte Borne</span>
                     </div>
-                    <div class="sys-usb-status-pill">
-                        <span id="usbLed" class="sys-led sys-led-rose animate-pulse"></span>
-                        <span id="usbStatusBadge" class="sys-usb-status-text text-rose-400" data-i18n="usb.status_disconnected">Déconnecté</span>
-                    </div>
                 </div>
 
                 <!-- Board Hardware Identity Strip -->
                 <div class="sys-board-strip">
-                    <div class="sys-board-main">
-                        <span class="sys-board-tag">
-                            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                            <span data-i18n="system.board_specs">Carte Borne</span>
-                        </span>
-                        <span id="boardInfo" class="sys-board-primary">...</span>
+                    <div class="sys-board-header">
+                        <svg width="13" height="13" class="text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
+                        <span class="sys-board-title" data-i18n="system.system_info_title">Informations Système & Borne</span>
                     </div>
-                    <div id="subInfo" class="sys-board-secondary">...</div>
+                    <div class="sys-board-lines">
+                        <div id="boardInfo" class="sys-board-primary">...</div>
+                        <div id="subInfo" class="sys-board-secondary">...</div>
+                        <div class="sys-board-link-ver">
+                            <span class="sys-kv-label" data-i18n="system.greenup_link_version">Version Green'Up Link :</span>
+                            <span id="cfgAppVersion" class="sys-board-primary text-sky-400 font-bold">--</span>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Serial Port & Baudrate Grid -->
@@ -410,19 +410,32 @@
                     </div>
                 </div>
 
-                <!-- USB Status detail text -->
-                <div id="sysUsbDetails" class="sys-usb-details">Câble USB non détecté (/dev/ttyUSB0 introuvable)</div>
+                <!-- USB Status detail row (Status + Activity Timer) -->
+                <div class="sys-usb-status-row">
+                    <span id="usbLed" class="sys-led sys-led-rose animate-pulse"></span>
+                    <span id="sysUsbDetails" class="sys-usb-details">Câble USB non détecté (/dev/ttyUSB0 introuvable)</span>
+                </div>
 
-                <!-- Serial Action Buttons (Init & Reset) -->
-                <div class="sys-grid-2">
-                    <button type="button" id="btnSerialInit" class="btn-system-action" title="Relance la synchronisation et la détection automatique avec l'ATmega" data-i18n-title="system.btn_init_title">
-                        <svg id="iconSerialInit" class="text-sky-400" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                        <span data-i18n="system.btn_init">Réinitialiser liaison</span>
-                    </button>
-                    <button type="button" id="btnSerialReset" class="btn-system-action btn-system-action-danger" title="Envoie une commande de redémarrage matériel (Reset) à la carte ATmega" data-i18n-title="system.btn_reset_title">
-                        <svg id="iconSerialReset" class="text-rose-400" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636a9 9 0 11-12.728 0M12 2v10"/></svg>
-                        <span data-i18n="system.btn_reset">Redémarrer carte (Reset)</span>
-                    </button>
+                <!-- Serial Action Rows (Init & Reset) -->
+                <div class="sys-actions-list">
+                    <div class="sys-action-row">
+                        <button type="button" id="btnSerialInit" class="btn-system-action-icon" title="Relance la synchronisation et la détection automatique avec l'ATmega" data-i18n-title="system.btn_init_title">
+                            <svg id="iconSerialInit" class="text-sky-400" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+                        </button>
+                        <div class="sys-action-text">
+                            <span class="sys-action-title" data-i18n="system.btn_init">Réinitialiser liaison</span>
+                            <span class="sys-action-desc" data-i18n="system.btn_init_desc">Démarre un nouveau processus d'initialisation USB</span>
+                        </div>
+                    </div>
+                    <div class="sys-action-row">
+                        <button type="button" id="btnSerialReset" class="btn-system-action-icon btn-system-action-danger" title="Envoie une commande de redémarrage matériel (Reset) à la carte ATmega" data-i18n-title="system.btn_reset_title">
+                            <svg id="iconSerialReset" class="text-rose-400" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                        </button>
+                        <div class="sys-action-text">
+                            <span class="sys-action-title" data-i18n="system.btn_reset">Redémarrer carte (Reset)</span>
+                            <span class="sys-action-desc" data-i18n="system.btn_reset_desc">Demande à la carte ATmega d'effectuer un soft reboot</span>
+                        </div>
+                    </div>
                 </div>
                 <div id="serialActionFeedback" class="sys-feedback"></div>
             </div>
@@ -493,49 +506,40 @@
                     <div class="sys-module-top">
                         <div class="sys-card-header sys-card-header-compact">
                             <div class="sys-card-title">
-                                <svg width="15" height="15" class="text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                <svg width="15" height="15" class="text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
                                 <span data-i18n="system.tic_title">Télé-Information (TIC)</span>
                             </div>
                             <span id="cfgTicSpeedBadge" class="sys-badge sys-badge-muted">--</span>
                         </div>
-                        <p id="cfgTicDesc" class="sys-module-desc" data-i18n="system.tic_desc">Détection automatique de la vitesse TIC du compteur Linky</p>
                     </div>
                     <div class="sys-module-bottom">
-                        <button type="button" id="btnRefreshTicConfig" class="btn-system-action w-full" disabled>
-                            <svg id="iconRefreshTic" class="text-emerald-400" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                            <span data-i18n="system.btn_refresh_tic">Tester / Actualiser détection TIC</span>
-                        </button>
+                        <div class="sys-action-row">
+                            <button type="button" id="btnRefreshTicConfig" class="btn-system-action-icon" title="Tester / Actualiser détection TIC" data-i18n-title="system.btn_refresh_tic" disabled>
+                                <svg id="iconRefreshTic" class="text-sky-400" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                            </button>
+                            <div class="sys-action-text">
+                                <span class="sys-action-title" data-i18n="system.btn_refresh_tic">Tester / Actualiser détection TIC</span>
+                                <span class="sys-action-desc" data-i18n="system.tic_desc">Détection automatique de la vitesse TIC du compteur Linky</span>
+                            </div>
+                        </div>
                         <div id="cfgTicFeedback" class="sys-feedback"></div>
                     </div>
                 </div>
             </div>
 
-            <!-- 3. Service Green'Up Link & Réseau -->
+            <!-- 3. Configuration Réseau & Clé API -->
             <div class="sys-card">
                 <div class="sys-card-header">
                     <div class="sys-card-title">
                         <svg width="15" height="15" class="text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                        <span data-i18n="system.network_section">Service Green'Up Link & Réseau</span>
+                        <span data-i18n="system.network_section">Configuration Réseau & Clé API</span>
                     </div>
                     <span id="cfgTokenStatusBadge" class="sys-badge sys-badge-muted">--</span>
                 </div>
 
-                <div class="sys-grid-3">
-                    <div class="sys-kv-box">
-                        <span class="sys-kv-label" data-i18n="system.http_bind">Hôte HTTP</span>
-                        <span id="cfgHttpBind" class="sys-kv-value">0.0.0.0:8080</span>
-                    </div>
-                    <div class="sys-kv-box">
-                        <span class="sys-kv-label" data-i18n="system.app_version">Version Link</span>
-                        <span id="cfgAppVersion" class="sys-kv-value text-sky-400">--</span>
-                    </div>
-                    <div class="sys-kv-box">
-                        <span class="sys-kv-label" data-i18n="system.service_status">Statut Service</span>
-                        <span class="sys-kv-value text-emerald-400 sys-service-active">
-                            <span class="sys-led-dot"></span>
-                            <span data-i18n="system.service_active">Actif</span>
-                        </span>
-                    </div>
+                <div class="sys-kv-box">
+                    <span class="sys-kv-label" data-i18n="system.http_bind">Hôte HTTP</span>
+                    <span id="cfgHttpBind" class="sys-kv-value font-mono">0.0.0.0:8080</span>
                 </div>
 
                 <!-- Client API Token Row -->
@@ -549,13 +553,19 @@
                                 <svg id="iconEyeSlash" class="hidden" width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"/></svg>
                             </button>
                         </div>
-                        <button type="button" id="btnSaveClientToken" class="btn-system-action" title="Enregistrer la clé dans le navigateur">
-                            <svg class="text-emerald-400" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                            <span data-i18n="system.btn_save_token">Appliquer</span>
+                        <button type="button" id="btnCopyClientToken" class="btn-system-action-icon" title="Copier la clé dans le presse-papier" data-i18n-title="system.btn_copy_token_title">
+                            <svg id="iconTokenCopy" class="text-sky-400" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                            </svg>
+                            <svg id="iconTokenCopyCheck" class="text-emerald-400 hidden" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+                            </svg>
                         </button>
-                        <button type="button" id="btnClearClientToken" class="btn-system-action btn-system-action-danger" title="Effacer la clé enregistrée" data-i18n-title="system.btn_clear_token_title">
-                            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                            <span data-i18n="system.btn_clear_token">Effacer</span>
+                        <button type="button" id="btnSaveClientToken" class="btn-system-action-icon" title="Enregistrer la clé dans le navigateur" data-i18n-title="system.btn_save_token_title">
+                            <svg class="text-emerald-400" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                        </button>
+                        <button type="button" id="btnClearClientToken" class="btn-system-action-icon btn-system-action-danger" title="Effacer la clé enregistrée" data-i18n-title="system.btn_clear_token_title">
+                            <svg class="text-rose-400" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                         </button>
                     </div>
                     <div id="cfgTokenFeedback" class="sys-feedback"></div>
