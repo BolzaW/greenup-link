@@ -129,7 +129,7 @@ A plausible hypothesis is that Legrand may have shipped a distinct factory OS im
 
 #### Official KitCom Archives Matrix
 
-The table below lists all 6 known official Legrand KitCom release archives identified in the field:
+The table below lists all 7 known official Legrand KitCom release archives identified in the field:
 
 | KitCom Version / Archive | Communication Software | Base OS | Apache Version | glibc Version | Compatibility with Green'Up Link | Notes |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -138,6 +138,7 @@ The table below lists all 6 known official Legrand KitCom release archives ident
 | **KitCom V01.17.00** (`KitCom.V01.17.00.zip`) | `SoftwareCommunication-V01.16.02.jar` | ❓ *Unknown* | ❓ *Unknown* (likely upgraded) | ❓ *Unknown* | ❓ **Untested** | Intermediate V01.17 release; exact OS unverified |
 | **KitCom V01.17.28** (`KitCom.V01.17.28.zip`) | `SoftwareCommunication-V01.17.27.jar` | ❓ *Unknown* (likely Debian 11 transition) | **≥ 2.4.56** *(via deb11 patch)* | ❓ *Unknown* | ❓ **Untested** | Includes `apache2_2.4.56-1~deb11u2_armhf.deb` package update |
 | **KitCom V01.18.04** (`KitCom-V01.18.04.zip`) | `SoftwareCommunication-V01.18.04.jar` | ❓ *Unknown* | **≥ 2.4.62** *(via deb11 patch)* | ❓ *Unknown* | ❓ **Untested** | Includes `apache2_2.4.62-1~deb11u2_armhf.deb` package update |
+| **KitCom V02.00.02 ("Gen2 Initial")** (`KitCom-V02.00.02.zip`) | `SoftwareCommunication-V02.00.02.jar` *(approx.)* | ❓ *Unknown* (modern Debian / LUKS) | ❓ *Unknown* | ❓ *Unknown* | ❓ **Untested** | Initial baseline image for Gen2; referenced in V02.01.14 release notes & configured in Azure blob storage (`current.json`) |
 | **KitCom V02.01.14 ("Gen2")** (`KitCom-V02.01.14.zip`) | `SoftwareCommunication-V02.01.14.jar` | ❓ *Unknown* (modern Debian / LUKS) | **≥ 2.4.62** *(via deb11 patch)* | ❓ *Unknown* | ❓ **Untested** | Major architecture redesign: LUKS encryption (`/run/bringup`), `bticino` user, Tomcat 9, new ZIP password |
 
 > [!NOTE]
