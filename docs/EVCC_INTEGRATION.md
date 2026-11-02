@@ -56,39 +56,39 @@ chargers:
     # The API natively returns the exact letter expected by EVCC
     status:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry
+      uri: http://<GREENUP_IP>:8080/api/status
       # Uncomment headers if api_token is enabled in greenup.toml:
       # headers:
       #   - Authorization: Bearer <YOUR_API_TOKEN>
-      jq: .iec_state
+      jq: .iec
       timeout: 5s
       
     # 2. Real-time Power (Watts)
     power:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry
+      uri: http://<GREENUP_IP>:8080/api/meter
       # headers:
       #   - Authorization: Bearer <YOUR_API_TOKEN>
-      jq: .power
+      jq: .power_w
       timeout: 5s
       
     # 3. Session Energy (kWh)
     energy:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry
+      uri: http://<GREENUP_IP>:8080/api/meter
       # headers:
       #   - Authorization: Bearer <YOUR_API_TOKEN>
-      jq: .energy
+      jq: .energy_kwh
       timeout: 5s
       
     # 4. Charger Enable State
     # Combines charge_authorized and !charge_paused directly in the API
     enabled:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry
+      uri: http://<GREENUP_IP>:8080/api/connectors/1
       # headers:
       #   - Authorization: Bearer <YOUR_API_TOKEN>
-      jq: .charge_authorized
+      jq: .control.charge_authorized
       timeout: 5s
       
     # 5. Start / Stop Action
@@ -106,9 +106,12 @@ chargers:
       cmd: curl -s -X POST http://<GREENUP_IP>:8080/api/current/${maxcurrent}
 ```
 
+> [!NOTE]
+> **Backward Compatibility:** If upgrading from an older version of Green'Up Link, the legacy endpoint `GET /api/telemetry` with `jq: .iec_state`, `jq: .power`, `jq: .energy`, and `jq: .charge_authorized` continues to be 100% supported without changes.
+
 ### 3.2 Dual Charge Point Configuration (2 Independent Loadpoints)
 
-If your charging station is a dual-point model (e.g. Legrand references 058011, 058013, 058042, 058044, 059011...), you can define two independent chargers and loadpoints using the `?side=1` and `?side=2` query parameters:
+If your charging station is a dual-point model (e.g. Legrand references 058011, 058013, 058042, 058044, 059011...), you can define two independent chargers and loadpoints using the dedicated connector endpoints `/api/connectors/1/*` and `/api/connectors/2/*` (or `?side=1` and `?side=2`):
 
 ```yaml
 chargers:
@@ -117,23 +120,23 @@ chargers:
     type: custom
     status:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry?side=1
-      jq: .iec_state
+      uri: http://<GREENUP_IP>:8080/api/connectors/1/status
+      jq: .iec
       timeout: 5s
     power:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry?side=1
-      jq: .power
+      uri: http://<GREENUP_IP>:8080/api/connectors/1/meter
+      jq: .power_w
       timeout: 5s
     energy:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry?side=1
-      jq: .energy
+      uri: http://<GREENUP_IP>:8080/api/connectors/1/meter
+      jq: .energy_kwh
       timeout: 5s
     enabled:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry?side=1
-      jq: .charge_authorized
+      uri: http://<GREENUP_IP>:8080/api/connectors/1
+      jq: .control.charge_authorized
       timeout: 5s
     enable:
       source: script
@@ -147,23 +150,23 @@ chargers:
     type: custom
     status:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry?side=2
-      jq: .iec_state
+      uri: http://<GREENUP_IP>:8080/api/connectors/2/status
+      jq: .iec
       timeout: 5s
     power:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry?side=2
-      jq: .power
+      uri: http://<GREENUP_IP>:8080/api/connectors/2/meter
+      jq: .power_w
       timeout: 5s
     energy:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry?side=2
-      jq: .energy
+      uri: http://<GREENUP_IP>:8080/api/connectors/2/meter
+      jq: .energy_kwh
       timeout: 5s
     enabled:
       source: http
-      uri: http://<GREENUP_IP>:8080/api/telemetry?side=2
-      jq: .charge_authorized
+      uri: http://<GREENUP_IP>:8080/api/connectors/2
+      jq: .control.charge_authorized
       timeout: 5s
     enable:
       source: script

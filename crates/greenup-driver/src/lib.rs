@@ -7,3 +7,7 @@ pub mod hardware_specs;
 
 pub use state::{SharedState, SharedStation, StationManager};
 pub use serial::{run_serial_loop, run_serial_loop_with_options, trigger_init_sequence, SerialOptions};
+pub use telemetry::{
+    ConnectorControl, ConnectorData, ConnectorGrid, ConnectorMeter, ConnectorStatus,
+    OcppChargePointStatus, StationData, StationSnapshot, SupervisionMode,
+};

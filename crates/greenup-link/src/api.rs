@@ -87,6 +87,14 @@ pub fn build_router(station: SharedStation, api_token: Option<String>) -> Router
         .route("/api/command", post(send_raw_command))
         .route("/api/voltage", post(set_voltage))
         .route("/api/mode", get(get_mode).post(set_mode))
+        .route("/api/state", get(get_state))
+        .route("/api/station", get(get_station))
+        .route("/api/connectors", get(get_connectors))
+        .route("/api/connectors/:id", get(get_connector_by_id))
+        .route("/api/connectors/:id/meter", get(get_connector_meter_by_id))
+        .route("/api/connectors/:id/status", get(get_connector_status_by_id))
+        .route("/api/meter", get(get_meter))
+        .route("/api/status", get(get_status))
         .with_state(station)
         .route_layer(axum::middleware::from_fn_with_state(
             token_state.clone(),
@@ -304,6 +312,110 @@ async fn get_telemetry(
     };
     telemetry.side = state.side();
     Json(telemetry)
+}
+
+/// GET /api/state
+/// Returns the full unified station snapshot (OCPP 1.6-J & EVCC aligned).
+async fn get_state(State(station): State<SharedStation>) -> impl IntoResponse {
+    logger::debug("API", "🔍 GET request /api/state");
+    Json(station.snapshot())
+}
+
+/// GET /api/station
+/// Returns the station hardware identity and system status.
+async fn get_station(State(station): State<SharedStation>) -> impl IntoResponse {
+    logger::debug("API", "🔍 GET request /api/station");
+    Json(station.snapshot().station)
+}
+
+/// GET /api/connectors
+/// Returns all charge point connectors and their current states.
+async fn get_connectors(State(station): State<SharedStation>) -> impl IntoResponse {
+    logger::debug("API", "🔍 GET request /api/connectors");
+    Json(station.snapshot().connectors)
+}
+
+/// GET /api/connectors/:id
+/// Returns a specific charge point connector by its ID (1 or 2).
+async fn get_connector_by_id(
+    State(station): State<SharedStation>,
+    axum::extract::Path(id): axum::extract::Path<u8>,
+) -> impl IntoResponse {
+    logger::debug("API", &format!("🔍 GET request /api/connectors/{}", id));
+    let snap = station.snapshot();
+    if let Some(conn) = snap.connectors.into_iter().find(|c| c.id == id) {
+        (StatusCode::OK, Json(json!(conn)))
+    } else {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "status": "error",
+                "error": format!("Connector {} not found. Available connectors: {:?}", id, snap.station.available_connectors)
+            })),
+        )
+    }
+}
+
+/// GET /api/connectors/:id/meter
+/// Returns electrical metering for a specific connector.
+async fn get_connector_meter_by_id(
+    State(station): State<SharedStation>,
+    axum::extract::Path(id): axum::extract::Path<u8>,
+) -> impl IntoResponse {
+    let snap = station.snapshot();
+    if let Some(conn) = snap.connectors.into_iter().find(|c| c.id == id) {
+        (StatusCode::OK, Json(json!(conn.meter)))
+    } else {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "status": "error",
+                "error": format!("Connector {} not found", id)
+            })),
+        )
+    }
+}
+
+/// GET /api/connectors/:id/status
+/// Returns charge automaton state (OCPP / IEC) for a specific connector.
+async fn get_connector_status_by_id(
+    State(station): State<SharedStation>,
+    axum::extract::Path(id): axum::extract::Path<u8>,
+) -> impl IntoResponse {
+    let snap = station.snapshot();
+    if let Some(conn) = snap.connectors.into_iter().find(|c| c.id == id) {
+        (StatusCode::OK, Json(json!(conn.status)))
+    } else {
+        (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "status": "error",
+                "error": format!("Connector {} not found", id)
+            })),
+        )
+    }
+}
+
+/// GET /api/meter
+/// Returns electrical metering for the primary (or queried ?side=X) connector.
+/// Tailored for fast EVCC polling.
+async fn get_meter(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side);
+    Json(state.to_connector_data().meter)
+}
+
+/// GET /api/status
+/// Returns charge automaton status (OCPP / IEC) for the primary (or queried ?side=X) connector.
+/// Tailored for fast EVCC / Home Assistant status polling.
+async fn get_status(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side);
+    Json(state.to_connector_data().status)
 }
 
 fn check_serial_connected(state: &SharedState) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
@@ -1074,6 +1186,61 @@ mod tests {
         ).await;
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(point1.mode(), SupervisionMode::Remote);
+    }
+
+    #[tokio::test]
+    async fn test_state_and_connector_endpoints() {
+        use std::sync::Arc;
+        use tokio::sync::mpsc;
+        use greenup_driver::state::{AppState, StationManager};
+        use greenup_driver::telemetry::SerialStatus;
+
+        let (tx, _rx) = mpsc::channel(10);
+        let point1 = Arc::new(AppState::new(tx));
+        let station = Arc::new(StationManager::new(point1.clone(), None));
+
+        {
+            let mut info = point1.info.lock().unwrap();
+            info.reference = "058001".to_string();
+            info.serial_number = "TEST12345".to_string();
+            info.hardware_version = "A".to_string();
+            info.software_version = "1.03.25".to_string();
+            info.link_version = "0.5.0-dev".to_string();
+            let mut tel = point1.telemetry.lock().unwrap();
+            tel.serial.status = SerialStatus::UsbConnected;
+            tel.greenup_state = "C".to_string();
+            tel.current = 16.0;
+            tel.power = 3680.0;
+            tel.energy = 5400.0;
+        }
+
+        // 1. GET /api/state -> 200 OK with full snapshot
+        let res_state = get_state(State(station.clone())).await.into_response();
+        assert_eq!(res_state.status(), StatusCode::OK);
+
+        // 2. GET /api/station -> 200 OK with station data
+        let res_station = get_station(State(station.clone())).await.into_response();
+        assert_eq!(res_station.status(), StatusCode::OK);
+
+        // 3. GET /api/connectors -> 200 OK with array
+        let res_connectors = get_connectors(State(station.clone())).await.into_response();
+        assert_eq!(res_connectors.status(), StatusCode::OK);
+
+        // 4. GET /api/connectors/1 -> 200 OK
+        let res_c1 = get_connector_by_id(State(station.clone()), axum::extract::Path(1)).await.into_response();
+        assert_eq!(res_c1.status(), StatusCode::OK);
+
+        // 5. GET /api/connectors/99 -> 404 NOT_FOUND
+        let res_c99 = get_connector_by_id(State(station.clone()), axum::extract::Path(99)).await.into_response();
+        assert_eq!(res_c99.status(), StatusCode::NOT_FOUND);
+
+        // 6. GET /api/meter -> 200 OK with electric measurements
+        let res_meter = get_meter(State(station.clone()), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(res_meter.status(), StatusCode::OK);
+
+        // 7. GET /api/status -> 200 OK with OCPP and IEC status
+        let res_status = get_status(State(station.clone()), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(res_status.status(), StatusCode::OK);
     }
 }
 

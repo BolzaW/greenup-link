@@ -95,6 +95,17 @@ impl AppState {
             .map(|t| t.serial.status == SerialStatus::UsbConnected)
             .unwrap_or(false)
     }
+
+    /// Converts the current charge point state into a standardized ConnectorData representation.
+    pub fn to_connector_data(&self) -> crate::telemetry::ConnectorData {
+        let info = self.info.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let tel = {
+            let mut t = self.telemetry.lock().unwrap_or_else(|e| e.into_inner());
+            t.evaluate_voltage();
+            t.clone()
+        };
+        tel.to_connector_data(&info)
+    }
 }
 
 pub type SharedState = Arc<AppState>;
@@ -152,6 +163,51 @@ impl StationManager {
             guard.as_ref().cloned().unwrap_or_else(|| self.point1.clone())
         } else {
             self.point1.clone()
+        }
+    }
+
+    /// Produces a complete, unified StationSnapshot aggregating station-level
+    /// metadata and all active charge point connectors (OCPP & EVCC aligned).
+    pub fn snapshot(&self) -> crate::telemetry::StationSnapshot {
+        let p1_info = self.point1.info.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let p1_tel = {
+            let mut tel = self.point1.telemetry.lock().unwrap_or_else(|e| e.into_inner());
+            tel.evaluate_voltage();
+            tel.clone()
+        };
+
+        let mut connectors = vec![p1_tel.to_connector_data(&p1_info)];
+
+        let is_dual = self.is_dual();
+        let available_connectors = self.available_points();
+
+        let guard = self.point2.read().unwrap_or_else(|e| e.into_inner());
+        if let Some(ref p2) = *guard {
+            let p2_info = p2.info.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let p2_tel = {
+                let mut tel = p2.telemetry.lock().unwrap_or_else(|e| e.into_inner());
+                tel.evaluate_voltage();
+                tel.clone()
+            };
+            connectors.push(p2_tel.to_connector_data(&p2_info));
+        }
+
+        let station = crate::telemetry::StationData {
+            vendor: "Legrand".to_string(),
+            model: p1_info.reference.clone(),
+            serial_number: p1_info.serial_number.clone(),
+            hardware_version: p1_info.hardware_version.clone(),
+            firmware_version: p1_info.software_version.clone(),
+            link_version: p1_info.link_version.clone(),
+            supervision_mode: self.point1.mode(),
+            serial_connection: p1_tel.serial.clone(),
+            is_dual,
+            available_connectors,
+        };
+
+        crate::telemetry::StationSnapshot {
+            station,
+            connectors,
         }
     }
 }
@@ -219,5 +275,56 @@ mod tests {
 
         state.set_mode(SupervisionMode::Remote);
         assert_eq!(state.mode(), SupervisionMode::Remote);
+    }
+
+    #[tokio::test]
+    async fn test_station_manager_snapshot() {
+        use crate::telemetry::{OcppChargePointStatus, SerialStatus};
+        let (tx1, _rx1) = tokio::sync::mpsc::channel(1);
+        let (tx2, _rx2) = tokio::sync::mpsc::channel(1);
+        let p1 = Arc::new(AppState::new_with_side(1, tx1));
+        let p2 = Arc::new(AppState::new_with_side(2, tx2));
+
+        {
+            let mut info1 = p1.info.lock().unwrap();
+            info1.reference = "058001".to_string();
+            info1.serial_number = "SIM01".to_string();
+            info1.hardware_version = "A".to_string();
+            info1.software_version = "1.03.25".to_string();
+            info1.link_version = "0.5.0".to_string();
+            let mut tel1 = p1.telemetry.lock().unwrap();
+            tel1.serial.status = SerialStatus::UsbConnected;
+            tel1.greenup_state = "A".to_string();
+        }
+
+        {
+            let mut info2 = p2.info.lock().unwrap();
+            info2.reference = "058001".to_string();
+            info2.serial_number = "SIM02".to_string();
+            let mut tel2 = p2.telemetry.lock().unwrap();
+            tel2.serial.status = SerialStatus::UsbConnected;
+            tel2.greenup_state = "B".to_string();
+        }
+
+        // 1. Single point station snapshot
+        let manager_single = StationManager::new(p1.clone(), None);
+        let snap1 = manager_single.snapshot();
+        assert_eq!(snap1.station.vendor, "Legrand");
+        assert_eq!(snap1.station.model, "058001");
+        assert_eq!(snap1.station.serial_number, "SIM01");
+        assert!(!snap1.station.is_dual);
+        assert_eq!(snap1.connectors.len(), 1);
+        assert_eq!(snap1.connectors[0].id, 1);
+        assert_eq!(snap1.connectors[0].status.ocpp, OcppChargePointStatus::Available);
+
+        // 2. Dual point station snapshot
+        let manager_dual = StationManager::new(p1.clone(), Some(p2.clone()));
+        let snap2 = manager_dual.snapshot();
+        assert!(snap2.station.is_dual);
+        assert_eq!(snap2.connectors.len(), 2);
+        assert_eq!(snap2.connectors[0].id, 1);
+        assert_eq!(snap2.connectors[0].status.ocpp, OcppChargePointStatus::Available);
+        assert_eq!(snap2.connectors[1].id, 2);
+        assert_eq!(snap2.connectors[1].status.ocpp, OcppChargePointStatus::Preparing);
     }
 }

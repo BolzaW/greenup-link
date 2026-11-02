@@ -139,6 +139,28 @@ impl HardwareCapabilities {
     }
 }
 
+/// Returns the standard description for an ATmega hardware error code.
+pub fn error_code_description(code: &str) -> Option<&'static str> {
+    match code {
+        "0000" => Some("No error"),
+        "0001" => Some("T2S socket lock error"),
+        "0002" => Some("T2S socket unlock error"),
+        "0003" => Some("Control pilot short-circuit (cable/vehicle)"),
+        "0004" => Some("Control pilot short-circuit (station board)"),
+        "0005" => Some("Domestic socket contactor open error"),
+        "0006" => Some("Domestic socket contactor close error"),
+        "0007" => Some("T2S contactor open error"),
+        "0008" => Some("T2S contactor close error"),
+        "0009" => Some("Vehicle diode not detected"),
+        "0010" => Some("T2S socket overcurrent"),
+        "0011" => Some("Domestic socket overcurrent"),
+        "0012" => Some("Mains power outage / power supply fault"),
+        "0013" => Some("Internal communication error"),
+        "0015" => Some("DC residual fault current detected (6mA DC)"),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

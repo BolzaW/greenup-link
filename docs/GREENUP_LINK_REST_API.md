@@ -44,23 +44,47 @@ Three standard authentication methods are supported simultaneously against the s
 
 ## 📋 Endpoints Overview
 
+### Canonical & Standard Endpoints (Recommended for EVCC, HA, OCPP)
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/state` | Full canonical station snapshot (Station metadata + Connectors status/meter/control/grid) |
+| `GET` | `/api/station` | Station static identity & capabilities (aligned with OCPP `BootNotification`) |
+| `GET` | `/api/connectors` | List of all connectors / EVSEs with status, control, meter, grid |
+| `GET` | `/api/connectors/:id` | Connector details by index (`1` or `2`) |
+| `GET` | `/api/connectors/:id/status` | Connector status (IEC 61851 & OCPP 1.6-J ChargePointStatus) |
+| `GET` | `/api/connectors/:id/meter` | Connector electrical metering (Power, Energy, Voltage, Current, Frequency) |
+| `GET` | `/api/status` | Real-time status for primary/queried side (`iec`, `ocpp`, `connected`, `charging`) |
+| `GET` | `/api/meter` | Real-time electrical metering for primary/queried side (`power_w`, `energy_kwh`, etc.) |
+
+### Legacy & Compatibility Endpoints
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/api/auth/status` | Check if authentication is enabled and if the provided token is valid |
 | `GET` | `/api/info` | Hardware info (Firmware, Serial, Capabilities) |
-| `GET` | `/api/telemetry` | Real-time telemetry + Legrand / IEC states |
+| `GET` | `/api/telemetry` | Real-time flat telemetry + Legrand / IEC states (polled by Web UI) |
+
+### Control & Actions
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/mode` | Get current supervision mode (`"remote"` or `"local"`) |
+| `POST` | `/api/mode` | Switch supervision mode dynamically (`{"mode": "local"|"remote"}`) |
+| `POST` | `/api/charge` | Control charge state (`enable`, `disable`, `pause`, `resume`) |
+| `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`, 7A to 32A) |
+| `POST` | `/api/voltage` | Inject external grid voltage (`{"voltage": 230.0}`) |
+| `POST` | `/api/init` | Relaunch startup sequence |
+| `POST` | `/api/reset` | ATmega board hardware restart (`Reset`) |
+| `POST` | `/api/tic/refresh` | TIC detection (only in `State:A`) |
+| `POST` | `/api/bluetooth` | Enable / disable Bluetooth |
+| `POST` | `/api/command` | Raw serial command (debug, strictly guarded) |
+
+### Logs & Diagnostics
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
 | `GET` | `/api/logs` | Recent in-memory logs (last 500 entries) |
 | `GET` | `/api/logs/stream` | Real-time Server-Sent Events (SSE) log stream |
 | `GET` | `/api/logs/export` | Download the current daily log file (`.log`) |
 | `GET` | `/api/logs/level` | Get currently active log level |
 | `POST` | `/api/logs/level` | Update active log level dynamically at runtime |
-| `POST` | `/api/charge` | Control charge state (`enable`, `disable`, `pause`, `resume`) |
-| `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`) |
-| `POST` | `/api/init` | Relaunch startup sequence |
-| `POST` | `/api/reset` | ATmega board hardware restart (`Reset`) |
-| `POST` | `/api/tic/refresh` | TIC detection (only in `State:A`) |
-| `POST` | `/api/bluetooth` | Enable / disable Bluetooth |
-| `POST` | `/api/command` | Raw serial command (debug) |
 
 ---
 
@@ -140,6 +164,166 @@ Three standard authentication methods are supported simultaneously against the s
   - `eliot_limit_amps` (`CCEl?`): Effective current limit applied by the station.
   - `charge_complete`: True if charging has terminated (vehicle battery full).
   - `tic_mode`: `"0"` (absent), `"1200"` (historical), `"9600"` (standard), `"detecting"` (detection in progress) or `""` (unknown, no detection started).
+
+### 3. Get canonical station snapshot (OCPP 1.6-J & EVCC structured)
+- **URL**: `/api/state`
+- **Method**: `GET`
+- **Description**: Returns the unified, clean hierarchical data model for the entire charging station, including station-level metadata and an array of individual connectors (`EVSEs`). Designed as the canonical backbone for OCPP 1.6-J, EVCC, and Home Assistant.
+- **Typical Response**:
+  ```json
+  {
+    "station": {
+      "charge_point_vendor": "Legrand",
+      "charge_point_model": "Green'Up Premium (058001)",
+      "charge_point_serial_number": "015184",
+      "firmware_version": "V01.18.10",
+      "hardware_version": "V02.01.01",
+      "production_date": "42W22",
+      "link_version": "0.5.0-dev",
+      "supervision_mode": "remote",
+      "connector_count": 1,
+      "capabilities": {
+        "phases": 1,
+        "max_power_kw": 7.4,
+        "max_current_amps": 32,
+        "has_schuko": false,
+        "charging_points": 1,
+        "is_known": true,
+        "has_tic": true
+      },
+      "serial": {
+        "status": "usb_connected",
+        "port": "/dev/ttyUSB0",
+        "message": "USB serial link active - Station connected",
+        "last_rx_secs_ago": 0
+      }
+    },
+    "connectors": [
+      {
+        "connector_id": 1,
+        "status": {
+          "iec": "C",
+          "ocpp": "Charging",
+          "legrand_raw": "C",
+          "connected": true,
+          "charging": true,
+          "error_code": "0000",
+          "error_description": "No error"
+        },
+        "control": {
+          "charge_authorized": true,
+          "charge_paused": false,
+          "limit_amps": 16,
+          "eliot_limit_amps": 16,
+          "pilot_voltage": 6
+        },
+        "meter": {
+          "power_w": 3680.0,
+          "energy_kwh": 14.52,
+          "current_a": 16.0,
+          "voltage_v": 230.0,
+          "frequency_hz": 50.0,
+          "voltage_source": "internal"
+        },
+        "grid": {
+          "tic_mode": "9600",
+          "tic_active": true
+        }
+      }
+    ]
+  }
+  ```
+
+### 4. Get station identity & capabilities
+- **URL**: `/api/station`
+- **Method**: `GET`
+- **Description**: Returns only the station-level metadata (vendor, model, serial, firmware, hardware capabilities, serial connection status). Formatted directly to populate an OCPP `BootNotification` payload.
+- **Typical Response**:
+  ```json
+  {
+    "charge_point_vendor": "Legrand",
+    "charge_point_model": "Green'Up Premium (058001)",
+    "charge_point_serial_number": "015184",
+    "firmware_version": "V01.18.10",
+    "hardware_version": "V02.01.01",
+    "production_date": "42W22",
+    "link_version": "0.5.0-dev",
+    "supervision_mode": "remote",
+    "connector_count": 1,
+    "capabilities": { ... },
+    "serial": { ... }
+  }
+  ```
+
+### 5. Get connector list & specific connector data
+- **URLs**:
+  - `GET /api/connectors`: List all connectors of the station (`Vec<ConnectorData>`).
+  - `GET /api/connectors/:id`: Get full data for connector `:id` (`1` or `2`).
+  - `GET /api/connectors/:id/status`: Get only `status` for connector `:id`.
+  - `GET /api/connectors/:id/meter`: Get only electrical `meter` for connector `:id`.
+- **Typical Response (`GET /api/connectors/1/status`)**:
+  ```json
+  {
+    "iec": "C",
+    "ocpp": "Charging",
+    "legrand_raw": "C",
+    "connected": true,
+    "charging": true,
+    "error_code": "0000",
+    "error_description": "No error"
+  }
+  ```
+- **Typical Response (`GET /api/connectors/1/meter`)**:
+  ```json
+  {
+    "power_w": 3680.0,
+    "energy_kwh": 14.52,
+    "current_a": 16.0,
+    "voltage_v": 230.0,
+    "frequency_hz": 50.0,
+    "voltage_source": "internal"
+  }
+  ```
+
+### 6. Fast Status & Metering Endpoints (Optimized for EVCC & Home Assistant)
+- **URLs**:
+  - `GET /api/status[?side=1|2]`
+  - `GET /api/meter[?side=1|2]`
+- **Description**: Direct, lightweight endpoints targeting the primary socket (or queried `?side=`). Perfect for simple HTTP polls in EVCC or Home Assistant REST sensors without parsing a giant JSON blob.
+- **`GET /api/status` Response**:
+  ```json
+  {
+    "iec": "C",
+    "ocpp": "Charging",
+    "legrand_raw": "C",
+    "connected": true,
+    "charging": true,
+    "error_code": "0000",
+    "error_description": "No error"
+  }
+  ```
+- **`GET /api/meter` Response**:
+  ```json
+  {
+    "power_w": 3680.0,
+    "energy_kwh": 14.52,
+    "current_a": 16.0,
+    "voltage_v": 230.0,
+    "frequency_hz": 50.0,
+    "voltage_source": "internal"
+  }
+  ```
+
+### 7. Get supervision mode
+- **URL**: `/api/mode`
+- **Method**: `GET`
+- **Description**: Returns the current runtime supervision mode (`"remote"` or `"local"`).
+- **Typical Response**:
+  ```json
+  {
+    "mode": "remote"
+  }
+  ```
 
 ---
 
@@ -239,6 +423,7 @@ Three standard authentication methods are supported simultaneously against the s
 - **Validation & Security**:
   - Whitelist: only characters matching `[a-zA-Z0-9:?]` are accepted (strictly eliminates CRLF `\r`, `\n`, control characters, and injection attempts).
   - Length: maximum 20 characters (`1..=20`).
+  - Blocked in Local supervision mode (`403 Forbidden`).
   - If invalid, returns HTTP `400 Bad Request`:
     ```json
     {
@@ -251,11 +436,40 @@ Three standard authentication methods are supported simultaneously against the s
   { "status": "success", "message": "Command sent" }
   ```
 
+### 10. Inject external grid voltage
+- **URL**: `/api/voltage`
+- **Method**: `POST`
+- **Body (JSON)**:
+  ```json
+  { "voltage": 234.5 }
+  ```
+- **Description**: Injects a measured grid voltage from an external smart meter (Shelly, Enedis Linky, Home Assistant, etc.). When injected, Green'Up Link uses this exact voltage to compute active power ($P = U \times I$) instead of the default nominal 230V. External voltage automatically expires after 30 seconds if not refreshed.
+- **Validation**: Accepts voltage values between `180.0` and `280.0` V. Allowed even in Local supervision mode.
+- **Typical Response**:
+  ```json
+  { "status": "success", "message": "External voltage updated" }
+  ```
+
+### 11. Switch supervision mode (Local / Remote)
+- **URL**: `/api/mode`
+- **Method**: `POST`
+- **Body (JSON)**:
+  ```json
+  { "mode": "local" }
+  ```
+  *(Supported modes: `"local"`, `"remote"`)*
+- **Description**: Switches the station between **Remote** mode (active bidirectional control by Green'Up Link) and **Local** mode (pure passive spy/sniffer without sending any frame or `RaspberryPiModeOK` to the ATmega).
+- **Safety Safeguard**: Hot-switching to Local mode is **only allowed when the station is idle (`State:A`)** and first sends a `Reset` to ensure the ATmega returns to autonomous operation without expecting Green'Up Link. In any charging state (`B`, `C`, etc.), switching to Local mode is rejected with `400 Bad Request`.
+- **Typical Response**:
+  ```json
+  { "status": "success", "mode": "local", "message": "Switched to local mode. Serial commands are now silenced." }
+  ```
+
 ---
 
 ## 📋 Log Management Endpoints
 
-### 10. Get recent in-memory logs
+### 12. Get recent in-memory logs
 - **URL**: `/api/logs`
 - **Method**: `GET`
 - **Description**: Returns the ring buffer of the most recent 500 log entries recorded by the server since startup. Used by the Web UI console to populate the history on page load.
@@ -275,20 +489,20 @@ Three standard authentication methods are supported simultaneously against the s
   ]
   ```
 
-### 11. Stream real-time logs (SSE)
+### 13. Stream real-time logs (SSE)
 - **URL**: `/api/logs/stream`
 - **Method**: `GET`
 - **Content-Type**: `text/event-stream`
 - **Description**: Server-Sent Events (SSE) stream broadcasting all newly generated log entries in real-time. Automatic keep-alive pings are transmitted to keep persistent connections alive.
 
-### 12. Download daily log file
+### 14. Download daily log file
 - **URL**: `/api/logs/export`
 - **Method**: `GET`
 - **Content-Type**: `text/plain; charset=utf-8`
 - **Content-Disposition**: `attachment; filename="greenup_YYYY-MM-DD.log"`
 - **Description**: Downloads the raw text content of the active daily log file on the server.
 
-### 13. Get active log level
+### 15. Get active log level
 - **URL**: `/api/logs/level`
 - **Method**: `GET`
 - **Description**: Returns the currently active logging threshold filter (applied equally to stdout console and disk files).
@@ -299,7 +513,7 @@ Three standard authentication methods are supported simultaneously against the s
   }
   ```
 
-### 14. Update active log level dynamically
+### 16. Update active log level dynamically
 - **URL**: `/api/logs/level`
 - **Method**: `POST`
 - **Body (JSON)**:
