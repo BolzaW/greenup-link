@@ -281,6 +281,13 @@ pub fn on_state_change_for_side(side: u8, new_state: &str, tel: &Telemetry) {
     if let Some(ref mut session) = lock[idx] {
         let now_instant = Instant::now();
         let now_local = Local::now();
+
+        // If transitioning away from an active charge state, integrate the remaining fraction
+        let was_charging = session.last_sample_state == "D" || session.last_sample_state == "E";
+        if was_charging && session.last_sample_current > 0.05 {
+            let dt = now_instant.duration_since(session.last_tick_instant).as_secs_f64().min(2.0);
+            session.active_charging_duration_secs_f64 += dt;
+        }
         session.last_tick_instant = now_instant;
 
         if new_state == "A" {

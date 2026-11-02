@@ -416,7 +416,6 @@ pub fn run_serial_loop_with_options(
         let session_start = Instant::now();
         let mut last_watchdog_probe = Instant::now();
         let mut last_watchdog_warn = Instant::now();
-        let mut last_session_tick = Instant::now();
 
         while is_running.load(Ordering::Relaxed) {
             let cmd_opt = match rx_channel.try_recv() {
@@ -462,13 +461,6 @@ pub fn run_serial_loop_with_options(
                     tel.last_power_update = None;
                     tel.charge_complete = false;
                     reset_serial_filters();
-                }
-            }
-
-            if last_session_tick.elapsed() >= Duration::from_millis(1000) {
-                last_session_tick = Instant::now();
-                if let Ok(tel) = state.telemetry.lock() {
-                    crate::session::on_telemetry_tick_for_side(state.side(), &tel);
                 }
             }
 
