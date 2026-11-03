@@ -40,8 +40,8 @@ mock_config = {
     "dual": False,
     "has_tic": True,
     "auth_required": False,
-    "auth_ihm": True,
-    "token": "mock-secret-key",
+    "auth_ihm": False,
+    "token": "1234",
 }
 
 # Simulated backend state per connector (Point 1 / Right and Point 2 / Left)
@@ -436,13 +436,41 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
     def is_authenticated(self):
         if not mock_config["auth_required"]:
             return True
-        auth_header = self.headers.get("Authorization", "")
-        if auth_header == f"Bearer {mock_config['token']}":
+        expected = mock_config.get("token", "")
+        if not expected:
             return True
+
+        # 1. Check Authorization header (Bearer or Basic)
+        auth_header = self.headers.get("Authorization", "").strip()
+        if auth_header.lower().startswith("bearer "):
+            candidate = auth_header[7:].strip()
+            if candidate == expected:
+                return True
+        elif auth_header.lower().startswith("basic "):
+            import base64
+            try:
+                b64 = auth_header[6:].strip()
+                decoded = base64.b64decode(b64).decode("utf-8", errors="ignore")
+                if ":" in decoded:
+                    user, pass_ = decoded.split(":", 1)
+                    if pass_ == expected or (not pass_ and user == expected):
+                        return True
+                elif decoded == expected:
+                    return True
+            except Exception:
+                pass
+
+        # 2. Check X-API-Key header
+        x_api_key = self.headers.get("X-API-Key", "").strip()
+        if x_api_key and x_api_key == expected:
+            return True
+
+        # 3. Check query param ?token=
         parsed = urllib.parse.urlparse(self.path)
         qs = urllib.parse.parse_qs(parsed.query)
-        if qs.get("token", [""])[0] == mock_config["token"]:
+        if qs.get("token", [""])[0] == expected:
             return True
+
         return False
 
     def check_mutation_auth(self):
@@ -485,20 +513,28 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         elif "has_tic" in qs:
             mock_config["has_tic"] = qs["has_tic"][0].lower() in ("1", "true", "yes")
             add_mock_log("SYS", "INFO", f"🔀 TIC mode set via URL: {mock_config['has_tic']}")
-        if "ihm_auth" in qs:
-            val = qs["ihm_auth"][0].lower()
-            if val in ("0", "false", "no"):
-                mock_config["auth_required"] = True
-                mock_config["auth_ihm"] = False
-                add_mock_log("SYS", "INFO", "🔀 Configured auth with ihm_auth=false (Kiosk consultation libre) via URL")
-            else:
-                mock_config["auth_required"] = True
-                mock_config["auth_ihm"] = True
-                add_mock_log("SYS", "INFO", "🔀 Configured auth with ihm_auth=true via URL")
-        if "no_auth" in qs:
+        # Auth / API token overrides via URL:
+        if "with_token" in qs or "has_token" in qs or "auth_required" in qs:
+            val = (qs.get("with_token") or qs.get("has_token") or qs.get("auth_required"))[0].lower()
+            mock_config["auth_required"] = val in ("1", "true", "yes")
+            add_mock_log("SYS", "INFO", f"🔀 API token requirement set via URL: {mock_config['auth_required']}")
+        elif "no_token" in qs or "no_auth" in qs:
             mock_config["auth_required"] = False
-            mock_config["auth_ihm"] = True
-            add_mock_log("SYS", "INFO", "🔀 Disabled auth (open access) via URL")
+            add_mock_log("SYS", "INFO", "🔀 Disabled API token requirement (Open LAN) via URL")
+
+        if "ihm_auth" in qs or "auth_ihm" in qs:
+            val = (qs.get("ihm_auth") or qs.get("auth_ihm"))[0].lower()
+            mock_config["auth_ihm"] = val in ("1", "true", "yes")
+            add_mock_log("SYS", "INFO", f"🔀 IHM Auth mode set via URL: {mock_config['auth_ihm']}")
+        elif "kiosk" in qs:
+            mock_config["auth_ihm"] = False
+            add_mock_log("SYS", "INFO", "🔀 Kiosk mode (ihm_auth=false) set via URL")
+
+        if "set_token" in qs or "server_token" in qs or "mock_token" in qs:
+            token_val = (qs.get("set_token") or qs.get("server_token") or qs.get("mock_token"))[0].strip()
+            mock_config["token"] = token_val
+            mock_config["auth_required"] = True
+            add_mock_log("SYS", "INFO", f"🔀 Authorized API token set via URL: '{token_val}'")
 
         # Full auth check if ihm_auth=true
         if mock_config["auth_required"] and mock_config["auth_ihm"]:
@@ -521,8 +557,8 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             self.serve_file(BASE_DIR / "locales" / filename, "application/json; charset=utf-8")
         elif url == "/api/auth/status":
             auth_req = mock_config["auth_required"]
-            auth_ihm = mock_config["auth_ihm"]
             is_authed = self.is_authenticated()
+            auth_ihm = mock_config["auth_ihm"] if auth_req else False
             add_mock_log("API", "DEBUG", f"🔐 GET /api/auth/status (required={auth_req}, authenticated={is_authed}, auth_ihm={auth_ihm})")
             self.send_json({
                 "auth_required": auth_req,
@@ -728,6 +764,36 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             return
 
         body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
+
+        # Allow dynamic parameterization of auth status via POST /api/auth/status
+        if url == "/api/auth/status":
+            try:
+                data = json.loads(body) if body else {}
+                if "auth_required" in data:
+                    mock_config["auth_required"] = bool(data["auth_required"])
+                if "with_token" in data or "has_token" in data:
+                    mock_config["auth_required"] = bool(data.get("with_token", data.get("has_token")))
+                if "auth_ihm" in data:
+                    mock_config["auth_ihm"] = bool(data["auth_ihm"])
+                if "ihm_auth" in data:
+                    mock_config["auth_ihm"] = bool(data["ihm_auth"])
+                if "token" in data:
+                    mock_config["token"] = str(data["token"])
+                add_mock_log("API", "INFO", f"🔐 Reconfigured auth via POST: required={mock_config['auth_required']}, ihm_auth={mock_config['auth_ihm']}, token={mock_config['token']}")
+                auth_req = mock_config["auth_required"]
+                auth_ihm = mock_config["auth_ihm"] if auth_req else False
+                is_authed = self.is_authenticated()
+                self.send_json({
+                    "status": "success",
+                    "auth_required": auth_req,
+                    "authenticated": is_authed,
+                    "auth_ihm": auth_ihm,
+                    "token": mock_config["token"],
+                })
+                return
+            except Exception as e:
+                self.send_error(400, f"Invalid JSON: {e}")
+                return
 
         # Check mutation authorization (kiosk mode blocks mutation unless token provided)
         if not self.check_mutation_auth():
@@ -949,38 +1015,51 @@ def parse_args():
         description="Serveur mock local de l'IHM Web Green'Up Link",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Exemples :
+Exemples d'utilisation :
   python scripts/mock_server.py
-      Mode standard : Borne mono point, TIC actif, accès libre LAN
+      Mode standard : Borne mono point, TIC actif, sans clé API (Accès libre LAN -> Cadenas ouvert ROUGE)
 
-  python scripts/mock_server.py --dual
-      Borne double point de charge (Point 1 Droit + Point 2 Gauche avec sélecteur)
-
-  python scripts/mock_server.py --no-tic
-      Borne sans support TIC (Linky masqué sur l'IHM, TIC non supporté)
+  python scripts/mock_server.py --with-token
+      Active la clé API sur la borne (clé autorisée par défaut: 1234, écran verrouillé -> Cadenas VERT une fois connecté)
 
   python scripts/mock_server.py --no-ihm-auth
-  python scripts/mock_server.py --ihm-auth-false
-      Authentification activée avec ihm_auth=false (Mode consultation libre / Kiosk)
-      Toutes les pages sont consultables librement, cadenas bleu ciel en haut à droite.
-      Toute action (arrêt de charge, consigne) invite à saisir la clé API (clé mock: mock-secret-key).
+  python scripts/mock_server.py --kiosk
+      Mode consultation libre (ihm_auth=false -> Cadenas ouvert BLEU)
+      Permet de naviguer librement. Au clic sur le cadenas ou lors d'une action, la clé 1234 est demandée.
 
   python scripts/mock_server.py --auth
-      Authentification complète avec ihm_auth=true (Écran verrouillé dès le chargement)
+      Active l'authentification complète avec ihm_auth=true (Écran verrouillé dès le chargement)
+
+  python scripts/mock_server.py --token 1234 --no-ihm-auth
+      Définit une clé API personnalisée (ex: 1234) en mode consultation libre
+
+  python scripts/mock_server.py --no-token
+      Force le mode sans clé API (Accès libre LAN -> Cadenas ouvert ROUGE)
 
   python scripts/mock_server.py --dual --no-tic --no-ihm-auth
       Combine toutes les options pour tester les cas avancés !
+
+Bascules dynamiques à chaud (dans l'URL du navigateur) :
+  http://localhost:8080/?with_token=1      # Active la présence d'une clé API
+  http://localhost:8080/?no_token=1        # Désactive la clé API (Open LAN -> Cadenas ROUGE)
+  http://localhost:8080/?ihm_auth=false    # Mode consultation libre (Cadenas BLEU)
+  http://localhost:8080/?ihm_auth=true     # Mode complet sécurisé
+  http://localhost:8080/?set_token=1234    # Définit la clé API autorisée sur le mock
 """
     )
     parser.add_argument("--port", type=int, default=PORT, help=f"Port d'écoute HTTP (défaut: {PORT})")
     parser.add_argument("--dual", action="store_true", help="Simule une borne double point de charge (2 points)")
     parser.add_argument("--no-tic", action="store_true", help="Simule une borne sans support TIC (Linky masqué)")
-    parser.add_argument("--no-ihm-auth", "--ihm-auth-false", dest="no_ihm_auth", action="store_true",
-                        help="Active l'authentification avec ihm_auth=false (Mode consultation libre / Kiosk)")
-    parser.add_argument("--auth", "--auth-required", dest="auth_required", action="store_true",
+    parser.add_argument("--token", type=str, default=None,
+                        help="Clé API autorisée sur la borne (défaut: 1234)")
+    parser.add_argument("--with-token", "--has-token", dest="with_token", action="store_true",
+                        help="Active une clé API sur la borne (auth_required=true, token par défaut: 1234)")
+    parser.add_argument("--no-token", "--without-token", "--no-auth", dest="no_token", action="store_true",
+                        help="Désactive la clé API sur la borne (auth_required=false, accès libre LAN, cadenas rouge)")
+    parser.add_argument("--no-ihm-auth", "--ihm-auth-false", "--kiosk", dest="no_ihm_auth", action="store_true",
+                        help="Active l'authentification avec ihm_auth=false (Mode consultation libre / Kiosk - cadenas bleu)")
+    parser.add_argument("--auth", "--auth-required", "--locked", dest="auth_required", action="store_true",
                         help="Active l'authentification complète avec ihm_auth=true (Écran verrouillé)")
-    parser.add_argument("--token", type=str, default="mock-secret-key",
-                        help="Clé API attendue (défaut: mock-secret-key)")
     return parser.parse_args()
 
 def main():
@@ -988,17 +1067,28 @@ def main():
     port = args.port
     mock_config["dual"] = args.dual
     mock_config["has_tic"] = not args.no_tic
-    mock_config["token"] = args.token
 
-    if args.no_ihm_auth:
+    if args.token is not None:
+        mock_config["token"] = args.token
+    else:
+        mock_config["token"] = "1234"
+
+    if args.no_token:
+        mock_config["auth_required"] = False
+        mock_config["auth_ihm"] = False
+    elif args.no_ihm_auth:
         mock_config["auth_required"] = True
         mock_config["auth_ihm"] = False
     elif args.auth_required:
         mock_config["auth_required"] = True
         mock_config["auth_ihm"] = True
-    else:
-        mock_config["auth_required"] = False
+    elif args.with_token or args.token is not None:
+        mock_config["auth_required"] = True
         mock_config["auth_ihm"] = True
+    else:
+        # Default: no API token configured on the station (Open LAN)
+        mock_config["auth_required"] = False
+        mock_config["auth_ihm"] = False
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", port), MockHandler)
     url = f"http://localhost:{port}"
@@ -1009,23 +1099,28 @@ def main():
     print(f"   • Type de borne        : {'Double point de charge [Point 1 + Point 2]' if mock_config['dual'] else 'Mono point de charge'}")
     print(f"   • Télé-information TIC : {'Activée (Standard 9600)' if mock_config['has_tic'] else 'Désactivée / Non supportée'}")
     if not mock_config["auth_required"]:
-        print(f"   • Authentification     : Accès libre LAN (aucune auth requise -> Cadenas ouvert ROUGE)")
+        print(f"   • Clé API / Auth       : Aucune clé configurée (Accès libre LAN -> Cadenas ouvert ROUGE)")
     elif not mock_config["auth_ihm"]:
-        print(f"   • Authentification     : Mode consultation libre (ihm_auth=false / Kiosk -> Cadenas ouvert BLEU)")
-        print(f"     Clé API mock attendue pour actions : {mock_config['token']}")
+        print(f"   • Clé API / Auth       : Mode consultation libre (ihm_auth=false / Kiosk -> Cadenas ouvert BLEU)")
+        print(f"     Clé API autorisée    : {mock_config['token']}")
     else:
-        print(f"   • Authentification     : Verrouillée complète (ihm_auth=true -> Cadenas fermé)")
-        print(f"     Clé API mock attendue : {mock_config['token']}")
+        print(f"   • Clé API / Auth       : Authentification complète (ihm_auth=true -> Verrouillé)")
+        print(f"     Clé API autorisée    : {mock_config['token']}")
     print("--------------------------------------------------------------------------------")
     print("💡 Raccourcis CLI :")
-    print("   python scripts/mock_server.py --dual          # Double point")
-    print("   python scripts/mock_server.py --no-tic        # Sans TIC")
-    print("   python scripts/mock_server.py --no-ihm-auth   # Mode consultation libre (ihm_auth=false)")
+    print("   python scripts/mock_server.py                      # Sans clé API (Cadenas ROUGE)")
+    print("   python scripts/mock_server.py --no-ihm-auth        # Clé 1234 en consultation libre (Cadenas BLEU)")
+    print("   python scripts/mock_server.py --with-token         # Clé 1234 en mode complet verrouillé")
+    print("   python scripts/mock_server.py --token 1234         # Clé personnalisée")
+    print("   python scripts/mock_server.py --dual               # Double point")
+    print("   python scripts/mock_server.py --no-tic             # Sans TIC")
     print("")
     print("💡 Bascules dynamiques sans redémarrer le serveur (dans l'URL du navigateur) :")
-    print(f"   {url}/?dual=1       ou {url}/?dual=0")
-    print(f"   {url}/?no_tic=1     ou {url}/?has_tic=1")
-    print(f"   {url}/?ihm_auth=0   ou {url}/?no_auth=1")
+    print(f"   {url}/?with_token=1    ou {url}/?no_token=1")
+    print(f"   {url}/?ihm_auth=false  ou {url}/?ihm_auth=true")
+    print(f"   {url}/?set_token=1234")
+    print(f"   {url}/?dual=1          ou {url}/?dual=0")
+    print(f"   {url}/?no_tic=1        ou {url}/?has_tic=1")
     print("================================================================================")
     print("Appuyez sur Ctrl+C pour arrêter le serveur.")
 
