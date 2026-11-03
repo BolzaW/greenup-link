@@ -598,6 +598,13 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 target_side = self.get_target_side()
                 apply_state(st, target_side)
 
+        # Mode override via URL (?mode=remote, local)
+        if "mode" in qs:
+            m = qs["mode"][0].lower()
+            if m in ("local", "remote"):
+                state["supervision_mode"] = m
+                add_mock_log("SYS", "INFO", f"🔀 Station control mode set via URL: {m}")
+
         # Full auth check if ihm_auth=true
         if mock_config["auth_required"] and mock_config["auth_ihm"]:
             is_public = url in ("/", "/favicon.ico", "/css/style.css", "/api/auth/status") or url.startswith(("/js/", "/locales/"))
@@ -1164,6 +1171,8 @@ Bascules dynamiques à chaud (dans l'URL du navigateur) :
                         help="Active l'authentification avec ihm_auth=false (Mode consultation libre / Kiosk - cadenas bleu)")
     parser.add_argument("--auth", "--auth-required", "--locked", dest="auth_required", action="store_true",
                         help="Active l'authentification complète avec ihm_auth=true (Écran verrouillé)")
+    parser.add_argument("--mode", "-m", type=str.lower, choices=["remote", "local"], default="remote",
+                        help="Mode de pilotage initial : remote (Actif/Nominal) ou local (Écoute seule/Passif) [défaut: remote]")
     return parser.parse_args()
 
 def main():
@@ -1171,6 +1180,7 @@ def main():
     port = args.port
     mock_config["dual"] = args.dual
     mock_config["has_tic"] = not args.no_tic
+    state["supervision_mode"] = args.mode
 
     # Apply initial state
     apply_state(args.state, 1)

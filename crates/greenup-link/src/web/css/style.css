@@ -1916,3 +1916,85 @@
     border-color: rgba(14, 165, 233, 0.35);
     color: #38bdf8;
 }
+
+/* --- Passive / Local Mode Banner in Controls Panel --- */
+#localModeBanner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    background-color: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.32);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(251, 191, 36, 0.1);
+    color: #fde68a;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    margin-bottom: 1.25rem;
+    box-sizing: border-box;
+}
+
+#localModeBanner.hidden {
+    display: none !important;
+}
+
+#localModeBanner .banner-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+    color: #fbbf24;
+    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.45));
+}
+
+#localModeBanner .banner-text {
+    font-weight: 500;
+    letter-spacing: 0.01em;
+}
+
+/* --- Range Slider: Disabled & Passive Mode Styling --- */
+input[type=range]:disabled {
+    cursor: not-allowed !important;
+}
+
+input[type=range]:disabled::-webkit-slider-runnable-track {
+    background-color: #1e293b !important;
+    border: 1px solid #334155 !important;
+    cursor: not-allowed !important;
+}
+
+input[type=range]:disabled::-moz-range-track {
+    background-color: #1e293b !important;
+    border: 1px solid #334155 !important;
+    cursor: not-allowed !important;
+}
+
+input[type=range]:disabled::-webkit-slider-thumb {
+    background-color: #475569 !important;
+    border: 2px solid #334155 !important;
+    box-shadow: none !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+input[type=range]:disabled::-moz-range-thumb {
+    background-color: #475569 !important;
+    border: 2px solid #334155 !important;
+    box-shadow: none !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+/* Dimmed Slider Box and Badge when disabled in passive mode */
+#sliderBox.slider-disabled {
+    border-color: rgba(51, 65, 85, 0.4);
+    background-color: rgba(15, 23, 42, 0.35);
+}
+
+#boxSliderValue.slider-disabled {
+    background-color: rgba(30, 41, 59, 0.5) !important;
+    border-color: rgba(51, 65, 85, 0.5) !important;
+}
+
+#lblSlider.slider-disabled {
+    color: #64748b !important;
+}

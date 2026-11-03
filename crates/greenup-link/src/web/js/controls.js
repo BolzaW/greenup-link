@@ -69,21 +69,32 @@ function updateControlButtons(charge_authorized, charge_paused) {
 }
 
 function updateControlsForMode(isLocal) {
+    const notice = typeof t === 'function' ? t('controls.local_mode_notice') : "Commandes verrouillées : la borne est en mode autonome (écoute seule)";
+    const sliderBox = document.getElementById('sliderBox');
+    const boxSliderValue = document.getElementById('boxSliderValue');
+    const lblSlider = document.getElementById('lblSlider');
+
     if (isLocal) {
         if (slider) slider.disabled = true;
+        if (sliderBox) sliderBox.classList.add('slider-disabled');
+        if (boxSliderValue) boxSliderValue.classList.add('slider-disabled');
+        if (lblSlider) lblSlider.classList.add('slider-disabled');
         if (btnEnableDisable) {
             btnEnableDisable.disabled = true;
-            btnEnableDisable.title = typeof t === 'function' ? t('controls.local_mode_notice') : "Commandes verrouillées : la borne est en mode Passif (Local)";
+            btnEnableDisable.title = notice;
         }
         if (btnPauseResume) {
             btnPauseResume.disabled = true;
-            btnPauseResume.title = typeof t === 'function' ? t('controls.local_mode_notice') : "Commandes verrouillées : la borne est en mode Passif (Local)";
+            btnPauseResume.title = notice;
         }
         if (controlsPanel) {
-            controlsPanel.classList.add('opacity-75');
+            controlsPanel.classList.add('mode-passive');
         }
     } else {
         if (slider && window.isUsbConnected) slider.disabled = false;
+        if (sliderBox) sliderBox.classList.remove('slider-disabled');
+        if (boxSliderValue) boxSliderValue.classList.remove('slider-disabled');
+        if (lblSlider) lblSlider.classList.remove('slider-disabled');
         if (btnEnableDisable && window.isUsbConnected) {
             btnEnableDisable.disabled = false;
             btnEnableDisable.removeAttribute('title');
@@ -93,6 +104,7 @@ function updateControlsForMode(isLocal) {
             btnPauseResume.removeAttribute('title');
         }
         if (controlsPanel && window.isUsbConnected && !isActionPending) {
+            controlsPanel.classList.remove('mode-passive');
             controlsPanel.classList.remove('opacity-75');
         }
     }

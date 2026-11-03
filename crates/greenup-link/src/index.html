@@ -637,17 +637,17 @@
                 <h3 class="text-sm font-bold text-slate-300 uppercase tracking-widest mb-6" data-i18n="controls.charge_params">Paramètres de charge</h3>
 
                 <!-- Local Mode Banner (shown when station is in passive local sniffer mode) -->
-                <div id="localModeBanner" class="hidden mb-6 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-3">
-                    <svg class="w-5 h-5 flex-shrink-0 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                    <span data-i18n="controls.local_mode_notice">Mode Passif actif : la borne est autonome. Les commandes de charge sont verrouillées.</span>
+                <div id="localModeBanner" class="hidden">
+                    <svg class="banner-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <span class="banner-text" data-i18n="controls.local_mode_notice">Mode écoute seule : la borne fonctionne en autonomie. Les commandes de charge sont verrouillées.</span>
                 </div>
 
                 <!-- Slider -->
-                <div class="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                <div id="sliderBox" class="bg-slate-950/50 p-4 rounded-xl border border-slate-800 transition-all duration-300">
                     <div class="flex justify-between items-end mb-4">
-                        <label class="text-xs font-bold text-slate-400 uppercase tracking-wide" data-i18n="controls.current_limit">Consigne de Courant</label>
-                        <div class="bg-sky-500/10 px-3 py-1 rounded border border-sky-500/20">
-                            <span id="lblSlider" class="font-bold text-sky-400 font-mono text-sm">16 A</span>
+                        <label id="lblSliderTitle" class="text-xs font-bold text-slate-400 uppercase tracking-wide transition-colors" data-i18n="controls.current_limit">Consigne de Courant</label>
+                        <div id="boxSliderValue" class="bg-sky-500/10 px-3 py-1 rounded border border-sky-500/20 transition-all duration-300">
+                            <span id="lblSlider" class="font-bold text-sky-400 font-mono text-sm transition-colors">16 A</span>
                         </div>
                     </div>
                     <input type="range" id="currentSlider" min="7" max="32" step="1" value="16">

@@ -82,7 +82,7 @@
     "disable": "DÉSACTIVER",
     "pause": "PAUSE",
     "resume": "REPRENDRE",
-    "local_mode_notice": "Mode Passif actif : la borne est autonome. Les commandes de charge sont verrouillées."
+    "local_mode_notice": "Mode écoute seule : la borne fonctionne en autonomie. Les commandes de charge sont verrouillées."
   },
   "tic": {
     "standard": "TIC Standard\n(9600 bauds)",

@@ -82,7 +82,7 @@
     "disable": "DISABLE",
     "pause": "PAUSE",
     "resume": "RESUME",
-    "local_mode_notice": "Passive mode active: station operates autonomously. Charge controls are locked."
+    "local_mode_notice": "Listen-only mode active: station operates autonomously. Charge controls are locked."
   },
   "tic": {
     "standard": "Standard TIC\n(9600 baud)",
