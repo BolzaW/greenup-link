@@ -106,6 +106,42 @@ def add_mock_log(category, level, message):
         mock_logs.pop(0)
     return entry
 
+def apply_state(state_letter, target_side=1):
+    """Applies a Green'Up state (A, B, C, D, E) to the simulated connector."""
+    state_letter = state_letter.upper()
+    c = connectors_state.get(target_side, connectors_state[1])
+    c["greenup_state"] = state_letter
+    if state_letter == "A":
+        c["iec_state"] = "A"
+        c["current"] = 0.0
+        c["power"] = 0.0
+        c["charge_authorized"] = True
+        c["charge_paused"] = False
+        c["charge_complete"] = False
+    elif state_letter == "B":
+        c["iec_state"] = "B"
+        c["current"] = 0.0
+        c["power"] = 0.0
+        c["charge_authorized"] = False
+        c["charge_paused"] = False
+        c["charge_complete"] = False
+    elif state_letter == "C":
+        c["iec_state"] = "B"
+        c["current"] = 0.0
+        c["power"] = 0.0
+        c["charge_authorized"] = True
+        c["charge_paused"] = False
+        c["charge_complete"] = False
+    elif state_letter in ("D", "E"):
+        c["iec_state"] = "C"
+        c["current"] = float(c.get("eliot_limit_amps", 16))
+        c["power"] = round(c["voltage"] * c["current"], 1)
+        c["charge_authorized"] = True
+        c["charge_paused"] = False
+        c["charge_complete"] = False
+    add_mock_log("API", "INFO", f"🔄 État borne changé en {state_letter} (Point {target_side})")
+    add_mock_log("SERIAL_RX", "INFO", f"State:{state_letter}")
+
 # Seed initial logs
 add_mock_log("SYS", "INFO", "=== GreenUp Link started in Mock Mode ===")
 add_mock_log("SERIAL", "INFO", "Serial port opened: /dev/mock_ttyUSB0 @ 115200 baud")
@@ -155,12 +191,31 @@ def get_mock_station():
 
 def get_mock_connector(connector_id=1):
     c_state = connectors_state.get(connector_id, connectors_state[1])
-    is_charging = c_state["greenup_state"] in ("C", "D", "E") and not c_state["charge_paused"]
+    is_charging = c_state["greenup_state"] in ("D", "E") and not c_state["charge_paused"]
     has_tic = mock_config["has_tic"]
+
+    if is_charging:
+        ocpp_status = "Charging"
+    elif c_state["charge_paused"]:
+        ocpp_status = "SuspendedEVSE"
+    elif c_state["greenup_state"] == "B":
+        ocpp_status = "Preparing"
+    elif c_state["greenup_state"] == "C":
+        ocpp_status = "SuspendedEV"
+    else:
+        ocpp_status = "Available"
+
+    if is_charging:
+        pilot_v = 6
+    elif c_state["greenup_state"] in ("B", "C"):
+        pilot_v = 9
+    else:
+        pilot_v = 12
+
     return {
         "id": connector_id,
         "status": {
-            "ocpp": "Charging" if is_charging else ("SuspendedEVSE" if c_state["charge_paused"] else ("Preparing" if c_state["greenup_state"] == "B" else "Available")),
+            "ocpp": ocpp_status,
             "iec": c_state["iec_state"],
             "raw_code": c_state["greenup_state"],
             "vehicle_connected": c_state["greenup_state"] in ("B", "C", "D", "E"),
@@ -176,7 +231,7 @@ def get_mock_connector(connector_id=1):
             "min_allowed_amps": 7,
             "max_hardware_amps": 32,
             "charge_authorized": c_state["charge_authorized"] and not c_state["charge_paused"],
-            "pilot_voltage": 6 if is_charging else (9 if c_state["greenup_state"] == "B" else 12),
+            "pilot_voltage": pilot_v,
         },
         "meter": {
             "power_w": c_state["power"],
@@ -536,6 +591,13 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             mock_config["auth_required"] = True
             add_mock_log("SYS", "INFO", f"🔀 Authorized API token set via URL: '{token_val}'")
 
+        # State override via URL (?state=A, B, C, D, E)
+        if "state" in qs:
+            st = qs["state"][0].upper()
+            if st in ("A", "B", "C", "D", "E"):
+                target_side = self.get_target_side()
+                apply_state(st, target_side)
+
         # Full auth check if ihm_auth=true
         if mock_config["auth_required"] and mock_config["auth_ihm"]:
             is_public = url in ("/", "/favicon.ico", "/css/style.css", "/api/auth/status") or url.startswith(("/js/", "/locales/"))
@@ -889,17 +951,32 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({"status": "success", "level": new_level})
             except Exception as e:
                 self.send_error(400, str(e))
+        elif url == "/api/state":
+            try:
+                data = json.loads(body) if body else {}
+                st = data.get("state", "").upper()
+                target_side = data.get("side", self.get_target_side())
+                if st in ("A", "B", "C", "D", "E"):
+                    apply_state(st, target_side)
+                    self.send_json({"status": "success", "state": st, "side": target_side})
+                    return
+                else:
+                    self.send_error(400, "Invalid state (must be A, B, C, D, or E)")
+                    return
+            except Exception as e:
+                self.send_error(400, str(e))
+                return
         elif url == "/api/command":
             cmd = body.strip()
             import re
-            if not re.match(r'^[a-zA-Z0-9:?]{1,20}$', cmd):
+            if not re.match(r'^[a-zA-Z0-9:?=_]{1,20}$', cmd):
                 add_mock_log("API", "WARN", f"⛔ Rejected invalid raw command: '{cmd}'")
                 self.send_response(400)
                 self.send_header("Content-Type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({
                     "status": "error",
-                    "error": "Invalid command format. Allowed characters: [a-zA-Z0-9:?], length 1-20 characters."
+                    "error": "Invalid command format. Allowed characters: [a-zA-Z0-9:?=_], length 1-20 characters."
                 }).encode("utf-8"))
                 return
 
@@ -913,7 +990,17 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 target_side = self.get_target_side()
                 c = connectors_state.get(target_side, connectors_state[1])
                 # Simulated responses
-                if cmd == "State?":
+                if cmd.upper() in ("STATE=A", "STATE:A", "SET_STATE:A"):
+                    apply_state("A", target_side)
+                elif cmd.upper() in ("STATE=B", "STATE:B", "SET_STATE:B"):
+                    apply_state("B", target_side)
+                elif cmd.upper() in ("STATE=C", "STATE:C", "SET_STATE:C"):
+                    apply_state("C", target_side)
+                elif cmd.upper() in ("STATE=D", "STATE:D", "SET_STATE:D"):
+                    apply_state("D", target_side)
+                elif cmd.upper() in ("STATE=E", "STATE:E", "SET_STATE:E"):
+                    apply_state("E", target_side)
+                elif cmd == "State?":
                     add_mock_log("SERIAL_RX", "INFO", f"State:{c['greenup_state']}")
                 elif cmd == "CC?":
                     add_mock_log("SERIAL_RX", "INFO", "CC:32A")
@@ -1017,7 +1104,19 @@ def parse_args():
         epilog="""
 Exemples d'utilisation :
   python scripts/mock_server.py
-      Mode standard : Borne mono point, TIC actif, sans clé API (Accès libre LAN -> Cadenas ouvert ROUGE)
+      Mode standard : Borne mono point, TIC actif, état E (En charge), sans clé API (Cadenas ouvert ROUGE)
+
+  python scripts/mock_server.py --state A
+      Démarre la borne à l'état A (Libre / Déconnectée, câble non branché)
+
+  python scripts/mock_server.py --state B
+      Démarre la borne à l'état B (Véhicule branché, attente autorisation borne)
+
+  python scripts/mock_server.py --state C
+      Démarre la borne à l'état C (Borne prête et autorisée, attente demande du véhicule)
+
+  python scripts/mock_server.py --state D
+      Démarre la borne à l'état D (En charge standard sans ventilation)
 
   python scripts/mock_server.py --with-token
       Active la clé API sur la borne (clé autorisée par défaut: 1234, écran verrouillé -> Cadenas VERT une fois connecté)
@@ -1036,10 +1135,11 @@ Exemples d'utilisation :
   python scripts/mock_server.py --no-token
       Force le mode sans clé API (Accès libre LAN -> Cadenas ouvert ROUGE)
 
-  python scripts/mock_server.py --dual --no-tic --no-ihm-auth
+  python scripts/mock_server.py --dual --no-tic --state A
       Combine toutes les options pour tester les cas avancés !
 
 Bascules dynamiques à chaud (dans l'URL du navigateur) :
+  http://localhost:8080/?state=A           # Bascule la borne à l'état A (B, C, D, E)
   http://localhost:8080/?with_token=1      # Active la présence d'une clé API
   http://localhost:8080/?no_token=1        # Désactive la clé API (Open LAN -> Cadenas ROUGE)
   http://localhost:8080/?ihm_auth=false    # Mode consultation libre (Cadenas BLEU)
@@ -1050,6 +1150,10 @@ Bascules dynamiques à chaud (dans l'URL du navigateur) :
     parser.add_argument("--port", type=int, default=PORT, help=f"Port d'écoute HTTP (défaut: {PORT})")
     parser.add_argument("--dual", action="store_true", help="Simule une borne double point de charge (2 points)")
     parser.add_argument("--no-tic", action="store_true", help="Simule une borne sans support TIC (Linky masqué)")
+    parser.add_argument("--state", "-s", type=str.upper, choices=["A", "B", "C", "D", "E"], default="E",
+                        help="État Green'Up initial de la borne : A (Déconnectée), B (Attente borne), C (Attente véhicule), D (Charge std), E (Charge Green'Up) [défaut: E]")
+    parser.add_argument("--state-2", type=str.upper, choices=["A", "B", "C", "D", "E"], default=None,
+                        help="État Green'Up initial pour le Point 2 (en mode double point, défaut: B)")
     parser.add_argument("--token", type=str, default=None,
                         help="Clé API autorisée sur la borne (défaut: 1234)")
     parser.add_argument("--with-token", "--has-token", dest="with_token", action="store_true",
@@ -1067,6 +1171,11 @@ def main():
     port = args.port
     mock_config["dual"] = args.dual
     mock_config["has_tic"] = not args.no_tic
+
+    # Apply initial state
+    apply_state(args.state, 1)
+    if args.state_2:
+        apply_state(args.state_2, 2)
 
     if args.token is not None:
         mock_config["token"] = args.token
@@ -1093,10 +1202,23 @@ def main():
     server = http.server.ThreadingHTTPServer(("127.0.0.1", port), MockHandler)
     url = f"http://localhost:{port}"
 
+    state_descriptions = {
+        "A": "A (Libre / Déconnectée)",
+        "B": "B (Connectée - Attente borne)",
+        "C": "C (Connectée - Attente véhicule)",
+        "D": "D (En charge standard)",
+        "E": "E (En charge Green'Up)",
+    }
+    st1 = connectors_state[1]["greenup_state"]
+
     print("================================================================================")
     print(f"🚀 Green'Up Link Mock UI Server démarré sur : {url}")
     print("--------------------------------------------------------------------------------")
     print(f"   • Type de borne        : {'Double point de charge [Point 1 + Point 2]' if mock_config['dual'] else 'Mono point de charge'}")
+    print(f"   • État initial borne   : {state_descriptions.get(st1, st1)}")
+    if mock_config["dual"]:
+        st2 = connectors_state[2]["greenup_state"]
+        print(f"   • État Point 2 initial : {state_descriptions.get(st2, st2)}")
     print(f"   • Télé-information TIC : {'Activée (Standard 9600)' if mock_config['has_tic'] else 'Désactivée / Non supportée'}")
     if not mock_config["auth_required"]:
         print(f"   • Clé API / Auth       : Aucune clé configurée (Accès libre LAN -> Cadenas ouvert ROUGE)")
@@ -1108,14 +1230,18 @@ def main():
         print(f"     Clé API autorisée    : {mock_config['token']}")
     print("--------------------------------------------------------------------------------")
     print("💡 Raccourcis CLI :")
-    print("   python scripts/mock_server.py                      # Sans clé API (Cadenas ROUGE)")
+    print("   python scripts/mock_server.py --state A            # État A (Libre / Déconnectée)")
+    print("   python scripts/mock_server.py --state B            # État B (Attente borne)")
+    print("   python scripts/mock_server.py --state C            # État C (Attente véhicule)")
+    print("   python scripts/mock_server.py --state D            # État D (En charge standard)")
+    print("   python scripts/mock_server.py --state E            # État E (En charge Green'Up)")
     print("   python scripts/mock_server.py --no-ihm-auth        # Clé 1234 en consultation libre (Cadenas BLEU)")
     print("   python scripts/mock_server.py --with-token         # Clé 1234 en mode complet verrouillé")
-    print("   python scripts/mock_server.py --token 1234         # Clé personnalisée")
     print("   python scripts/mock_server.py --dual               # Double point")
     print("   python scripts/mock_server.py --no-tic             # Sans TIC")
     print("")
     print("💡 Bascules dynamiques sans redémarrer le serveur (dans l'URL du navigateur) :")
+    print(f"   {url}/?state=A         ou {url}/?state=B  ou  {url}/?state=E")
     print(f"   {url}/?with_token=1    ou {url}/?no_token=1")
     print(f"   {url}/?ihm_auth=false  ou {url}/?ihm_auth=true")
     print(f"   {url}/?set_token=1234")
