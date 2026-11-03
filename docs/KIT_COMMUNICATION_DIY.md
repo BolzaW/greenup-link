@@ -10,11 +10,9 @@ This kit is designed to run the lightweight **Green'Up Link** daemon (written in
 > ### ⚡ Mains Electrical Safety Warning
 > Any physical intervention inside the EV charging station must **strictly be performed with the main electrical circuit breaker switched OFF (completely de-energized)**. Fatal electrical shock hazards (**230V single-phase / 400V three-phase**) are present inside the enclosure. Always verify the complete absence of voltage with a verified multimeter before removing the station's front cover.
 
-> [!WARNING]
-> ### 🧪 Experimental Project & Proof of Concept Notice
-> This DIY communication kit is **experimental**. In practice, **it has never been fully assembled and tested as a complete end-to-end package in real-world conditions**. No 3D-printable mounting bracket model currently exists.
-> 
-> This document represents a theoretical engineering roadmap and reference guide that is intended to evolve over time through community testing, feedback, and contributions.
+> [!IMPORTANT]
+> ### ✅ Hardware Implementation Status: Field-Validated (Kit V1)
+> As of November 2026, this DIY alternative communication kit (Kit V1) has been **fully assembled, physically integrated inside the original station chassis, and successfully field-validated** with a Raspberry Pi 3 Model B+. The system powers on reliably from the internal 12V auxiliary DC supply, fits cleanly in the upper left section of the lateral side panel (the exact location of the official kit), and establishes robust bi-directional serial USB communication with the ATmega2560 controller board.
 
 ---
 
@@ -45,10 +43,10 @@ To replicate Legrand's setup with off-the-shelf commercial components:
 
 | Component | Specifications | Search Keywords (Amazon / AliExpress / RS) | Indicative Price |
 | :--- | :--- | :--- | :--- |
-| **Waterproof Buck Converter 12V/24V to 5V 3A (15W)** | - Input: 8V – 32V DC<br>- Output: 5.0V / 3A (15W)<br>- Format: Sealed black resin case (IP67 waterproof)<br>- Output connector: **Micro-USB male** (for Pi Zero 2 W or Pi 3B+) or **USB-C male** (for Pi 4) | *12V to 5V 3A Micro USB buck converter* / *DC-DC Step Down Waterproof 12V 5V 3A* | ~**8 € – 12 €** |
+| **Waterproof Buck Converter 12V/24V to 5V 3A (15W)** | - Input: 8V – 32V DC<br>- Output: 5.0V / 3A (15W)<br>- Format: Sealed black resin case (IP67 waterproof)<br>- Output connector: **Micro-USB male** (for Pi Zero 2 W or Pi 3B+) or **USB-C male** (for Pi 4)<br>- *Field-validated model:* **Fastsaw DC-DC 15W Car Power Technology (12V-24V in, 5V/3A out)** | *12V to 5V 3A Micro USB buck converter* / *DC-DC Step Down Waterproof 12V 5V 3A Fastsaw* | ~**8 €** |
 
 *Advantages:* Completely self-contained inside the wallbox enclosure; no external cable or power outlet required.  
-*Requirements:* Requires a 2-pin Molex connector (see Section C below) to tap into the station's internal auxiliary harness.
+*Requirements:* Requires a 2-pin Molex connector and splicing connectors (see Section C below) to tap into the station's internal auxiliary harness.
 
 #### Option 2: External Standard USB Power Supply (Simplified Alternative)
 As an easier alternative, you can use a standard official or commercial Raspberry Pi 5V power supply (5.1V / 2.5A or 3A with Micro-USB for Pi Zero 2 W / Pi 3B+, or USB-C for Pi 4). 
@@ -68,9 +66,10 @@ The low-voltage power cord is simply routed into the charging station enclosure 
 
 | Component | Specification | Role | Indicative Price |
 | :--- | :--- | :--- | :--- |
-| **Wallbox Auxiliary Power Connector** *(Option 1 only)* | Connector type **Molex Mini-Fit Jr. 2-pin (1x2 single row)** with top locking latch (pitch 4.2 mm, e.g. Molex series 5557 / 39-01-4020 or 39-01-4021) | Plugs directly into the station's internal 12V auxiliary power cable. **Pinout:** Red = **+12V DC**, Black = **GND (0V)**. Pre-crimped pigtails or DIY kits with female pins. *(Not needed if using Option 2 External PSU)*. | ~**2 € – 4 €** |
+| **Wallbox Auxiliary Power Connector** *(Option 1 only)* | Connector type **Molex Mini-Fit Jr. 2-pin (1x2 single row)** with top locking latch (pitch 4.2 mm, e.g. Molex series 5557 / 39-01-4020)<br>*Field-tested hack:* **Repurposed PC PCIe 6+2 pin cable** (see Pro-Tip below) | Plugs directly into the station's internal 12V auxiliary power cable. **Pinout:** Red = **+12V DC**, Black = **GND (0V)**. *(Not needed if using Option 2 External PSU)*. | ~**2 € – 5 €** *(or free from spare PC parts)* |
+| **Splicing Connectors** *(Option 1 only)* | **2x WAGO 221-412** (compact 2-conductor lever connectors) | Safe, reusable, and vibration-resistant connection between the Molex harness and the DC-DC buck converter input wires. | ~**1.50 €** *(pack of 10 ~7 € at hardware stores)* |
 | **USB Cable for Controller Link** | - For Pi Zero 2 W: **Micro-USB male to USB-A female OTG adapter** + short USB cable.<br>- For Pi 3B+ / 4: Short standard **USB-A to USB cable** connecting to the power board. | Connects the Raspberry Pi to the ATmega2560 power controller board. | ~**3 € – 5 €** |
-| **High Endurance MicroSD Card** | **Kingston High Endurance** (32 GB, `SDCE/32GB`) or **Kingston Industrial** (`SDCIT2/32GB`) / **SanDisk MAX Endurance** | System storage. High/Industrial endurance cards are built to withstand continuous writes and extreme operating temperatures (-25°C to +85°C) in outdoor wallboxes. | ~**45 € – 50 €** *(Standard consumer card: ~10 €)* |
+| **High Endurance MicroSD Card** | **Kingston High Endurance** (32 GB, `SDCE/32GB`) or **Kingston Industrial** (`SDCIT2/32GB`) / **SanDisk MAX Endurance** | System storage. High/Industrial endurance cards are built to withstand continuous writes and extreme operating temperatures (-25°C to +85°C) in outdoor wallboxes. | ~**10 €** *(standard)* to **~45 €** *(industrial)* |
 
 > [!NOTE]
 > ### 🔌 12V Auxiliary Power Connector Identification & Pinout
@@ -81,54 +80,70 @@ The low-voltage power cord is simply routed into the charging station enclosure 
 > - **Important Distinction:** Inside the charging station, an adjacent harness with identical connectors powers other auxiliary modules (such as the optional RFID reader 0 590 59 or TIC/Bluetooth board). Verify that you tap the 2-pin harness with Red/Black wires delivering 12V DC.
 > - **Search references:** *Molex Mini-Fit Jr 2 pin 1x2* / *Molex 5557 2P 4.2mm* / *Molex 39-01-4020*. Pre-crimped 2-pin pigtail cables (*"câble Molex 2 broches 4.2mm pré-câblé"*) make connection to the DC-DC buck converter quick and easy without dedicated crimping pliers.
 
+> [!TIP]
+> ### 💡 Pro-Tip: The "PCIe 6+2 Pin" Zero-Crimping Lifehack
+> If you do not have dedicated Molex crimping pliers, buy an inexpensive **PC GPU power extension cable (PCIe 6+2 pin)** (~5 € on Amazon) or use an unused modular PSU cable from your PC parts drawer.
+> 
+> The detachable **2-pin segment** of a PC PCIe power connector uses the **exact same Molex Mini-Fit Jr. 4.2 mm footprint and retention clip** as Legrand's auxiliary power connector!
+> 1. Snip the 2-pin segment off the PCIe cable to get a ready-to-use female connector with thick, factory-crimped 18 AWG wires.
+> 2. Strip the wire ends and insert them into two **WAGO 221** lever connectors (one for +12V, one for GND).
+> 3. Connect the input wires of the buck converter into the other side of the WAGO connectors.
+> 4. Use heat shrink tubing or electrical tape over exposed splices for clean wire management and vibration safety.
+
 ---
 
 ### D. Mechanical Mounting & Fasteners
 
+Field testing on a real Green'up Premium wallbox confirms that **a standard Raspberry Pi 3B+ in an off-the-shelf plastic protective case fits directly into the upper left section of the lateral side panel (the exact location of the official kit)**:
+
 | Component | Status & Specifications | Notes | Indicative Cost |
 | :--- | :--- | :--- | :--- |
-| **3D Mounting Bracket** | ⚠️ **None currently exists!** | No 3D model (STL/STEP) has been designed or validated yet. A custom bracket remains to be modeled by the community. When designed, it must be printed in **PETG** or **ABS/ASA** (never use PLA, which softens and deforms above 50°C in outdoor enclosures). | ~**2 € – 3 €** *(filament)* |
-| **Chassis Fasteners** | **4x M4 screws** (e.g. M4x7 or M4x8) | Per official Legrand installation notice **LE09802AA**, the wallbox internal mounting bosses use **M4 screws** to secure the communication plate. | ~**1 €** |
-| **SBC Fasteners** | **4x M2.5 screws and standoffs** | Standard Raspberry Pi mounting hole hardware to secure the board to the bracket. | ~**1 €** |
+| **Pragmatic Mounting (Field-Validated)** | **Heavy-duty double-sided foam tape + electrical tape** | The Raspberry Pi in its standard vented case is secured against the smooth internal plastic chassis. No chassis drilling or 3D printer required. Highly stable, zero vibration inside the garage/outdoor box. | ~**1 €** |
+| **3D Mounting Bracket (Optional)** | Custom 3D-printed carrier plate | For an OEM-style finish. When designed, must be printed in **PETG** or **ABS/ASA** (avoid PLA due to heat in summer). Secures to the 4 factory M4 bosses. | ~**2 € – 3 €** *(filament)* |
+| **Chassis Ground Wire** | **Factory grounding eyelet** | Ensure the original braided grounding strap is screwed back securely onto the chassis ground standoff with its M4 screw. | **0 €** *(original hardware)* |
 
 ---
 
 ## 2. Indicative Budget Summary
 
-| Item | Official Legrand Kit (Ref 059056) | DIY Alternative Kit (Pi Zero 2 W) | DIY Alternative Kit (Pi 3B+) |
-| :--- | :--- | :--- | :--- |
-| **SBC / Processor** | Proprietary Raspberry Pi 3B | Raspberry Pi Zero 2 W (~22 €) | Raspberry Pi 3 Model B+ (~46 €) |
-| **5V Power Supply** | Proprietary Legrand PCB | Waterproof DC-DC Converter (~10 €)<br>*or Standard External PSU (~10 €)* | Waterproof DC-DC Converter (~10 €)<br>*or Standard External PSU (~10 €)* |
-| **Cabling & Connectors** | Included in kit | Molex connector + USB cables (~7 €)<br>*(or USB cable only ~3 € if external PSU)* | Molex connector + USB cable (~5 €)<br>*(or USB cable only ~3 € if external PSU)* |
-| **MicroSD Card** | 16 GB standard card | 32 GB High Endurance Kingston (~45 €)<br>*(or standard card ~10 €)* | 32 GB High Endurance Kingston (~45 €)<br>*(or standard card ~10 €)* |
-| **Mounting Plate & Screws** | Stamped metal bracket + screws | Custom 3D bracket + M4 / M2.5 screws (~4 €) | Custom 3D bracket + M4 / M2.5 screws (~4 €) |
-| **TOTAL** | **~500 € to 700 €** | **~84 € – 88 €** *(~49 € – 53 € with consumer SD)* | **~106 € – 110 €** *(~71 € – 75 € with consumer SD)* |
+| Item | Official Legrand Kit (Ref 059056) | DIY Alternative Kit (Pi Zero 2 W) | DIY Alternative Kit (Pi 3B+) | Field-Tested Kit V1 (Existing Pi 3B+) |
+| :--- | :--- | :--- | :--- | :--- |
+| **SBC / Processor** | Proprietary Raspberry Pi 3B | Raspberry Pi Zero 2 W (~22 €) | Raspberry Pi 3 Model B+ (~46 €) | Already owned (0 €) |
+| **5V Power Supply** | Proprietary Legrand PCB | Waterproof Buck 12V->5V 3A (~8 €) | Waterproof Buck 12V->5V 3A (~8 €) | Fastsaw 12V->5V 3A (~8 €) |
+| **Molex Harness & Splicing** | Included in kit | PCIe 6+2 pin cable + 2x WAGO 221 (~6.50 €) | PCIe 6+2 pin cable + 2x WAGO 221 (~6.50 €) | PCIe 6+2 pin cable (5 €) + 2x WAGO 221 (~1.50 €) |
+| **USB Link Cable** | Included in kit | OTG adapter + USB cable (~5 €) | Standard USB cable (~3 €) | Standard USB cable (0 € / already owned) |
+| **MicroSD Card** | 16 GB standard card | 32 GB Kingston High Endurance (~15–45 €)<br>*(or standard card ~10 €)* | 32 GB Kingston High Endurance (~15–45 €)<br>*(or standard card ~10 €)* | MicroSD card (already owned) |
+| **Mounting & Insulation** | Stamped metal bracket + screws | Double-sided tape / electrical tape (~1 €) | Double-sided tape / electrical tape (~1 €) | Double-sided tape + electrical tape (~1 €) |
+| **TOTAL** | **~500 € to 700 €** | **~42 € – 55 €** *(consumer SD)* | **~65 € – 75 €** *(consumer SD)* | **~15.50 € !** 🎯 *(Power conversion adaptation)* |
 
 ---
 
 ## 3. Synoptic Wiring Diagrams
 
-### Setup A: Internal Power Tap (Fully Integrated)
+### Setup A: Internal Power Tap (Field-Validated Kit V1)
 
 ```text
-[ Internal Station Power Supply (12V DC / 24V DC) ]
+[ Internal Station Power Supply (12V DC) ]
                         |
-                        | (Factory Legrand harness)
+                        | (Factory Legrand auxiliary harness)
                         v
-          [ Molex 2-pin (1x2) Connector ]
-              |                     |
-              | (+12V DC - Red)     | (GND - Black)
-              +----------+   +------+
-                         |   |
-                         v   v
-        [ Waterproof DC-DC Buck Converter (12V->5V 3A) ]
-                         |
-                         | (Regulated 5.0V output via Micro-USB / USB-C)
-                         v
-              [ Raspberry Pi SBC ] <===== (USB Cable) =====> [ ATmega2560 Power Board ]
-               (Green'Up Link)
-                      |
-                      +-- Local Wi-Fi / Ethernet --> [ Home Automation / EVCC ]
+     [ Molex 2-pin Female Connector (PCIe 6+2 hack) ]
+            |                               |
+            | (+12V DC - Red)               | (GND / 0V - Black)
+            v                               v
+    [ WAGO 221 Lever Nut ]          [ WAGO 221 Lever Nut ]
+            |                               |
+            +---------------+       +-------+
+                            |       |
+                            v       v
+      [ Waterproof DC-DC Buck Converter (12V->5V 3A / 15W) ]
+                            |
+                            | (Regulated 5.0V via Micro-USB / USB-C)
+                            v
+                 [ Raspberry Pi SBC ] <===== (USB Cable) =====> [ ATmega2560 Power Board ]
+                  (Green'Up Link)
+                        |
+                        +-- Local Wi-Fi / Ethernet --> [ Home Automation / EVCC ]
 ```
 
 ### Setup B: External Power Supply (Simplified Alternative)
