@@ -1009,12 +1009,12 @@ def main():
     print(f"   • Type de borne        : {'Double point de charge [Point 1 + Point 2]' if mock_config['dual'] else 'Mono point de charge'}")
     print(f"   • Télé-information TIC : {'Activée (Standard 9600)' if mock_config['has_tic'] else 'Désactivée / Non supportée'}")
     if not mock_config["auth_required"]:
-        print(f"   • Authentification     : Accès libre LAN (aucune auth requise)")
+        print(f"   • Authentification     : Accès libre LAN (aucune auth requise -> Cadenas ouvert ROUGE)")
     elif not mock_config["auth_ihm"]:
-        print(f"   • Authentification     : Mode consultation libre (ihm_auth=false / Kiosk)")
+        print(f"   • Authentification     : Mode consultation libre (ihm_auth=false / Kiosk -> Cadenas ouvert BLEU)")
         print(f"     Clé API mock attendue pour actions : {mock_config['token']}")
     else:
-        print(f"   • Authentification     : Verrouillée complète (ihm_auth=true)")
+        print(f"   • Authentification     : Verrouillée complète (ihm_auth=true -> Cadenas fermé)")
         print(f"     Clé API mock attendue : {mock_config['token']}")
     print("--------------------------------------------------------------------------------")
     print("💡 Raccourcis CLI :")

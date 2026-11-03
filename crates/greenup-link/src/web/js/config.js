@@ -22,7 +22,7 @@ function updateClientTokenBadge() {
             badge.innerText = (typeof t === 'function' ? t('system.token_status_missing') : 'Token manquant') || 'Token manquant';
         }
     } else {
-        badge.className = 'sys-badge sys-badge-muted';
+        badge.className = 'sys-badge sys-badge-rose';
         badge.innerText = (typeof t === 'function' ? t('system.token_status_no_auth') : "Accès libre (pas d'auth)") || "Accès libre (pas d'auth)";
     }
 }

@@ -438,18 +438,18 @@
     vertical-align: middle;
 }
 
-/* State: Open LAN (unsecured mode) -> Amber / Orange styling */
+/* State: Open LAN (unsecured mode - No API token configured) -> Red styling */
 .header-auth-btn.auth-open {
-    color: #fbbf24;
-    background-color: rgba(245, 158, 11, 0.12);
-    border-color: rgba(245, 158, 11, 0.4);
+    color: #f87171;
+    background-color: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.4);
 }
 
 .header-auth-btn.auth-open:hover {
-    color: #f59e0b;
-    background-color: rgba(245, 158, 11, 0.22);
-    border-color: rgba(245, 158, 11, 0.6);
-    box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+    color: #ef4444;
+    background-color: rgba(239, 68, 68, 0.22);
+    border-color: rgba(239, 68, 68, 0.6);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.25);
 }
 
 /* State: Secured with Kiosk / Consultation mode (unauthenticated guest) */
