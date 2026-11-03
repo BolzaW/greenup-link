@@ -199,8 +199,7 @@ function updateSessionsDropdown(isDefaultSelectionRequested) {
         const act = sessionsCache.active_session;
         const opt = document.createElement('option');
         opt.value = 'active';
-        const prefix = t('sessions.active_prefix') || '⚡ [En cours]';
-        opt.innerText = `${prefix} ${act.start_time} — ${act.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(act.charging_duration_seconds, false)})`;
+        opt.innerText = `${act.start_time} — ${act.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(act.charging_duration_seconds, false)})`;
         select.appendChild(opt);
     }
 
@@ -209,7 +208,7 @@ function updateSessionsDropdown(isDefaultSelectionRequested) {
         const opt = document.createElement('option');
         opt.value = s.id;
         const sideBadge = (window.isDualStation && s.side) ? `[P${s.side}] ` : '';
-        opt.innerText = `📅 ${sideBadge}${s.start_time} — ${s.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(s.charging_duration_seconds, false)})`;
+        opt.innerText = `${sideBadge}${s.start_time} — ${s.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(s.charging_duration_seconds, false)})`;
         select.appendChild(opt);
     });
 
@@ -337,6 +336,9 @@ function renderEmptySessionView() {
     currentChartPoints = [];
     resetDeleteButton();
 
+    const activeDot = document.getElementById('sessionActiveDot');
+    if (activeDot) activeDot.classList.add('hidden');
+
     const btnZip = document.getElementById('btnSessionDownloadZip');
     const btnDel = document.getElementById('btnSessionDelete');
     if (btnZip) btnZip.disabled = true;
@@ -361,6 +363,15 @@ function renderEmptySessionView() {
 function onSessionSelected(id) {
     selectedSessionId = id;
     resetDeleteButton();
+
+    const activeDot = document.getElementById('sessionActiveDot');
+    if (activeDot) {
+        if (id === 'active') {
+            activeDot.classList.remove('hidden');
+        } else {
+            activeDot.classList.add('hidden');
+        }
+    }
 
     const btnZip = document.getElementById('btnSessionDownloadZip');
     const btnDel = document.getElementById('btnSessionDelete');

@@ -131,7 +131,6 @@
     "title": "Sessions de charge",
     "loading": "Chargement des sessions...",
     "no_sessions": "Aucune session enregistrée",
-    "active_prefix": "⚡ [En cours]",
     "active_reason": "Charge en cours",
     "download_zip": "ZIP",
     "download_zip_title": "Télécharger l'archive ZIP (CSV + fiche résumé)",
