@@ -438,8 +438,8 @@ function updateSupervisionModeUi(mode) {
     const desc = document.getElementById('cfgModeDesc');
     if (desc) {
         desc.innerText = isRemote
-            ? (typeof t === 'function' ? t('system.mode_remote_desc') : "Mode supervisé actif : Green'Up Link pilote la charge (autorisations, consigne, watchdog, TIC).")
-            : (typeof t === 'function' ? t('system.mode_local_desc') : "Mode passif (sniffer) : la borne est autonome, Green'Up Link écoute sans interférer.");
+            ? (typeof t === 'function' ? t('system.mode_remote_desc') : "Mode normal : Green'Up Link pilote la borne et envoie les commandes à l'ATmega (autorisations, consigne de courant, TIC).")
+            : (typeof t === 'function' ? t('system.mode_local_desc') : "Mode écoute seule (passif) : la borne fonctionne en autonomie, Green'Up Link n'envoie aucune commande à l'ATmega.");
     }
 
     // Controls Panel Banner
