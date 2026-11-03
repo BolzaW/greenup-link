@@ -250,11 +250,19 @@ function renderMetricCard() {
     const titleEl = document.getElementById('sessionMetricTitle');
     const maxValEl = document.getElementById('sessionValMaxPower');
     const avgValEl = document.getElementById('sessionValAvgPower');
-    const iconEl = document.getElementById('sessionMetricIcon');
+    const unitEl = document.getElementById('sessionValMetricUnit');
+    const valuesContainer = document.getElementById('sessionMetricValues');
+    const subLabelEl = document.getElementById('sessionValAvgPowerSub');
+
+    if (subLabelEl) {
+        subLabelEl.setAttribute('data-i18n', 'sessions.stat_max_avg');
+        subLabelEl.innerText = t('sessions.stat_max_avg') || 'Max / Moyenne';
+    }
 
     if (!s) {
         if (maxValEl) maxValEl.innerText = '--';
         if (avgValEl) avgValEl.innerText = '--';
+        if (unitEl) unitEl.innerText = sessionMetricMode === 'current' ? 'A' : 'kW';
         return;
     }
 
@@ -263,32 +271,28 @@ function renderMetricCard() {
             titleEl.setAttribute('data-i18n', 'sessions.stat_current_max');
             titleEl.innerText = t('sessions.stat_current_max') || 'Courant';
         }
-        if (iconEl) iconEl.innerText = '⚡';
-        if (maxValEl) {
-            maxValEl.className = 'text-sm sm:text-base font-bold text-sky-400 font-mono mt-1';
-            const maxA = s.max_current_a != null ? s.max_current_a : 0;
-            maxValEl.innerText = `${maxA.toFixed(1)} A`;
+        if (valuesContainer) {
+            valuesContainer.className = 'text-sm sm:text-base font-bold text-emerald-400 font-mono mt-1 flex items-baseline truncate';
         }
-        if (avgValEl) {
-            const avgA = (s.avg_current_a != null && s.avg_current_a > 0) ? s.avg_current_a : 0;
-            avgValEl.innerText = avgA > 0 ? `Moy: ${avgA.toFixed(1)} A` : 'Moy: --';
-        }
+        const maxA = s.max_current_a != null ? s.max_current_a : 0;
+        const avgA = (s.avg_current_a != null && s.avg_current_a > 0) ? s.avg_current_a : 0;
+        if (maxValEl) maxValEl.innerText = maxA.toFixed(1);
+        if (avgValEl) avgValEl.innerText = avgA > 0 ? avgA.toFixed(1) : '--';
+        if (unitEl) unitEl.innerText = 'A';
     } else {
         // power mode
         if (titleEl) {
             titleEl.setAttribute('data-i18n', 'sessions.stat_power_max');
             titleEl.innerText = t('sessions.stat_power_max') || 'Puissance';
         }
-        if (iconEl) iconEl.innerText = '📈';
-        if (maxValEl) {
-            maxValEl.className = 'text-sm sm:text-base font-bold text-emerald-400 font-mono mt-1';
-            const maxW = s.max_power_w != null ? s.max_power_w : 0;
-            maxValEl.innerText = `${(maxW / 1000).toFixed(2)} kW`;
+        if (valuesContainer) {
+            valuesContainer.className = 'text-sm sm:text-base font-bold text-sky-400 font-mono mt-1 flex items-baseline truncate';
         }
-        if (avgValEl) {
-            const avgW = (s.avg_power_w != null && s.avg_power_w > 0) ? s.avg_power_w : 0;
-            avgValEl.innerText = avgW > 0 ? `Moy: ${(avgW / 1000).toFixed(2)} kW` : 'Moy: --';
-        }
+        const maxW = s.max_power_w != null ? s.max_power_w : 0;
+        const avgW = (s.avg_power_w != null && s.avg_power_w > 0) ? s.avg_power_w : 0;
+        if (maxValEl) maxValEl.innerText = (maxW / 1000).toFixed(2);
+        if (avgValEl) avgValEl.innerText = avgW > 0 ? (avgW / 1000).toFixed(2) : '--';
+        if (unitEl) unitEl.innerText = 'kW';
     }
 }
 
@@ -305,10 +309,7 @@ function setSessionMetricMode(mode) {
     const btnKw = document.getElementById('btnChartModeKw');
     const btnAmps = document.getElementById('btnChartModeAmps');
     if (btnKw) btnKw.classList.toggle('active', mode === 'power');
-    if (btnAmps) {
-        btnAmps.classList.toggle('active', mode === 'current');
-        btnAmps.classList.toggle('amps-mode', mode === 'current');
-    }
+    if (btnAmps) btnAmps.classList.toggle('active', mode === 'current');
 
     const chartTitle = document.getElementById('sessionChartTitle');
     const chartDot = document.getElementById('sessionChartDot');
@@ -319,11 +320,11 @@ function setSessionMetricMode(mode) {
     }
     if (chartDot) {
         if (mode === 'current') {
-            chartDot.classList.remove('bg-emerald-400');
-            chartDot.classList.add('bg-sky-400');
-        } else {
             chartDot.classList.remove('bg-sky-400');
             chartDot.classList.add('bg-emerald-400');
+        } else {
+            chartDot.classList.remove('bg-emerald-400');
+            chartDot.classList.add('bg-sky-400');
         }
     }
 
@@ -614,12 +615,12 @@ function drawChart(points, hoverIndex = -1) {
     // 3. Draw gradient filled area under the curve
     const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
     if (isCurrentMode) {
-        gradient.addColorStop(0, 'rgba(14, 165, 233, 0.35)');
-        gradient.addColorStop(0.7, 'rgba(56, 189, 248, 0.15)');
+        gradient.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
+        gradient.addColorStop(0.7, 'rgba(52, 211, 153, 0.15)');
         gradient.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
     } else {
-        gradient.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
-        gradient.addColorStop(0.7, 'rgba(14, 165, 233, 0.15)');
+        gradient.addColorStop(0, 'rgba(14, 165, 233, 0.35)');
+        gradient.addColorStop(0.7, 'rgba(56, 189, 248, 0.15)');
         gradient.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
     }
 
@@ -636,7 +637,7 @@ function drawChart(points, hoverIndex = -1) {
 
     // 4. Draw curve line
     ctx.beginPath();
-    ctx.strokeStyle = isCurrentMode ? '#0ea5e9' : '#10b981';
+    ctx.strokeStyle = isCurrentMode ? '#10b981' : '#0ea5e9';
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
@@ -656,7 +657,7 @@ function drawChart(points, hoverIndex = -1) {
 
         // Vertical dashed line
         ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = isCurrentMode ? 'rgba(56, 189, 248, 0.8)' : 'rgba(52, 211, 153, 0.8)';
+        ctx.strokeStyle = isCurrentMode ? 'rgba(52, 211, 153, 0.8)' : 'rgba(56, 189, 248, 0.8)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(hx, padTop);
@@ -667,13 +668,13 @@ function drawChart(points, hoverIndex = -1) {
         // Outer glow
         ctx.beginPath();
         ctx.arc(hx, hy, 6, 0, Math.PI * 2);
-        ctx.fillStyle = isCurrentMode ? 'rgba(14, 165, 233, 0.35)' : 'rgba(16, 185, 129, 0.35)';
+        ctx.fillStyle = isCurrentMode ? 'rgba(16, 185, 129, 0.35)' : 'rgba(14, 165, 233, 0.35)';
         ctx.fill();
 
         // Inner solid point
         ctx.beginPath();
         ctx.arc(hx, hy, 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = isCurrentMode ? '#38bdf8' : '#34d399';
+        ctx.fillStyle = isCurrentMode ? '#34d399' : '#38bdf8';
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
@@ -725,12 +726,12 @@ function setupChartInteractions() {
             const stateStr = stateLabel ? ` • ${stateLabel}` : '';
             if (sessionMetricMode === 'current') {
                 tooltip.innerHTML = `
-                    <div class="font-bold text-sky-400 font-mono">${p.amps.toFixed(1)} A <span class="text-slate-300 font-normal">(${p.kw.toFixed(2)} kW)</span></div>
+                    <div class="font-bold text-emerald-400 font-mono">${p.amps.toFixed(1)} A <span class="text-slate-300 font-normal">(${p.kw.toFixed(2)} kW)</span></div>
                     <div class="text-[9px] text-slate-400 font-mono mt-0.5">${timeStr}${stateStr}</div>
                 `;
             } else {
                 tooltip.innerHTML = `
-                    <div class="font-bold text-emerald-400 font-mono">${p.kw.toFixed(2)} kW <span class="text-slate-300 font-normal">(${p.amps.toFixed(1)} A)</span></div>
+                    <div class="font-bold text-sky-400 font-mono">${p.kw.toFixed(2)} kW <span class="text-slate-300 font-normal">(${p.amps.toFixed(1)} A)</span></div>
                     <div class="text-[9px] text-slate-400 font-mono mt-0.5">${timeStr}${stateStr}</div>
                 `;
             }

@@ -223,7 +223,8 @@
                 <!-- Duration -->
                 <div class="session-stat-card">
                     <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
-                        <span>⏱️</span> <span data-i18n="sessions.stat_charge_duration">Durée charge</span>
+                        <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span data-i18n="sessions.stat_charge_duration">Durée charge</span>
                     </span>
                     <span id="sessionValChargingDuration" class="text-sm sm:text-base font-bold text-slate-100 font-mono mt-1">--</span>
                     <span id="sessionValTotalDuration" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
@@ -231,7 +232,8 @@
                 <!-- Energy -->
                 <div class="session-stat-card">
                     <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
-                        <span>⚡</span> <span data-i18n="sessions.stat_energy">Énergie</span>
+                        <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        <span data-i18n="sessions.stat_energy">Énergie</span>
                     </span>
                     <span id="sessionValEnergy" class="text-sm sm:text-base font-bold text-sky-400 font-mono mt-1">--</span>
                     <span id="sessionValPhase" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
@@ -240,20 +242,26 @@
                 <div class="session-stat-card">
                     <div class="flex items-center justify-between">
                         <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
-                            <span id="sessionMetricIcon">📈</span>
+                            <svg id="sessionMetricIcon" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
                             <span id="sessionMetricTitle" data-i18n="sessions.stat_power_max">Puissance</span>
                         </span>
                         <button id="btnSessionMetricToggle" type="button" class="session-unit-toggle" title="Basculer Puissance (kW) / Courant (A)" data-i18n-title="sessions.toggle_unit_title">
                             <span id="toggleKwLabel" class="active">kW</span><span class="text-slate-600 font-mono">/</span><span id="toggleAmpsLabel">A</span>
                         </button>
                     </div>
-                    <span id="sessionValMaxPower" class="text-sm sm:text-base font-bold text-emerald-400 font-mono mt-1">--</span>
-                    <span id="sessionValAvgPower" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
+                    <div id="sessionMetricValues" class="text-sm sm:text-base font-bold text-sky-400 font-mono mt-1 flex items-baseline truncate">
+                        <span id="sessionValMaxPower">--</span>
+                        <span class="text-slate-500 font-normal mx-1">/</span>
+                        <span id="sessionValAvgPower">--</span>
+                        <span id="sessionValMetricUnit" class="text-xs font-semibold ml-1">kW</span>
+                    </div>
+                    <span id="sessionValAvgPowerSub" class="text-[10px] text-slate-500 font-mono mt-0.5" data-i18n="sessions.stat_max_avg">Max / Moyenne</span>
                 </div>
                 <!-- Reason / Status -->
                 <div class="session-stat-card">
                     <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
-                        <span>ℹ️</span> <span data-i18n="sessions.stat_reason">Statut</span>
+                        <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span data-i18n="sessions.stat_reason">Statut</span>
                     </span>
                     <span id="sessionValReason" class="text-xs sm:text-sm font-semibold text-slate-300 truncate mt-1" title="" data-i18n="sessions.no_sessions">Aucune session enregistrée</span>
                     <span id="sessionValEndTime" class="text-[10px] text-slate-500 font-mono mt-0.5">--</span>
@@ -265,7 +273,7 @@
                 <!-- Header inside chart container -->
                 <div class="flex items-center justify-between px-3 pt-2 pb-2 mb-1 border-b border-slate-900/80">
                     <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center gap-1.5">
-                        <span id="sessionChartDot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block transition-colors"></span>
+                        <span id="sessionChartDot" class="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block transition-colors"></span>
                         <span id="sessionChartTitle" data-i18n="sessions.chart_power_curve">Courbe de puissance</span>
                     </span>
                     <div class="flex items-center gap-2">

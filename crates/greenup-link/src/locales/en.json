@@ -147,6 +147,7 @@
     "stat_power_avg": "Avg power",
     "stat_current_max": "Current",
     "stat_current_avg": "Avg current",
+    "stat_max_avg": "Max / Average",
     "stat_reason": "Status",
     "toggle_unit_title": "Toggle display between Power (kW) and Current (A)",
     "chart_power_curve": "Power curve",

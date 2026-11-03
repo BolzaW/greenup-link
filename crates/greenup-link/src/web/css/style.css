@@ -768,8 +768,13 @@
     color: #e2e8f0;
 }
 
-.session-unit-toggle span.active {
+.session-unit-toggle span#toggleKwLabel.active {
     color: #38bdf8;
+    font-weight: 800;
+}
+
+.session-unit-toggle span#toggleAmpsLabel.active {
+    color: #34d399;
     font-weight: 800;
 }
 
@@ -799,16 +804,16 @@
     color: #cbd5e1;
 }
 
-.chart-pill-btn.active {
-    background-color: rgba(16, 185, 129, 0.2);
-    color: #34d399;
-    box-shadow: 0 0 6px rgba(16, 185, 129, 0.25);
-}
-
-.chart-pill-btn.active.amps-mode {
+#btnChartModeKw.active {
     background-color: rgba(14, 165, 233, 0.2);
     color: #38bdf8;
     box-shadow: 0 0 6px rgba(14, 165, 233, 0.25);
+}
+
+#btnChartModeAmps.active {
+    background-color: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.25);
 }
 
 .session-summary-grid {

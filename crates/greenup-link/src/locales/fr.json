@@ -147,6 +147,7 @@
     "stat_power_avg": "P. Moyenne",
     "stat_current_max": "Courant",
     "stat_current_avg": "Courant moyen",
+    "stat_max_avg": "Max / Moyenne",
     "stat_reason": "Statut",
     "toggle_unit_title": "Basculer l'affichage Puissance (kW) / Courant (A)",
     "chart_power_curve": "Courbe de puissance",
