@@ -21,7 +21,6 @@
             <h1 class="text-lg md:text-2xl font-bold tracking-tight text-white leading-none">Green'Up <span class="text-sky-400">Link</span></h1>
             <div class="flex items-center space-x-1.5 mt-1">
                 <span class="text-[9px] md:text-xs text-slate-500"><span data-i18n="header.subtitle">Interface de contrôle locale</span> <span id="lblLinkVersion"></span></span>
-                <span id="hdrModeBadge" class="hidden text-[9px] font-bold px-1.5 py-0.5 rounded border font-mono"></span>
             </div>
         </div>
     </div>
@@ -108,7 +107,7 @@
                     <!-- TOP ROW -->
                     
                     <!-- Linky (Cols 1-2) -->
-                    <div id="cellLinky" class="col-span-3 md:col-span-2 flex flex-col items-center pt-4">
+                    <div id="cellLinky" class="col-span-2 md:col-span-2 flex flex-col items-center pt-4">
                         <div id="linkyBox" class="relative z-20">
                             <div class="w-14 h-14 md:w-16 md:h-16 rounded-xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center transition-all duration-300 shadow-inner" id="linkyContainer">
                                 <svg class="w-6 h-6 md:w-8 md:h-8 text-slate-600 transition-colors" id="linkyIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -119,8 +118,8 @@
                         <span class="mt-4 text-[10px] font-bold tracking-wide text-slate-400 uppercase text-center w-full">LINKY</span>
                     </div>
 
-                    <!-- Wire 1: Linky to Charger (Cols 3-5) -->
-                    <div id="cellLinkyWire" class="col-span-3 md:col-span-4 flex flex-col items-center justify-center relative z-10 px-2">
+                    <!-- Wire 1: Linky to Charger (Cols 3-4 on mobile, 3-6 on PC) -->
+                    <div id="cellLinkyWire" class="col-span-2 md:col-span-4 flex flex-col items-center justify-center relative z-10 px-1 md:px-2">
                         <svg class="w-full h-8 overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 20">
                             <path d="M0,10 L100,10" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="6 6" stroke-linecap="round" vector-effect="non-scaling-stroke" />
                             <path id="animWireLinky" d="M0,10 L100,10" fill="none" stroke="#38bdf8" stroke-width="4" stroke-linecap="round" class="anim-flow-linky opacity-0 transition-opacity duration-500" vector-effect="non-scaling-stroke" />
@@ -128,8 +127,8 @@
                         <span id="linkyLabel" class="absolute left-0 right-0 text-[8px] md:text-[9px] font-bold tracking-wide text-sky-400 uppercase text-center leading-tight opacity-0 transition-opacity pointer-events-none" style="top: calc(50% + 14px); white-space: pre-line;">--</span>
                     </div>
 
-                    <!-- Charger (Cols 6-8) -->
-                    <div id="cellCharger" class="col-span-3 flex flex-col items-center relative z-20">
+                    <!-- Charger (Cols 5-8 on mobile, 7-9 on PC) -->
+                    <div id="cellCharger" class="col-span-4 md:col-span-3 flex flex-col items-center relative z-20">
                         <div class="w-16 h-24 md:w-20 md:h-28 rounded-2xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center relative transition-all duration-500 shadow-2xl" id="chargerBox">
                             <svg class="w-8 h-8 md:w-10 md:h-10 text-slate-600 transition-colors duration-500" id="chargerIcon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                             <div class="charger-led-bar" id="chargerLedBar">
@@ -141,8 +140,8 @@
                         <span class="mt-4 text-[10px] font-bold tracking-wide text-slate-300 uppercase text-center w-full">Green'Up</span>
                     </div>
 
-                    <!-- Wire 2: Top Loop (Cols 9-12) -->
-                    <div id="cellWireTop" class="col-span-3 relative z-10 pointer-events-none min-h-[100px]">
+                    <!-- Wire 2: Top Loop (Cols 9-12 on mobile, 10-12 on PC) -->
+                    <div id="cellWireTop" class="col-span-4 md:col-span-3 relative z-10 pointer-events-none min-h-[100px]">
                         <svg class="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
                             <!-- Starts left-center (inside charger cell), arcs to bottom-right -->
                             <path id="staticWire1" d="M -5 45 L 67 45 C 88 45 100 65 100 100" fill="none" stroke="#1e293b" stroke-width="5" stroke-linecap="round" vector-effect="non-scaling-stroke" />
@@ -153,8 +152,8 @@
 
                     <!-- BOTTOM ROW -->
 
-                    <!-- Car (Cols 1-9) -->
-                    <div id="cellCar" class="col-span-9 flex justify-end items-end relative z-20 pr-4 mt-0">
+                    <!-- Car (Cols 1-8 on mobile, 1-9 on PC) -->
+                    <div id="cellCar" class="col-span-8 md:col-span-9 flex justify-end items-end relative z-20 pr-4 mt-0">
                         <div class="w-full max-w-[250px] md:max-w-[400px] flex items-center justify-end relative transition-transform duration-500" id="carBox">
                             <!-- Custom Sedan EV Side Profile SVG from user -->
                             <svg class="w-full h-full text-slate-700 transition-all duration-500 drop-shadow-2xl" id="carIcon" viewBox="0 0 1280 671" fill="currentColor">
@@ -165,8 +164,8 @@
                         </div>
                     </div>
 
-                    <!-- Wire 3: Bottom Loop (Cols 10-12) -->
-                    <div id="cellWireBottom" class="col-span-3 relative z-10 pointer-events-none min-h-[100px] mt-0">
+                    <!-- Wire 3: Bottom Loop (Cols 9-12 on mobile, 10-12 on PC) -->
+                    <div id="cellWireBottom" class="col-span-4 md:col-span-3 relative z-10 pointer-events-none min-h-[100px] mt-0">
                         <svg class="absolute inset-0 w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 100">
                             <!-- Starts top-right, arcs to bottom-left (into the car's charge port) -->
                             <path d="M 100 0 C 100 65 50 65 -15 65" fill="none" stroke="#1e293b" stroke-width="5" stroke-linecap="round" vector-effect="non-scaling-stroke" />
@@ -437,14 +436,14 @@
                 </div>
 
                 <!-- Serial Action Rows (Init & Reset) -->
-                <div class="sys-actions-list">
+                <div class="sys-actions-list grid grid-cols-1 md:grid-cols-2 gap-2">
                     <div class="sys-action-row">
                         <button type="button" id="btnSerialInit" class="btn-system-action-icon" title="Relance la synchronisation et la détection automatique avec l'ATmega" data-i18n-title="system.btn_init_title">
                             <svg id="iconSerialInit" class="text-sky-400" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
                         </button>
                         <div class="sys-action-text">
                             <span class="sys-action-title" data-i18n="system.btn_init">Réinitialiser liaison</span>
-                            <span class="sys-action-desc" data-i18n="system.btn_init_desc">Démarre un nouveau processus d'initialisation USB</span>
+                            <span class="sys-action-desc" data-i18n="system.btn_init_desc">Réinitialise la communication USB</span>
                         </div>
                     </div>
                     <div class="sys-action-row">
@@ -453,46 +452,11 @@
                         </button>
                         <div class="sys-action-text">
                             <span class="sys-action-title" data-i18n="system.btn_reset">Redémarrer carte (Reset)</span>
-                            <span class="sys-action-desc" data-i18n="system.btn_reset_desc">Demande à la carte ATmega d'effectuer un soft reboot</span>
+                            <span class="sys-action-desc" data-i18n="system.btn_reset_desc">Soft reboot de la carte ATmega</span>
                         </div>
                     </div>
                 </div>
                 <div id="serialActionFeedback" class="sys-feedback"></div>
-            </div>
-
-            <!-- Mode de Supervision (Remote vs Local Passif) -->
-            <div class="sys-card sys-mode-card">
-                <div class="sys-card-header">
-                    <div class="sys-card-title">
-                        <svg width="15" height="15" class="text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                        </svg>
-                        <span data-i18n="system.supervision_title">Mode de supervision</span>
-                    </div>
-                    <span id="cfgModeActiveBadge" class="sys-badge sys-badge-emerald" data-i18n="system.mode_remote_short">Supervisé</span>
-                </div>
-                <p class="sys-module-desc" data-i18n="system.supervision_desc">Bascule entre le contrôle actif et l'écoute passive (sniffer) du bus série</p>
-                <div class="sys-grid-2">
-                    <button type="button" id="btnModeRemote" class="sys-mode-btn active" onclick="switchSupervisionMode('remote')">
-                        <div class="flex items-center justify-between w-full mb-1">
-                            <span class="font-bold text-xs" data-i18n="system.mode_remote">Supervisé (Distant)</span>
-                            <span id="badgeModeRemote" class="sys-badge sys-badge-emerald text-[9px]" data-i18n="system.mode_badge_active">Actif</span>
-                        </div>
-                        <p class="text-[10px] text-slate-400 leading-snug" data-i18n="system.mode_remote_desc">Green'Up Link pilote activement la borne (autorisations, consigne de courant, watchdog, TIC).</p>
-                    </button>
-                    <button type="button" id="btnModeLocal" class="sys-mode-btn" onclick="switchSupervisionMode('local')">
-                        <div class="flex items-center justify-between w-full mb-1">
-                            <span class="font-bold text-xs" data-i18n="system.mode_local">Passif (Local / Sniffer)</span>
-                            <span id="badgeModeLocal" class="sys-badge sys-badge-amber text-[9px] hidden" data-i18n="system.mode_badge_active">Actif</span>
-                        </div>
-                        <p class="text-[10px] text-slate-400 leading-snug" data-i18n="system.mode_local_desc">Green'Up Link n'envoie aucune commande à l'ATmega. Il journalise et affiche les trames spontanées sans interférer.</p>
-                    </button>
-                </div>
-                <div id="cfgModeNotice" class="text-[11px] text-slate-400 flex items-center gap-1.5 pt-1">
-                    <span class="text-amber-400 font-bold">ℹ️</span>
-                    <span data-i18n="system.mode_state_a_required">La bascule de mode nécessite que la borne soit à l'état A (Libre / Déconnectée).</span>
-                </div>
-                <div id="cfgModeFeedback" class="sys-feedback"></div>
             </div>
 
             <!-- 2. Périphériques & Modules (2-Column Side-by-Side Cards) -->
@@ -562,6 +526,24 @@
                     <span id="cfgHttpBind" class="sys-kv-value font-mono">0.0.0.0:8080</span>
                 </div>
 
+                <!-- Mode de Supervision Toggle Row -->
+                <div class="sys-mode-section pt-3 pb-3 border-t border-slate-800/60 mt-3">
+                    <div class="flex items-center justify-between mb-1">
+                        <div class="sys-card-title">
+                            <svg width="15" height="15" class="text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                            </svg>
+                            <span data-i18n="system.supervision_title">Mode de supervision</span>
+                        </div>
+                        <div class="sys-toggle-wrap">
+                            <input type="checkbox" name="toggleMode" id="modeToggle" onchange="toggleSupervisionMode()" class="toggle-checkbox absolute block rounded-full bg-slate-200 border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out" checked/>
+                            <label for="modeToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-800 cursor-pointer transition-colors duration-200 ease-in-out border border-slate-700"></label>
+                        </div>
+                    </div>
+                    <p id="cfgModeDesc" class="sys-module-desc text-[11px] text-slate-400 mt-1" data-i18n="system.mode_remote_desc">Mode supervisé actif : Green'Up Link pilote activement la borne (autorisations, consigne de courant, watchdog, TIC).</p>
+                    <div id="cfgModeFeedback" class="sys-feedback"></div>
+                </div>
+
                 <!-- Client API Token Row -->
                 <div class="sys-token-section">
                     <p class="sys-module-desc" data-i18n="system.token_desc">Clé API enregistrée localement dans votre navigateur pour authentifier les requêtes vers Green'Up Link.</p>
@@ -595,7 +577,7 @@
     </div>
 
     <!-- RIGHT COLUMN : Data & Controls -->
-    <div class="lg:col-span-5 flex flex-col gap-6">
+    <div class="lg:col-span-5 flex flex-col gap-6 h-fit">
         
         <!-- Telemetry Grid -->
         <div class="grid grid-cols-2 gap-4">
@@ -649,7 +631,7 @@
         </div>
 
         <!-- Controls Panel -->
-        <div id="controlsPanel" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex-1 flex flex-col justify-between transition-opacity duration-300 min-h-[220px]">
+        <div id="controlsPanel" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col gap-6 transition-opacity duration-300 h-fit">
             <div>
                 <h3 class="text-sm font-bold text-slate-300 uppercase tracking-widest mb-6" data-i18n="controls.charge_params">Paramètres de charge</h3>
 
@@ -660,7 +642,7 @@
                 </div>
 
                 <!-- Slider -->
-                <div class="mb-8 bg-slate-950/50 p-4 rounded-xl border border-slate-800">
+                <div class="bg-slate-950/50 p-4 rounded-xl border border-slate-800">
                     <div class="flex justify-between items-end mb-4">
                         <label class="text-xs font-bold text-slate-400 uppercase tracking-wide" data-i18n="controls.current_limit">Consigne de Courant</label>
                         <div class="bg-sky-500/10 px-3 py-1 rounded border border-sky-500/20">
@@ -676,7 +658,7 @@
             </div>
 
             <!-- Action Buttons -->
-            <div class="flex gap-4 mt-auto">
+            <div class="flex gap-4">
                 <button id="btnEnableDisable" class="flex-1 font-bold py-4 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] disabled:opacity-30 disabled:cursor-not-allowed disabled:shadow-none">
                     <svg id="iconEnable" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                     <svg id="iconDisable" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>

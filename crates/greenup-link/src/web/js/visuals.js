@@ -66,7 +66,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     if (animWire2) { animWire2.classList.add('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#10b981'); }
     if (cableLabel) {
         cableLabel.classList.add('opacity-0');
-        cableLabel.classList.remove('text-rose-500');
+        cableLabel.classList.remove('text-rose-500', 'text-sky-400');
         cableLabel.classList.add('text-emerald-400');
     }
 
@@ -88,7 +88,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
         if (animWire1) { animWire1.classList.remove('opacity-0'); animWire1.setAttribute('stroke', '#f43f5e'); }
         if (animWire2) { animWire2.classList.remove('opacity-0'); animWire2.setAttribute('stroke', '#f43f5e'); }
         if (cableLabel) {
-            cableLabel.classList.remove('opacity-0', 'text-emerald-400');
+            cableLabel.classList.remove('opacity-0', 'text-emerald-400', 'text-sky-400');
             cableLabel.classList.add('text-rose-500');
         }
     }
@@ -113,7 +113,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
             animWire2.setAttribute('stroke', '#10b981');
         }
         if (cableLabel) {
-            cableLabel.classList.remove('opacity-0', 'text-rose-500');
+            cableLabel.classList.remove('opacity-0', 'text-rose-500', 'text-sky-400');
             cableLabel.classList.add('text-emerald-400');
         }
 
@@ -130,12 +130,12 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     else if (greenup_state === 'B') {
         stateLabel = (t('state.connected_waiting_station') || (t('state.connected') + " — Attente borne")) + " (B)";
 
-        // Solid green cable (connected)
-        if (animWire1) { animWire1.classList.remove('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#10b981'); }
-        if (animWire2) { animWire2.classList.remove('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#10b981'); }
+        // Solid blue cable (connected)
+        if (animWire1) { animWire1.classList.remove('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#38bdf8'); }
+        if (animWire2) { animWire2.classList.remove('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#38bdf8'); }
         if (cableLabel) {
-            cableLabel.classList.remove('opacity-0', 'text-rose-500');
-            cableLabel.classList.add('text-emerald-400');
+            cableLabel.classList.remove('opacity-0', 'text-rose-500', 'text-emerald-400');
+            cableLabel.classList.add('text-sky-400');
         }
 
         // Charger pulses slowly in blue
@@ -149,12 +149,12 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     else if (greenup_state === 'C') {
         stateLabel = (t('state.connected_waiting_car') || (t('state.connected') + " — Attente véhicule")) + " (C)";
 
-        // Solid green cable (connected)
-        if (animWire1) { animWire1.classList.remove('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#10b981'); }
-        if (animWire2) { animWire2.classList.remove('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#10b981'); }
+        // Solid blue cable (connected)
+        if (animWire1) { animWire1.classList.remove('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#38bdf8'); }
+        if (animWire2) { animWire2.classList.remove('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#38bdf8'); }
         if (cableLabel) {
-            cableLabel.classList.remove('opacity-0', 'text-rose-500');
-            cableLabel.classList.add('text-emerald-400');
+            cableLabel.classList.remove('opacity-0', 'text-rose-500', 'text-emerald-400');
+            cableLabel.classList.add('text-sky-400');
         }
 
         // Charger is solid green (ready & authorized)

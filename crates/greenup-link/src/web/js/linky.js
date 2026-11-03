@@ -67,14 +67,14 @@ function updateLinky(ticMode) {
     switch(ticMode) {
         case '9600':
             linkyIcon.classList.replace('text-slate-600', 'text-sky-400');
-            linkyContainer.classList.add('border-sky-500/30');
+            linkyContainer.classList.add('linky-active-halo');
             animWireLinky.classList.remove('opacity-0');
             animWireLinky.style.animationDuration = '0.5s';
             labelText = t('tic.standard');
             break;
         case '1200':
             linkyIcon.classList.replace('text-slate-600', 'text-sky-400');
-            linkyContainer.classList.add('border-sky-500/30');
+            linkyContainer.classList.add('linky-active-halo');
             animWireLinky.classList.remove('opacity-0');
             animWireLinky.style.animationDuration = '2.0s';
             labelText = t('tic.historic');

@@ -867,7 +867,7 @@
     }
 }
 .pulse-charger-blue {
-    animation: pulseChargerBlue 2.5s ease-in-out infinite;
+    animation: pulseChargerBlue 2s ease-in-out infinite;
 }
 
 /* --- Legrand 3-LED Indicator Bar --- */
@@ -973,14 +973,18 @@
     }
 }
 .pulse-car-blue {
-    animation: pulseCarBlue 2.5s ease-in-out infinite;
+    animation: pulseCarBlue 2s ease-in-out infinite;
 }
 
-/* --- Car Charging Shimmer Animation (Right-to-Left, Antigravity cadence) --- */
+/* --- Car Charging Shimmer Animation (Right-to-Left, 2s hardware LED synchronized cycle with synchronized pulse) --- */
 @keyframes carShimmerRTL {
-    0% {
+    0%, 100% {
         -webkit-mask-position: 0% 50%;
         mask-position: 0% 50%;
+        filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.2));
+    }
+    50% {
+        filter: drop-shadow(0 0 24px rgba(16, 185, 129, 0.65));
     }
     68%, 100% {
         -webkit-mask-position: 100% 50%;
@@ -1012,7 +1016,7 @@
     );
     -webkit-mask-size: 300% 100%;
     mask-size: 300% 100%;
-    animation: carShimmerRTL 2.2s linear infinite;
+    animation: carShimmerRTL 2s ease-in-out infinite;
 }
 
 @keyframes pulseChargerGreen {
@@ -1026,7 +1030,19 @@
     }
 }
 .pulse-charger-green {
-    animation: pulseChargerGreen 2.5s ease-in-out infinite;
+    animation: pulseChargerGreen 2s ease-in-out infinite;
+}
+
+/* Linky active halo effect (steady blue glow, no pulse) */
+.linky-active-halo {
+    border-color: rgba(56, 189, 248, 0.7) !important;
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.35) !important;
+}
+
+/* Cable flow animation (0.5s duration: ~30% slower, 4 cycles per 2s master loop) */
+.anim-flow {
+    stroke-dasharray: 10;
+    animation: dash 0.5s linear infinite;
 }
 
 
@@ -1691,9 +1707,14 @@
 
 /* Action Rows (Button + Explanatory Text) */
 .sys-actions-list {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr;
     gap: 0.5rem;
+}
+@media (min-width: 768px) {
+    .sys-actions-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .sys-action-row {
@@ -1776,11 +1797,21 @@
 }
 
 #visualizerGrid.no-tic #cellCharger {
-    grid-column: span 3 / span 3 !important;
+    grid-column: span 4 / span 4 !important;
+}
+@media (min-width: 768px) {
+    #visualizerGrid.no-tic #cellCharger {
+        grid-column: span 3 / span 3 !important;
+    }
 }
 
 #visualizerGrid.no-tic #cellWireTop {
-    grid-column: span 9 / span 9 !important;
+    grid-column: span 8 / span 8 !important;
+}
+@media (min-width: 768px) {
+    #visualizerGrid.no-tic #cellWireTop {
+        grid-column: span 9 / span 9 !important;
+    }
 }
 
 #visualizerGrid.no-tic #cableLabel {
@@ -1788,11 +1819,21 @@
 }
 
 #visualizerGrid.no-tic #cellCar {
-    grid-column: span 9 / span 9 !important;
+    grid-column: span 8 / span 8 !important;
+}
+@media (min-width: 768px) {
+    #visualizerGrid.no-tic #cellCar {
+        grid-column: span 9 / span 9 !important;
+    }
 }
 
 #visualizerGrid.no-tic #cellWireBottom {
-    grid-column: span 3 / span 3 !important;
+    grid-column: span 4 / span 4 !important;
+}
+@media (min-width: 768px) {
+    #visualizerGrid.no-tic #cellWireBottom {
+        grid-column: span 3 / span 3 !important;
+    }
 }
 
 /* ==========================================================================

@@ -425,69 +425,25 @@ function initConfig() {
     }
 }
 
-function updateSupervisionModeUi(mode, can_switch) {
+function updateSupervisionModeUi(mode) {
     window.currentSupervisionMode = mode;
-    const badgeActive = document.getElementById('cfgModeActiveBadge');
-    const btnRemote = document.getElementById('btnModeRemote');
-    const btnLocal = document.getElementById('btnModeLocal');
-    const badgeRemote = document.getElementById('badgeModeRemote');
-    const badgeLocal = document.getElementById('badgeModeLocal');
-    const hdrModeBadge = document.getElementById('hdrModeBadge');
-    const localBanner = document.getElementById('localModeBanner');
-
+    const isRemote = mode === 'remote';
     const isLocal = mode === 'local';
 
-    // Header badge
-    if (hdrModeBadge) {
-        hdrModeBadge.classList.remove('hidden');
-        if (isLocal) {
-            hdrModeBadge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded border font-mono mode-badge-local';
-            hdrModeBadge.innerText = (typeof t === 'function' ? t('system.mode_local_short') : 'Passif') || 'Passif';
-            hdrModeBadge.title = (typeof t === 'function' ? t('system.mode_local_desc') : 'Mode passif sniffer');
-        } else {
-            hdrModeBadge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded border font-mono mode-badge-remote';
-            hdrModeBadge.innerText = (typeof t === 'function' ? t('system.mode_remote_short') : 'Supervisé') || 'Supervisé';
-            hdrModeBadge.title = (typeof t === 'function' ? t('system.mode_remote_desc') : 'Mode supervisé actif');
-        }
+    const toggle = document.getElementById('modeToggle');
+    if (toggle) {
+        toggle.checked = isRemote;
     }
 
-    // Config Panel Buttons
-    if (btnRemote && btnLocal) {
-        if (isLocal) {
-            btnLocal.classList.add('active', 'mode-local-active');
-            btnRemote.classList.remove('active');
-            if (badgeLocal) badgeLocal.classList.remove('hidden');
-            if (badgeRemote) badgeRemote.classList.add('hidden');
-            if (badgeActive) {
-                badgeActive.className = 'sys-badge sys-badge-amber';
-                badgeActive.innerText = (typeof t === 'function' ? t('system.mode_local_short') : 'Passif') || 'Passif';
-            }
-        } else {
-            btnRemote.classList.add('active');
-            btnLocal.classList.remove('active', 'mode-local-active');
-            if (badgeRemote) badgeRemote.classList.remove('hidden');
-            if (badgeLocal) badgeLocal.classList.add('hidden');
-            if (badgeActive) {
-                badgeActive.className = 'sys-badge sys-badge-emerald';
-                badgeActive.innerText = (typeof t === 'function' ? t('system.mode_remote_short') : 'Supervisé') || 'Supervisé';
-            }
-        }
-
-        if (can_switch !== undefined) {
-            const notice = document.getElementById('cfgModeNotice');
-            if (!can_switch) {
-                btnRemote.disabled = true;
-                btnLocal.disabled = true;
-                if (notice) notice.classList.add('text-amber-400');
-            } else {
-                btnRemote.disabled = false;
-                btnLocal.disabled = false;
-                if (notice) notice.classList.remove('text-amber-400');
-            }
-        }
+    const desc = document.getElementById('cfgModeDesc');
+    if (desc) {
+        desc.innerText = isRemote
+            ? (typeof t === 'function' ? t('system.mode_remote_desc') : "Mode supervisé actif : Green'Up Link pilote la charge (autorisations, consigne, watchdog, TIC).")
+            : (typeof t === 'function' ? t('system.mode_local_desc') : "Mode passif (sniffer) : la borne est autonome, Green'Up Link écoute sans interférer.");
     }
 
     // Controls Panel Banner
+    const localBanner = document.getElementById('localModeBanner');
     if (localBanner) {
         if (isLocal) {
             localBanner.classList.remove('hidden');
@@ -502,30 +458,30 @@ function updateSupervisionModeUi(mode, can_switch) {
     }
 }
 
-async function switchSupervisionMode(targetMode) {
+async function toggleSupervisionMode() {
     if (window.isAuthRequired && !window.isAuthenticated) {
         if (typeof showAuthModal === 'function') showAuthModal(false);
+        const toggle = document.getElementById('modeToggle');
+        if (toggle) toggle.checked = window.currentSupervisionMode === 'remote';
         return;
     }
-    if (window.currentSupervisionMode === targetMode) return;
+
+    const toggle = document.getElementById('modeToggle');
+    if (!toggle) return;
+    const targetMode = toggle.checked ? 'remote' : 'local';
+    const feedback = document.getElementById('cfgModeFeedback');
 
     if (lastReportedState && lastReportedState !== 'A' && lastReportedState !== 'DISCONNECTED') {
-        alert(typeof t === 'function' ? t('system.mode_state_a_required') : "La bascule de mode nécessite que la borne soit à l'état A (Libre / Déconnectée).");
+        toggle.checked = !toggle.checked;
+        if (feedback) {
+            feedback.innerText = (typeof t === 'function' ? t('system.mode_state_a_required') : "La bascule de mode nécessite que la borne soit à l'état A (Libre / Déconnectée).");
+            feedback.className = 'sys-feedback sys-feedback-warn';
+            setTimeout(() => { feedback.innerText = ''; }, 4000);
+        }
         return;
     }
 
-    const confirmMsg = targetMode === 'local'
-        ? (typeof t === 'function' ? t('system.mode_switch_confirm_local') : "Attention : le passage en mode Passif (Local) envoie une commande Reset à l'ATmega pour libérer la borne, puis cesse tout envoi de trame. Voulez-vous continuer ?")
-        : (typeof t === 'function' ? t('system.mode_switch_confirm_remote') : "Voulez-vous réactiver la supervision active (mode Distant) et réinitialiser la communication avec la borne ?");
-
-    if (!confirm(confirmMsg)) return;
-
-    const feedback = document.getElementById('cfgModeFeedback');
-    const btnRemote = document.getElementById('btnModeRemote');
-    const btnLocal = document.getElementById('btnModeLocal');
-    if (btnRemote) btnRemote.disabled = true;
-    if (btnLocal) btnLocal.disabled = true;
-
+    toggle.disabled = true;
     if (feedback) {
         feedback.innerText = (typeof t === 'function' ? t('system.mode_switching') : "Changement de mode en cours...") || "Changement de mode en cours...";
         feedback.className = 'sys-feedback sys-feedback-info animate-pulse';
@@ -545,7 +501,8 @@ async function switchSupervisionMode(targetMode) {
         }
 
         const data = await res.json();
-        updateSupervisionModeUi(data.mode || targetMode);
+        const effectiveMode = data.mode || targetMode;
+        updateSupervisionModeUi(effectiveMode);
 
         if (feedback) {
             feedback.innerText = (typeof t === 'function' ? t('system.mode_switch_success') : "Mode mis à jour avec succès") || "Mode mis à jour avec succès";
@@ -557,13 +514,13 @@ async function switchSupervisionMode(targetMode) {
         }
     } catch (err) {
         console.error('Mode switch error:', err);
+        toggle.checked = window.currentSupervisionMode === 'remote';
         if (feedback) {
             feedback.innerText = (typeof t === 'function' ? t('alert.error') : 'Erreur: ') + (err.message || err);
             feedback.className = 'sys-feedback sys-feedback-error';
         }
     } finally {
-        if (btnRemote) btnRemote.disabled = false;
-        if (btnLocal) btnLocal.disabled = false;
+        toggle.disabled = false;
         if (feedback) {
             setTimeout(() => { feedback.innerText = ''; }, 4000);
         }
