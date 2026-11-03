@@ -10,6 +10,7 @@ Usage:
     Then open http://localhost:8080 in your browser.
 """
 
+import argparse
 import datetime
 import http.server
 import io
@@ -34,29 +35,57 @@ if sys.platform == "win32":
 PORT = 8080
 BASE_DIR = pathlib.Path(__file__).parent.parent / "crates" / "greenup-link" / "src"
 
-# Simulated backend state
-state = {
-    "serial": {
-        "status": "usb_connected",
-        "port": "/dev/ttyUSB0",
-        "message": "USB serial link active - Station connected",
-        "last_rx_secs_ago": 0,
-    },
-    "voltage": 230.8,
-    "current": 16.0,
-    "power": 3692.0,
-    "energy": 14250.0,
-    "greenup_state": "E",
-    "iec_state": "C",
-    "charge_authorized": True,
-    "charge_paused": False,
-    "charge_complete": False,
-    "tic_mode": "9600",
-    "eliot_limit_amps": 16,
-    "error_code": "0000",
-    "bluetooth_enabled": True,
-    "log_level": "INFO",
+# Runtime mock configuration (controllable via CLI arguments or URL query params)
+mock_config = {
+    "dual": False,
+    "has_tic": True,
+    "auth_required": False,
+    "auth_ihm": True,
+    "token": "mock-secret-key",
 }
+
+# Simulated backend state per connector (Point 1 / Right and Point 2 / Left)
+connectors_state = {
+    1: {
+        "id": 1,
+        "greenup_state": "E",
+        "iec_state": "C",
+        "charge_authorized": True,
+        "charge_paused": False,
+        "charge_complete": False,
+        "current": 16.0,
+        "voltage": 230.8,
+        "power": 3692.0,
+        "energy": 14250.0,
+        "eliot_limit_amps": 16,
+        "error_code": "0000",
+    },
+    2: {
+        "id": 2,
+        "greenup_state": "B",
+        "iec_state": "B",
+        "charge_authorized": True,
+        "charge_paused": False,
+        "charge_complete": False,
+        "current": 0.0,
+        "voltage": 231.2,
+        "power": 0.0,
+        "energy": 5120.0,
+        "eliot_limit_amps": 32,
+        "error_code": "0000",
+    },
+}
+
+# Reference for point 1 common properties
+state = connectors_state[1]
+state["serial"] = {
+    "status": "usb_connected",
+    "port": "/dev/ttyUSB0",
+    "message": "USB serial link active - Station connected",
+    "last_rx_secs_ago": 0,
+}
+state["bluetooth_enabled"] = True
+state["log_level"] = "INFO"
 
 mock_logs = []
 log_counter = 0
@@ -97,9 +126,11 @@ add_mock_log("SERIAL", "WARN", "⚠️ Retrying frame sync (mock warning)")
 add_mock_log("SYS", "ERROR", "❌ Simulated minor error check (mock error)")
 
 def get_mock_station():
+    is_dual = mock_config["dual"]
+    has_tic = mock_config["has_tic"]
     return {
         "vendor": "Legrand",
-        "model": "059001",
+        "model": "059002" if is_dual else "059001",
         "serial_number": "LEG123456789",
         "hardware_version": "01",
         "firmware_version": "17.77",
@@ -107,8 +138,8 @@ def get_mock_station():
         "link_version": "0.5.0-mock",
         "supervision_mode": state.get("supervision_mode", "remote"),
         "serial_connection": state["serial"],
-        "is_dual": False,
-        "available_connectors": [1],
+        "is_dual": is_dual,
+        "available_connectors": [1, 2] if is_dual else [1],
         "bluetooth_enabled": state["bluetooth_enabled"],
         "mac_address": "AA:BB:CC:DD:EE:FF",
         "capabilities": {
@@ -116,56 +147,60 @@ def get_mock_station():
             "max_power_kw": 7.4,
             "max_current_amps": 32,
             "has_schuko": False,
-            "charging_points": 1,
+            "charging_points": 2 if is_dual else 1,
             "is_known": True,
-            "has_tic": True,
+            "has_tic": has_tic,
         }
     }
 
-def get_mock_connector():
-    is_charging = state["greenup_state"] in ("C", "D", "E") and not state["charge_paused"]
+def get_mock_connector(connector_id=1):
+    c_state = connectors_state.get(connector_id, connectors_state[1])
+    is_charging = c_state["greenup_state"] in ("C", "D", "E") and not c_state["charge_paused"]
+    has_tic = mock_config["has_tic"]
     return {
-        "id": 1,
+        "id": connector_id,
         "status": {
-            "ocpp": "Charging" if is_charging else ("SuspendedEVSE" if state["charge_paused"] else ("Preparing" if state["greenup_state"] == "B" else "Available")),
-            "iec": state["iec_state"],
-            "raw_code": state["greenup_state"],
-            "vehicle_connected": state["greenup_state"] in ("B", "C", "D", "E"),
+            "ocpp": "Charging" if is_charging else ("SuspendedEVSE" if c_state["charge_paused"] else ("Preparing" if c_state["greenup_state"] == "B" else "Available")),
+            "iec": c_state["iec_state"],
+            "raw_code": c_state["greenup_state"],
+            "vehicle_connected": c_state["greenup_state"] in ("B", "C", "D", "E"),
             "charging": is_charging,
-            "paused": state["charge_paused"],
-            "charge_complete": state["charge_complete"],
-            "error_code": state["error_code"],
-            "error_description": "No error" if state["error_code"] == "0000" else "Mock hardware error",
+            "paused": c_state["charge_paused"],
+            "charge_complete": c_state["charge_complete"],
+            "error_code": c_state["error_code"],
+            "error_description": "No error" if c_state["error_code"] == "0000" else "Mock hardware error",
         },
         "control": {
-            "setpoint_amps": state["eliot_limit_amps"],
-            "pilot_limit_amps": state["eliot_limit_amps"],
+            "setpoint_amps": c_state["eliot_limit_amps"],
+            "pilot_limit_amps": c_state["eliot_limit_amps"],
             "min_allowed_amps": 7,
             "max_hardware_amps": 32,
-            "charge_authorized": state["charge_authorized"] and not state["charge_paused"],
-            "pilot_voltage": 6 if is_charging else (9 if state["greenup_state"] == "B" else 12),
+            "charge_authorized": c_state["charge_authorized"] and not c_state["charge_paused"],
+            "pilot_voltage": 6 if is_charging else (9 if c_state["greenup_state"] == "B" else 12),
         },
         "meter": {
-            "power_w": state["power"],
-            "energy_kwh": round(state["energy"] / 1000.0, 3),
-            "energy_total_wh": state["energy"],
-            "current_a": state["current"],
-            "voltage_v": state["voltage"],
+            "power_w": c_state["power"],
+            "energy_kwh": round(c_state["energy"] / 1000.0, 3),
+            "energy_total_wh": c_state["energy"],
+            "current_a": c_state["current"],
+            "voltage_v": c_state["voltage"],
             "voltage_source": state.get("voltage_source", "default"),
             "voltage_ttl_remaining_s": state.get("voltage_ttl_remaining_s", None),
             "frequency_hz": 50.0,
         },
         "grid": {
-            "tic_connected": True,
-            "tic_mode": "standard",
-            "tic_baud_rate": 9600,
+            "tic_connected": has_tic,
+            "tic_mode": "standard" if has_tic else "disabled",
+            "tic_baud_rate": 9600 if has_tic else None,
         }
     }
 
 def get_mock_snapshot():
+    is_dual = mock_config["dual"]
+    conns = [get_mock_connector(1), get_mock_connector(2)] if is_dual else [get_mock_connector(1)]
     return {
         "station": get_mock_station(),
-        "connectors": [get_mock_connector()],
+        "connectors": conns,
     }
 
 # ==============================================================================
@@ -355,7 +390,35 @@ def _generate_mock_past_session():
 mock_active_session, mock_live_csv, mock_live_txt = _generate_mock_live_session()
 mock_past_session, mock_past_csv, mock_past_txt = _generate_mock_past_session()
 
+# Second past session for dual point charge simulation (Point 2 / Left)
+mock_past_session_side2 = {
+    "id": "session_side2_2026-11-01_19-00-00",
+    "side": 2,
+    "start_time": "2026-11-01 19:00:00",
+    "end_time": "2026-11-01 22:15:30",
+    "termination_reason": "Véhicule débranché (State: A)",
+    "total_duration_seconds": 11730,
+    "charging_duration_seconds": 10800,
+    "idle_duration_seconds": 930,
+    "total_energy_kwh": 9.85,
+    "phase": "1-phase",
+    "plug_type": "Type 2",
+    "max_current_a": 16.1,
+    "avg_current_a": 15.9,
+    "max_power_w": 3710.0,
+    "avg_power_w": 3660.0,
+    "has_csv": True,
+    "has_txt": True,
+    "csv_size_bytes": 1024,
+}
+
 mock_saved_sessions = [mock_past_session]
+
+def get_all_saved_sessions():
+    res = list(mock_saved_sessions)
+    if mock_config["dual"] and mock_past_session_side2 not in res:
+        res.append(mock_past_session_side2)
+    return res
 
 class MockHandler(http.server.BaseHTTPRequestHandler):
     def end_headers(self):
@@ -363,14 +426,86 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Referrer-Policy", "no-referrer")
         super().end_headers()
+
     def log_message(self, format, *args):
         # Mute high frequency polling logs
         if self.path in ("/api/state", "/api/logs/stream"):
             return
         print(f"[{self.command}] {self.path}")
 
+    def is_authenticated(self):
+        if not mock_config["auth_required"]:
+            return True
+        auth_header = self.headers.get("Authorization", "")
+        if auth_header == f"Bearer {mock_config['token']}":
+            return True
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        if qs.get("token", [""])[0] == mock_config["token"]:
+            return True
+        return False
+
+    def check_mutation_auth(self):
+        """Returns True if mutation is permitted, False if 401 was sent."""
+        if not mock_config["auth_required"]:
+            return True
+        if self.is_authenticated():
+            return True
+        add_mock_log("API", "WARN", f"⛔ 401 Unauthorized for mutation: {self.path} (token required)")
+        self.send_response(401)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(json.dumps({
+            "status": "error",
+            "error": "Authentification requise pour cette action en mode consultation"
+        }).encode("utf-8"))
+        return False
+
+    def get_target_side(self):
+        parsed = urllib.parse.urlparse(self.path)
+        qs = urllib.parse.parse_qs(parsed.query)
+        side_val = qs.get("side", ["1"])[0]
+        try:
+            return int(side_val)
+        except ValueError:
+            return 1
+
     def do_GET(self):
-        url = self.path.split("?")[0]
+        parsed = urllib.parse.urlparse(self.path)
+        url = parsed.path
+        qs = urllib.parse.parse_qs(parsed.query)
+
+        # Allow URL query param overrides on index or any GET
+        if "dual" in qs:
+            mock_config["dual"] = qs["dual"][0].lower() in ("1", "true", "yes")
+            add_mock_log("SYS", "INFO", f"🔀 Dual mode set via URL: {mock_config['dual']}")
+        if "no_tic" in qs:
+            mock_config["has_tic"] = False
+            add_mock_log("SYS", "INFO", "🔀 TIC disabled via URL")
+        elif "has_tic" in qs:
+            mock_config["has_tic"] = qs["has_tic"][0].lower() in ("1", "true", "yes")
+            add_mock_log("SYS", "INFO", f"🔀 TIC mode set via URL: {mock_config['has_tic']}")
+        if "ihm_auth" in qs:
+            val = qs["ihm_auth"][0].lower()
+            if val in ("0", "false", "no"):
+                mock_config["auth_required"] = True
+                mock_config["auth_ihm"] = False
+                add_mock_log("SYS", "INFO", "🔀 Configured auth with ihm_auth=false (Kiosk consultation libre) via URL")
+            else:
+                mock_config["auth_required"] = True
+                mock_config["auth_ihm"] = True
+                add_mock_log("SYS", "INFO", "🔀 Configured auth with ihm_auth=true via URL")
+        if "no_auth" in qs:
+            mock_config["auth_required"] = False
+            mock_config["auth_ihm"] = True
+            add_mock_log("SYS", "INFO", "🔀 Disabled auth (open access) via URL")
+
+        # Full auth check if ihm_auth=true
+        if mock_config["auth_required"] and mock_config["auth_ihm"]:
+            is_public = url in ("/", "/favicon.ico", "/css/style.css", "/api/auth/status") or url.startswith(("/js/", "/locales/"))
+            if not is_public and not self.is_authenticated():
+                self.send_error(401, "Unauthorized")
+                return
 
         if url == "/":
             self.serve_file(BASE_DIR / "index.html", "text/html; charset=utf-8")
@@ -385,24 +520,48 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             filename = url[len("/locales/"):]
             self.serve_file(BASE_DIR / "locales" / filename, "application/json; charset=utf-8")
         elif url == "/api/auth/status":
-            add_mock_log("API", "DEBUG", "🔐 GET /api/auth/status (auth_required: False)")
-            self.send_json({"auth_required": False, "authenticated": True})
+            auth_req = mock_config["auth_required"]
+            auth_ihm = mock_config["auth_ihm"]
+            is_authed = self.is_authenticated()
+            add_mock_log("API", "DEBUG", f"🔐 GET /api/auth/status (required={auth_req}, authenticated={is_authed}, auth_ihm={auth_ihm})")
+            self.send_json({
+                "auth_required": auth_req,
+                "authenticated": is_authed,
+                "auth_ihm": auth_ihm,
+            })
         elif url == "/api/state":
-            if state["iec_state"] == "C" and not state["charge_paused"]:
-                state["power"] = state["voltage"] * state["current"]
-                state["energy"] += (state["power"] * 2.0 / 3600.0)
+            c1 = connectors_state[1]
+            if c1["iec_state"] == "C" and not c1["charge_paused"]:
+                c1["power"] = c1["voltage"] * c1["current"]
+                c1["energy"] += (c1["power"] * 2.0 / 3600.0)
             self.send_json(get_mock_snapshot())
         elif url == "/api/station":
             add_mock_log("API", "DEBUG", "🔍 GET /api/station")
             self.send_json(get_mock_station())
         elif url == "/api/connectors":
-            self.send_json([get_mock_connector()])
-        elif url in ("/api/connectors/1", "/api/connectors/2"):
-            self.send_json(get_mock_connector())
-        elif url in ("/api/connectors/1/status", "/api/connectors/2/status", "/api/status"):
-            self.send_json(get_mock_connector()["status"])
-        elif url in ("/api/connectors/1/meter", "/api/connectors/2/meter", "/api/meter"):
-            self.send_json(get_mock_connector()["meter"])
+            conns = [get_mock_connector(1), get_mock_connector(2)] if mock_config["dual"] else [get_mock_connector(1)]
+            self.send_json(conns)
+        elif url == "/api/connectors/1":
+            self.send_json(get_mock_connector(1))
+        elif url == "/api/connectors/2":
+            if mock_config["dual"]:
+                self.send_json(get_mock_connector(2))
+            else:
+                self.send_error(404, "Connector 2 not found")
+        elif url in ("/api/connectors/1/status", "/api/status"):
+            self.send_json(get_mock_connector(1)["status"])
+        elif url == "/api/connectors/2/status":
+            if mock_config["dual"]:
+                self.send_json(get_mock_connector(2)["status"])
+            else:
+                self.send_error(404, "Connector 2 not found")
+        elif url in ("/api/connectors/1/meter", "/api/meter"):
+            self.send_json(get_mock_connector(1)["meter"])
+        elif url == "/api/connectors/2/meter":
+            if mock_config["dual"]:
+                self.send_json(get_mock_connector(2)["meter"])
+            else:
+                self.send_error(404, "Connector 2 not found")
         elif url == "/api/mode":
             self.send_json({"mode": state.get("supervision_mode", "remote"), "can_switch": True})
         elif url == "/api/logs":
@@ -414,15 +573,24 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         elif url == "/api/logs/export":
             self.handle_logs_export()
         elif url == "/api/sessions":
-            add_mock_log("API", "DEBUG", f"📊 GET /api/sessions (active: {mock_active_session['session_id']}, saved: {len(mock_saved_sessions)})")
-            self.send_json({"active_session": mock_active_session, "sessions": mock_saved_sessions})
+            side_filter = qs.get("side", [None])[0]
+            saved = get_all_saved_sessions()
+            if side_filter:
+                try:
+                    s_id = int(side_filter)
+                    act = mock_active_session if (mock_active_session and mock_active_session.get("side") == s_id) else None
+                    saved = [s for s in saved if s.get("side") == s_id]
+                except ValueError:
+                    act = mock_active_session
+            else:
+                act = mock_active_session
+            add_mock_log("API", "DEBUG", f"📊 GET /api/sessions (active: {act['session_id'] if act else 'None'}, saved: {len(saved)})")
+            self.send_json({"active_session": act, "sessions": saved})
         elif url.startswith("/api/sessions/") and url.endswith("/export"):
             parts = url.split("/")
             if len(parts) >= 5:
                 session_id = parts[3]
-                parsed_url = urllib.parse.urlparse(self.path)
-                query_params = urllib.parse.parse_qs(parsed_url.query)
-                fmt = query_params.get("format", ["csv"])[0].lower()
+                fmt = qs.get("format", ["csv"])[0].lower()
                 self.handle_session_export(session_id, fmt)
             else:
                 self.send_error(400, "Bad Request")
@@ -561,13 +729,19 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
 
         body = self.rfile.read(content_len).decode("utf-8") if content_len > 0 else ""
 
+        # Check mutation authorization (kiosk mode blocks mutation unless token provided)
+        if not self.check_mutation_auth():
+            return
+
         if url.startswith("/api/current/"):
             try:
                 amps = int(url.split("/")[-1])
-                state["eliot_limit_amps"] = amps
-                state["current"] = float(amps) if state["charge_authorized"] and not state["charge_paused"] else 0.0
-                state["power"] = state["voltage"] * state["current"]
-                add_mock_log("API", "INFO", f"⚡ Setpoint changed to: {amps}A")
+                target_side = self.get_target_side()
+                c = connectors_state.get(target_side, connectors_state[1])
+                c["eliot_limit_amps"] = amps
+                c["current"] = float(amps) if c["charge_authorized"] and not c["charge_paused"] else 0.0
+                c["power"] = c["voltage"] * c["current"]
+                add_mock_log("API", "INFO", f"⚡ Setpoint changed to: {amps}A (Point {target_side})")
                 add_mock_log("SERIAL_TX", "INFO", f"FM1:{amps}")
                 add_mock_log("SERIAL_RX", "INFO", f"FM1:{amps}:OK")
                 self.send_json({"status": "success", "message": f"Current limit set to {amps}A"})
@@ -577,36 +751,42 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             try:
                 data = json.loads(body) if body else {}
                 action = data.get("action", "")
+                target_side = self.get_target_side()
+                c = connectors_state.get(target_side, connectors_state[1])
                 if action == "enable":
-                    state["charge_authorized"] = True
-                    state["iec_state"] = "C"
-                    state["greenup_state"] = "E"
-                    state["current"] = float(state["eliot_limit_amps"])
-                    add_mock_log("API", "INFO", "⚡ Charge enable requested (T2COK + FM2:0 + DOK)")
+                    c["charge_authorized"] = True
+                    c["iec_state"] = "C"
+                    c["greenup_state"] = "E"
+                    c["current"] = float(c["eliot_limit_amps"])
+                    c["power"] = c["voltage"] * c["current"]
+                    add_mock_log("API", "INFO", f"⚡ Charge enable requested (Point {target_side})")
                     add_mock_log("SERIAL_TX", "INFO", "T2COK")
                     add_mock_log("SERIAL_RX", "INFO", "T2C:OK")
                 elif action == "disable":
-                    state["charge_authorized"] = False
-                    state["iec_state"] = "B"
-                    state["greenup_state"] = "B"
-                    state["current"] = 0.0
-                    add_mock_log("API", "INFO", "🛑 Charge disable requested (FM2:1 + DNOK)")
+                    c["charge_authorized"] = False
+                    c["iec_state"] = "B"
+                    c["greenup_state"] = "B"
+                    c["current"] = 0.0
+                    c["power"] = 0.0
+                    add_mock_log("API", "INFO", f"🛑 Charge disable requested (Point {target_side})")
                     add_mock_log("SERIAL_TX", "INFO", "DNOK")
                     add_mock_log("SERIAL_RX", "INFO", "D:NOK")
                 elif action == "pause":
-                    state["charge_paused"] = True
-                    state["iec_state"] = "B"
-                    state["greenup_state"] = "M"
-                    state["current"] = 0.0
-                    add_mock_log("API", "INFO", "⏸ Charge pause requested (SBNOK)")
+                    c["charge_paused"] = True
+                    c["iec_state"] = "B"
+                    c["greenup_state"] = "M"
+                    c["current"] = 0.0
+                    c["power"] = 0.0
+                    add_mock_log("API", "INFO", f"⏸ Charge pause requested (Point {target_side})")
                     add_mock_log("SERIAL_TX", "INFO", "SBNOK")
                     add_mock_log("SERIAL_RX", "INFO", "SB:NOK")
                 elif action == "resume":
-                    state["charge_paused"] = False
-                    state["iec_state"] = "C"
-                    state["greenup_state"] = "E"
-                    state["current"] = float(state["eliot_limit_amps"])
-                    add_mock_log("API", "INFO", "▶ Charge resume requested (SBOK)")
+                    c["charge_paused"] = False
+                    c["iec_state"] = "C"
+                    c["greenup_state"] = "E"
+                    c["current"] = float(c["eliot_limit_amps"])
+                    c["power"] = c["voltage"] * c["current"]
+                    add_mock_log("API", "INFO", f"▶ Charge resume requested (Point {target_side})")
                     add_mock_log("SERIAL_TX", "INFO", "SBOK")
                     add_mock_log("SERIAL_RX", "INFO", "SB:OK")
                 self.send_json({"status": "success"})
@@ -620,11 +800,20 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 self.send_json({"status": "success"})
             except Exception as e:
                 self.send_error(400, str(e))
-        elif url == "/api/tic/refresh":
-            add_mock_log("API", "INFO", "🔄 TIC refresh requested (TICTM:1)")
+        elif url in ("/api/tic/refresh", "/api/tic/detect"):
+            if not mock_config["has_tic"]:
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "status": "error",
+                    "error": "TIC non supporté sur ce modèle de borne"
+                }).encode("utf-8"))
+                return
+            add_mock_log("API", "INFO", "🔄 TIC refresh/test requested (TICTM:1)")
             add_mock_log("SERIAL_TX", "INFO", "TICTM:1")
             add_mock_log("SERIAL_RX", "INFO", "TICTM:1:OK")
-            self.send_json({"status": "success"})
+            self.send_json({"status": "success", "mode": "standard", "baud_rate": 9600})
         elif url == "/api/logs/level":
             try:
                 data = json.loads(body) if body else {}
@@ -655,13 +844,15 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             else:
                 add_mock_log("API", "INFO", f"🔧 Raw command received: {cmd}")
                 add_mock_log("SERIAL_TX", "INFO", cmd)
+                target_side = self.get_target_side()
+                c = connectors_state.get(target_side, connectors_state[1])
                 # Simulated responses
                 if cmd == "State?":
-                    add_mock_log("SERIAL_RX", "INFO", f"State:{state['greenup_state']}")
+                    add_mock_log("SERIAL_RX", "INFO", f"State:{c['greenup_state']}")
                 elif cmd == "CC?":
                     add_mock_log("SERIAL_RX", "INFO", "CC:32A")
                 elif cmd == "Side?":
-                    add_mock_log("SERIAL_RX", "INFO", "Side:Left")
+                    add_mock_log("SERIAL_RX", "INFO", f"Side:{'Right' if target_side == 1 else 'Left'}")
                 elif cmd == "RaspberryPiModeOK" or cmd == "RPIMODEOK":
                     add_mock_log("SERIAL_RX", "INFO", "DIP1:1")
                 else:
@@ -683,10 +874,12 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             try:
                 data = json.loads(body) if body else {}
                 v = float(data.get("voltage", 230.0))
-                state["voltage"] = v
+                target_side = self.get_target_side()
+                c = connectors_state.get(target_side, connectors_state[1])
+                c["voltage"] = v
+                c["power"] = c["voltage"] * c["current"]
                 state["voltage_source"] = "external"
                 state["voltage_ttl_remaining_s"] = 30
-                state["power"] = state["voltage"] * state["current"]
                 add_mock_log("API", "INFO", f"⚡ External voltage injected: {v}V")
                 self.send_json({"status": "success", "message": "External voltage updated"})
             except Exception as e:
@@ -694,13 +887,15 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         elif url == "/api/init":
             add_mock_log("API", "INFO", "🔄 Initialization sequence started (mock)")
             self.send_json({"status": "success", "message": "Initialization sequence started"})
-        elif url == "/api/reset":
+        elif url in ("/api/reset", "/api/board/reset"):
             add_mock_log("API", "WARN", "⚠️ Hardware restart requested (mock)")
             self.send_json({"status": "success", "message": "ATmega board restart requested"})
         else:
             self.send_json({"status": "success"})
 
     def do_DELETE(self):
+        if not self.check_mutation_auth():
+            return
         url = self.path.split("?")[0]
         if url.startswith("/api/sessions/"):
             parts = url.split("/")
@@ -715,7 +910,7 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 global mock_saved_sessions
                 initial_count = len(mock_saved_sessions)
                 mock_saved_sessions = [s for s in mock_saved_sessions if s["id"] != session_id]
-                if len(mock_saved_sessions) < initial_count:
+                if len(mock_saved_sessions) < initial_count or session_id == mock_past_session_side2["id"]:
                     add_mock_log("API", "INFO", f"🗑️ Deleted session: {session_id}")
                     self.send_json({"status": "success", "message": f"Session {session_id} deleted"})
                 else:
@@ -749,18 +944,95 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Serveur mock local de l'IHM Web Green'Up Link",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Exemples :
+  python scripts/mock_server.py
+      Mode standard : Borne mono point, TIC actif, accès libre LAN
+
+  python scripts/mock_server.py --dual
+      Borne double point de charge (Point 1 Droit + Point 2 Gauche avec sélecteur)
+
+  python scripts/mock_server.py --no-tic
+      Borne sans support TIC (Linky masqué sur l'IHM, TIC non supporté)
+
+  python scripts/mock_server.py --no-ihm-auth
+  python scripts/mock_server.py --ihm-auth-false
+      Authentification activée avec ihm_auth=false (Mode consultation libre / Kiosk)
+      Toutes les pages sont consultables librement, cadenas bleu ciel en haut à droite.
+      Toute action (arrêt de charge, consigne) invite à saisir la clé API (clé mock: mock-secret-key).
+
+  python scripts/mock_server.py --auth
+      Authentification complète avec ihm_auth=true (Écran verrouillé dès le chargement)
+
+  python scripts/mock_server.py --dual --no-tic --no-ihm-auth
+      Combine toutes les options pour tester les cas avancés !
+"""
+    )
+    parser.add_argument("--port", type=int, default=PORT, help=f"Port d'écoute HTTP (défaut: {PORT})")
+    parser.add_argument("--dual", action="store_true", help="Simule une borne double point de charge (2 points)")
+    parser.add_argument("--no-tic", action="store_true", help="Simule une borne sans support TIC (Linky masqué)")
+    parser.add_argument("--no-ihm-auth", "--ihm-auth-false", dest="no_ihm_auth", action="store_true",
+                        help="Active l'authentification avec ihm_auth=false (Mode consultation libre / Kiosk)")
+    parser.add_argument("--auth", "--auth-required", dest="auth_required", action="store_true",
+                        help="Active l'authentification complète avec ihm_auth=true (Écran verrouillé)")
+    parser.add_argument("--token", type=str, default="mock-secret-key",
+                        help="Clé API attendue (défaut: mock-secret-key)")
+    return parser.parse_args()
+
 def main():
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", PORT), MockHandler)
-    url = f"http://localhost:{PORT}"
-    print(f"=======================================================")
-    print(f"🚀 Green'Up Link Mock UI Server running at: {url}")
-    print(f"Press Ctrl+C to stop.")
-    print(f"=======================================================")
+    args = parse_args()
+    port = args.port
+    mock_config["dual"] = args.dual
+    mock_config["has_tic"] = not args.no_tic
+    mock_config["token"] = args.token
+
+    if args.no_ihm_auth:
+        mock_config["auth_required"] = True
+        mock_config["auth_ihm"] = False
+    elif args.auth_required:
+        mock_config["auth_required"] = True
+        mock_config["auth_ihm"] = True
+    else:
+        mock_config["auth_required"] = False
+        mock_config["auth_ihm"] = True
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", port), MockHandler)
+    url = f"http://localhost:{port}"
+
+    print("================================================================================")
+    print(f"🚀 Green'Up Link Mock UI Server démarré sur : {url}")
+    print("--------------------------------------------------------------------------------")
+    print(f"   • Type de borne        : {'Double point de charge [Point 1 + Point 2]' if mock_config['dual'] else 'Mono point de charge'}")
+    print(f"   • Télé-information TIC : {'Activée (Standard 9600)' if mock_config['has_tic'] else 'Désactivée / Non supportée'}")
+    if not mock_config["auth_required"]:
+        print(f"   • Authentification     : Accès libre LAN (aucune auth requise)")
+    elif not mock_config["auth_ihm"]:
+        print(f"   • Authentification     : Mode consultation libre (ihm_auth=false / Kiosk)")
+        print(f"     Clé API mock attendue pour actions : {mock_config['token']}")
+    else:
+        print(f"   • Authentification     : Verrouillée complète (ihm_auth=true)")
+        print(f"     Clé API mock attendue : {mock_config['token']}")
+    print("--------------------------------------------------------------------------------")
+    print("💡 Raccourcis CLI :")
+    print("   python scripts/mock_server.py --dual          # Double point")
+    print("   python scripts/mock_server.py --no-tic        # Sans TIC")
+    print("   python scripts/mock_server.py --no-ihm-auth   # Mode consultation libre (ihm_auth=false)")
+    print("")
+    print("💡 Bascules dynamiques sans redémarrer le serveur (dans l'URL du navigateur) :")
+    print(f"   {url}/?dual=1       ou {url}/?dual=0")
+    print(f"   {url}/?no_tic=1     ou {url}/?has_tic=1")
+    print(f"   {url}/?ihm_auth=0   ou {url}/?no_auth=1")
+    print("================================================================================")
+    print("Appuyez sur Ctrl+C pour arrêter le serveur.")
 
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nShutting down mock server.")
+        print("\nArrêt du serveur mock.")
         server.server_close()
 
 if __name__ == "__main__":
