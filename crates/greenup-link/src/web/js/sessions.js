@@ -5,8 +5,38 @@ let sessionsCache = { active_session: null, sessions: [] };
 let selectedSessionId = null;
 let sessionCsvCache = new Map();
 let currentChartPoints = [];
+let currentSessionStartSeconds = null;
 let deleteConfirmTimer = null;
 let sessionMetricMode = localStorage.getItem('greenup_session_metric_mode') || 'power';
+
+function updateSessionStartInfo(startTimeStr, sessionIdStr) {
+    currentSessionStartSeconds = null;
+    let dateStr = '';
+
+    const src = startTimeStr || '';
+    const dateMatch = src.match(/(\d{4}-\d{2}-\d{2})/) || (sessionIdStr || '').match(/(\d{4}-\d{2}-\d{2})/);
+    if (dateMatch) {
+        dateStr = dateMatch[1];
+    }
+
+    const timeMatch = src.match(/(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (timeMatch) {
+        const hh = parseInt(timeMatch[1], 10);
+        const mm = parseInt(timeMatch[2], 10);
+        const ss = parseInt(timeMatch[3] || '0', 10);
+        currentSessionStartSeconds = hh * 3600 + mm * 60 + ss;
+    } else if (sessionIdStr) {
+        const idTimeMatch = sessionIdStr.match(/_(\d{2})-(\d{2})-(\d{2})$/);
+        if (idTimeMatch) {
+            const hh = parseInt(idTimeMatch[1], 10);
+            const mm = parseInt(idTimeMatch[2], 10);
+            const ss = parseInt(idTimeMatch[3], 10);
+            currentSessionStartSeconds = hh * 3600 + mm * 60 + ss;
+        }
+    }
+
+    setElemText('sessionChartDate', dateStr);
+}
 
 function formatSessionDuration(totalSeconds, includeSeconds = true) {
     if (totalSeconds == null || isNaN(totalSeconds)) return '--';
@@ -33,7 +63,18 @@ function formatSessionDuration(totalSeconds, includeSeconds = true) {
     return `${sec}${sLabel}`;
 }
 
-function formatChartTimeLabel(totalSeconds) {
+function formatChartTimeLabel(totalSeconds, maxT = null, includeSeconds = false) {
+    if (currentSessionStartSeconds != null) {
+        const totalSec = ((Math.round(currentSessionStartSeconds + totalSeconds) % 86400) + 86400) % 86400;
+        const hh = Math.floor(totalSec / 3600).toString().padStart(2, '0');
+        const mm = Math.floor((totalSec % 3600) / 60).toString().padStart(2, '0');
+        if (includeSeconds || (maxT != null && maxT < 240)) {
+            const ss = (totalSec % 60).toString().padStart(2, '0');
+            return `${hh}:${mm}:${ss}`;
+        }
+        return `${hh}:${mm}`;
+    }
+
     const s = Math.max(0, Math.floor(totalSeconds));
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
@@ -334,6 +375,8 @@ function setSessionMetricMode(mode) {
 function renderEmptySessionView() {
     selectedSessionId = null;
     currentChartPoints = [];
+    currentSessionStartSeconds = null;
+    setElemText('sessionChartDate', '');
     resetDeleteButton();
 
     const activeDot = document.getElementById('sessionActiveDot');
@@ -380,6 +423,8 @@ function onSessionSelected(id) {
         const act = sessionsCache.active_session;
         if (!act) return;
 
+        updateSessionStartInfo(act.start_time, act.session_id);
+
         // Active session metrics
         setElemText('sessionValChargingDuration', formatSessionDuration(act.charging_duration_seconds));
         setElemText('sessionValTotalDuration', `Total: ${formatSessionDuration(act.elapsed_seconds)}`);
@@ -410,6 +455,8 @@ function onSessionSelected(id) {
         const savedList = sessionsCache.sessions || [];
         const s = savedList.find(item => item.id === id);
         if (!s) return;
+
+        updateSessionStartInfo(s.start_time, s.id);
 
         setElemText('sessionValChargingDuration', formatSessionDuration(s.charging_duration_seconds));
         setElemText('sessionValTotalDuration', `Total: ${formatSessionDuration(s.total_duration_seconds)}`);
@@ -525,7 +572,7 @@ function parseCsvPoints(csvText) {
 }
 
 // Native Canvas Drawing with High DPI & Hover interactions
-let chartCanvasGeometry = { width: 0, height: 0, padLeft: 42, padRight: 15, padTop: 18, padBottom: 26 };
+let chartCanvasGeometry = { width: 0, height: 0, padLeft: 42, padRight: 22, padTop: 18, padBottom: 26 };
 
 function resizeAndRedrawChart() {
     const canvas = document.getElementById('sessionChartCanvas');
@@ -620,7 +667,7 @@ function drawChart(points, hoverIndex = -1) {
         const tVal = (maxT / xSteps) * i;
         const x = getX(tVal);
         ctx.fillStyle = '#64748b';
-        ctx.fillText(formatChartTimeLabel(tVal), x, height - padBottom + 6);
+        ctx.fillText(formatChartTimeLabel(tVal, maxT), x, height - padBottom + 6);
     }
 
     // 3. Draw gradient filled area under the curve
@@ -732,7 +779,9 @@ function setupChartInteractions() {
         drawChart(currentChartPoints, closestIdx);
 
         if (tooltip) {
-            const timeStr = formatSessionDuration(p.t);
+            const timeStr = currentSessionStartSeconds != null
+                ? `${formatChartTimeLabel(p.t, null, true)} (+${formatSessionDuration(p.t, false)})`
+                : formatSessionDuration(p.t);
             const stateLabel = p.state ? formatSessionState(p.state) : '';
             const stateStr = stateLabel ? ` • ${stateLabel}` : '';
             if (sessionMetricMode === 'current') {

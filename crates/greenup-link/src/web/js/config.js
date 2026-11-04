@@ -266,8 +266,8 @@ async function refreshTicFromConfig() {
 
     try {
         if (feedback) {
-            feedback.innerText = (typeof t === 'function' ? t('system.tic_refreshing') : "Détection TIC lancée sur l'ATmega...") || "Détection TIC lancée sur l'ATmega...";
-            feedback.className = 'sys-feedback sys-feedback-info animate-pulse';
+            feedback.innerText = '';
+            feedback.className = 'sys-feedback';
         }
         if (typeof updateLinky === 'function') {
             updateLinky('detecting');
@@ -283,9 +283,6 @@ async function refreshTicFromConfig() {
         if (typeof fetchTelemetry === 'function') {
             fetchTelemetry();
         }
-        setTimeout(() => {
-            if (feedback) feedback.innerText = '';
-        }, 4000);
     } catch (err) {
         console.error('TIC refresh error:', err);
         if (typeof updateTicSpeedBadge === 'function') {
