@@ -411,6 +411,7 @@ dependencies = [
  "chrono",
  "greenup-protocol",
  "serde",
+ "serde_json",
  "serialport",
  "tokio",
 ]

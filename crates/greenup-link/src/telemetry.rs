@@ -1,17 +1,5 @@
 use serde::{Deserialize, Serialize};
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum SerialStatus {
-    /// Aucun adaptateur USB détecté / câble USB débranché du Raspberry Pi
-    UsbDisconnected,
-    /// Port USB ouvert, en attente de la première réponse de la borne
-    UsbConnecting,
-    /// Liaison USB active et saine (dialogue bidirectionnel avec l'ATmega)
-    UsbConnected,
-    /// Port USB ouvert mais aucune réponse reçue (borne éteinte ou ATmega figé)
-    UsbNoResponse,
-}
+pub use greenup_driver::{SerialStatus, SupervisionMode};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct SerialConnection {
@@ -38,40 +26,6 @@ fn default_side() -> u8 {
 
 fn default_voltage_source() -> String {
     String::from("default")
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum SupervisionMode {
-    #[default]
-    Remote,
-    Local,
-}
-
-impl std::str::FromStr for SupervisionMode {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_lowercase().as_str() {
-            "remote" => Ok(SupervisionMode::Remote),
-            "local" => Ok(SupervisionMode::Local),
-            _ => Err(()),
-        }
-    }
-}
-
-impl SupervisionMode {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            SupervisionMode::Remote => "remote",
-            SupervisionMode::Local => "local",
-        }
-    }
-
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
-        s.parse().ok()
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -190,9 +144,43 @@ impl Telemetry {
             });
         }
         self.evaluate_voltage();
-        if self.greenup_state == "D" || self.greenup_state == "E" {
+        if matches!(self.greenup_state.as_str(), "D" | "E" | "G" | "H") {
             self.power = self.voltage * self.current;
         }
+    }
+
+    /// Recomputes `iec_state` from the raw Legrand state (`A`..`Z`), `t2c_enabled`, and `cp_voltage`.
+    pub fn update_iec_state(&mut self) {
+        if self.greenup_state == "U" || self.greenup_state == "V" {
+            self.iec_state = Some("F".to_string());
+        } else if matches!(self.greenup_state.as_str(), "R" | "S" | "T" | "X") {
+            self.iec_state = Some("E".to_string());
+        } else if let Some(false) = self.t2c_enabled {
+            match self.cp_voltage {
+                Some(12) => self.iec_state = Some("A".to_string()),
+                Some(9) => self.iec_state = Some("B".to_string()),
+                Some(6) => self.iec_state = Some("C".to_string()),
+                _ => {}
+            }
+        } else {
+            match self.greenup_state.as_str() {
+                "A" | "L" | "DISCONNECTED" => self.iec_state = Some("A".to_string()),
+                "B" | "C" | "F" | "I" | "J" | "K" | "M" | "N" | "O" | "P" | "W" => {
+                    self.iec_state = Some("B".to_string())
+                }
+                "D" | "E" | "G" | "H" => self.iec_state = Some("C".to_string()),
+                _ => {}
+            }
+        }
+    }
+
+    /// Recomputes `charge_authorized` from `t2c_enabled`, `fm2_state`, and `d_state`.
+    pub fn update_charge_status(&mut self) {
+        let is_blocked_by_fm2 = self.fm2_state.unwrap_or(false);
+        let is_forced_by_d = self.d_state.unwrap_or(false);
+        let is_t2c_authorized = self.t2c_enabled.unwrap_or(true);
+
+        self.charge_authorized = is_t2c_authorized && (!is_blocked_by_fm2 || is_forced_by_d);
     }
 }
 

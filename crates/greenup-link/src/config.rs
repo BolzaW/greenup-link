@@ -145,13 +145,13 @@ impl Default for SerialConfig {
 
 #[derive(Debug, Clone)]
 pub struct StationConfig {
-    pub mode: greenup_driver::telemetry::SupervisionMode,
+    pub mode: crate::telemetry::SupervisionMode,
 }
 
 impl Default for StationConfig {
     fn default() -> Self {
         Self {
-            mode: greenup_driver::telemetry::SupervisionMode::Remote,
+            mode: crate::telemetry::SupervisionMode::Remote,
         }
     }
 }
@@ -317,7 +317,7 @@ impl AppConfig {
                     }
                 } else if current_section == "station" {
                     if key.as_str() == "mode" {
-                        if let Some(m) = greenup_driver::telemetry::SupervisionMode::from_str(&val) {
+                        if let Some(m) = crate::telemetry::SupervisionMode::from_str(&val) {
                             config.station.mode = m;
                         }
                     }

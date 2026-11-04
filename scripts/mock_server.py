@@ -258,6 +258,56 @@ def get_mock_snapshot():
         "connectors": conns,
     }
 
+def get_mock_driver_snapshot(side=1):
+    is_dual = mock_config["dual"]
+    has_tic = mock_config["has_tic"]
+    c_state = connectors_state.get(side, connectors_state[1])
+    port = "/dev/ttyUSB0" if side == 1 else "/dev/ttyUSB1"
+    return {
+        "atmega": {
+            "side": side,
+            "s": "0102030405",
+            "d": "058009" if is_dual else "058001",
+            "w": "42W22",
+            "v": "A",
+            "f": "1.03.25",
+            "kit_com": True,
+            "initialized": True,
+            "bt": state.get("bluetooth_enabled", True),
+            "bt_mac": "00:80:E1:AA:BB:CC",
+            "state": c_state["greenup_state"],
+            "e": c_state["error_code"] or None,
+            "fm": "4",
+            "fm2": 0,
+            "cp": 6 if c_state["iec_state"] == "C" else (9 if c_state["iec_state"] == "B" else 12),
+            "pp": 32,
+            "cc": c_state["eliot_limit_amps"],
+            "cci": c_state["current"],
+            "cci_updates_count": 42,
+            "cc_el": c_state["eliot_limit_amps"],
+            "cc_ca": 32,
+            "cc_s": 32,
+            "cc_co": 32,
+            "cc_tic": 32 if has_tic else 0,
+            "t2c": c_state["charge_authorized"],
+            "sb": not c_state["charge_paused"],
+            "fcs": c_state["charge_complete"],
+            "tic_tm": False,
+            "tic_test_b": 9600 if has_tic else 0,
+        },
+        "usb": {
+            "status": c_state["usb_status"],
+            "port": port,
+            "baud_rate": 115200,
+            "supervision_mode": state.get("supervision_mode", "remote"),
+            "tic_detecting": False,
+            "last_rx_age_ms": 120,
+            "tx_frames_count": 128,
+            "rx_frames_count": 512,
+            "timeout_retries_count": 0,
+        },
+    }
+
 # ==============================================================================
 # MOCK CHARGING SESSIONS & CURVES GENERATION
 # ==============================================================================
@@ -669,6 +719,15 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 self.send_error(404, "Connector 2 not found")
         elif url == "/api/mode":
             self.send_json({"mode": state.get("supervision_mode", "remote"), "can_switch": True})
+        elif url == "/api/driver/raw":
+            if "side" in qs:
+                side = self.get_target_side()
+                self.send_json(get_mock_driver_snapshot(side))
+            else:
+                self.send_json({
+                    "point1": get_mock_driver_snapshot(1),
+                    "point2": get_mock_driver_snapshot(2) if mock_config["dual"] else None,
+                })
         elif url == "/api/logs":
             add_mock_log("API", "DEBUG", f"📋 GET /api/logs ({len(mock_logs)} entries)")
             self.send_json(mock_logs)

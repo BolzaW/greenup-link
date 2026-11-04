@@ -1,93 +1,35 @@
 mod api;
 mod auth;
 mod config;
+pub mod hardware_specs;
+pub mod session;
+pub mod station;
+pub mod telemetry;
 
-use std::sync::{atomic::AtomicU8, Arc, Mutex};
-use tokio::sync::mpsc;
-use greenup_driver::state::{AppState, BoardInfo, StationManager, Telemetry};
+use std::sync::Arc;
+use station::{AppState, StationManager};
 
-fn discover_candidate_ports(configured_port: Option<&str>, configured_port2: Option<&str>) -> (String, String) {
-    let mut available: Vec<String> = serialport::available_ports()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|p| p.port_name)
-        .filter(|name| {
-            name.contains("ttyUSB")
-                || name.contains("ttyACM")
-                || name.starts_with("COM")
-                || name.contains("cu.usbserial")
-        })
-        .collect();
-
-    available.sort();
-
-    let port1 = match configured_port {
-        Some(p) if !p.trim().is_empty() => p.trim().to_string(),
-        _ => available.first().cloned().unwrap_or_else(|| "/dev/ttyUSB0".to_string()),
-    };
-
-    let port2 = match configured_port2 {
-        Some(p2) if !p2.trim().is_empty() => p2.trim().to_string(),
-        _ => available
-            .iter()
-            .find(|&p| p != &port1)
-            .cloned()
-            .unwrap_or_else(|| {
-                if port1.ends_with('0') {
-                    format!("{}1", &port1[..port1.len() - 1])
-                } else if port1 == "/dev/ttyUSB0" {
-                    "/dev/ttyUSB1".to_string()
-                } else {
-                    "/dev/ttyUSB1".to_string()
-                }
-            }),
-    };
-
-    (port1, port2)
-}
-
-fn spawn_serial_worker(
+fn spawn_supervised_point(
     side: u8,
-    mode: greenup_driver::telemetry::SupervisionMode,
+    mode: telemetry::SupervisionMode,
     port_name: String,
     baud_rate: u32,
     watchdog_timeout_secs: u64,
     link_version: &str,
-) -> (Arc<AppState>, tokio::sync::mpsc::Sender<greenup_protocol::Command>) {
-    let (tx, rx) = mpsc::channel::<greenup_protocol::Command>(32);
-    let mut initial_info = BoardInfo::default();
-    initial_info.link_version = link_version.to_string();
-    initial_info.side = Some(side);
-
-    let mut tel = Telemetry::default();
-    tel.side = side;
-    tel.mode = mode;
-
-    let app_state = Arc::new(AppState {
-        side: AtomicU8::new(side),
-        mode: AtomicU8::new(match mode {
-            greenup_driver::telemetry::SupervisionMode::Remote => 0,
-            greenup_driver::telemetry::SupervisionMode::Local => 1,
-        }),
-        telemetry: Mutex::new(tel),
-        info: Mutex::new(initial_info),
-        serial_tx: tx.clone(),
-        tic_detection: Mutex::new(greenup_driver::state::TicDetectionState::default()),
-        tokio_handle: tokio::runtime::Handle::current(),
-    });
-
-    let state_for_serial = app_state.clone();
-    let serial_options = greenup_driver::SerialOptions {
-        port: port_name,
-        baud_rate,
-        timeout_ms: 100,
-        watchdog_timeout_secs,
-    };
-    tokio::task::spawn_blocking(move || {
-        greenup_driver::run_serial_loop_with_options(state_for_serial, rx, serial_options);
-    });
-
-    (app_state, tx)
+) -> Arc<AppState> {
+    let driver = greenup_driver::spawn_port(
+        side,
+        mode,
+        greenup_driver::SerialOptions {
+            port: port_name,
+            baud_rate,
+            timeout_ms: 100,
+            watchdog_timeout_secs,
+        },
+    );
+    let app_state = Arc::new(AppState::from_driver(driver, link_version));
+    app_state.start_driver_watcher();
+    app_state
 }
 
 #[tokio::main]
@@ -96,17 +38,25 @@ async fn main() {
 
     // Configure storage directories from greenup.toml before logger initialization
     greenup_driver::logger::set_custom_log_dir(Some(app_config.storage.log_dir.clone()));
-    greenup_driver::session::set_custom_sessions_dir(Some(std::path::PathBuf::from(&app_config.storage.sessions_dir)));
+    session::set_custom_sessions_dir(Some(std::path::PathBuf::from(
+        &app_config.storage.sessions_dir,
+    )));
     greenup_driver::logger::init();
 
     let pkg_version = env!("CARGO_PKG_VERSION");
 
     greenup_driver::logger::log("SYS", "===================================================");
-    greenup_driver::logger::log("SYS", &format!("               GREEN'UP LINK v{:<15}     ", pkg_version));
+    greenup_driver::logger::log(
+        "SYS",
+        &format!("               GREEN'UP LINK v{:<15}     ", pkg_version),
+    );
     greenup_driver::logger::log("SYS", "===================================================");
     greenup_driver::logger::log(
         "SYS",
-        &format!("📁 Storage paths: logs = {}, sessions = {}", app_config.storage.log_dir, app_config.storage.sessions_dir),
+        &format!(
+            "📁 Storage paths: logs = {}, sessions = {}",
+            app_config.storage.log_dir, app_config.storage.sessions_dir
+        ),
     );
     if app_config.http.api_token.is_some() {
         let auth_desc = if app_config.http.auth_ihm {
@@ -123,13 +73,13 @@ async fn main() {
     }
 
     match app_config.station.mode {
-        greenup_driver::telemetry::SupervisionMode::Local => {
+        telemetry::SupervisionMode::Local => {
             greenup_driver::logger::warn(
                 "SYS",
                 "👂 Supervision mode: LOCAL (passive monitoring - no commands will be sent to ATmega)",
             );
         }
-        greenup_driver::telemetry::SupervisionMode::Remote => {
+        telemetry::SupervisionMode::Remote => {
             greenup_driver::logger::log(
                 "SYS",
                 "⚡ Supervision mode: REMOTE (active supervision enabled)",
@@ -137,17 +87,20 @@ async fn main() {
         }
     }
 
-    let (port1_name, port2_candidate) = discover_candidate_ports(
+    let (port1_name, port2_candidate) = greenup_driver::discover_candidate_ports(
         app_config.serial.port.as_deref(),
         app_config.serial.port2.as_deref(),
     );
 
     greenup_driver::logger::log(
         "SYS",
-        &format!("🔌 Serial port resolved: Point 1 = {} (Point 2 candidate = {})", port1_name, port2_candidate),
+        &format!(
+            "🔌 Serial port resolved: Point 1 = {} (Point 2 candidate = {})",
+            port1_name, port2_candidate
+        ),
     );
 
-    let (app_state_1, _tx1) = spawn_serial_worker(
+    let app_state_1 = spawn_supervised_point(
         1,
         app_config.station.mode,
         port1_name,
@@ -156,78 +109,48 @@ async fn main() {
         pkg_version,
     );
 
-    let (station, should_watch_auto) = match app_config.serial.dual_point {
+    let station = match app_config.serial.dual_point {
         config::DualPointMode::True => {
             greenup_driver::logger::log(
                 "SYS",
-                &format!("⚡ Dual charge point mode: FORCED (Point 1: active, Point 2: {})", port2_candidate),
+                &format!(
+                    "⚡ Dual charge point mode: FORCED (Point 1: active, Point 2: {})",
+                    port2_candidate
+                ),
             );
-            let (app_state_2, _tx2) = spawn_serial_worker(
+            let app_state_2 = spawn_supervised_point(
                 2,
                 app_config.station.mode,
-                port2_candidate.clone(),
+                port2_candidate,
                 app_config.serial.baud_rate,
                 app_config.serial.watchdog_timeout_secs,
                 pkg_version,
             );
             greenup_driver::logger::set_dual_station(true);
-            (Arc::new(StationManager::new(app_state_1, Some(app_state_2))), false)
+            Arc::new(StationManager::new(app_state_1, Some(app_state_2)))
         }
         config::DualPointMode::False => {
             greenup_driver::logger::log("SYS", "⚡ Single charge point mode: FORCED");
             greenup_driver::logger::set_dual_station(false);
-            (Arc::new(StationManager::new(app_state_1, None)), false)
+            Arc::new(StationManager::new(app_state_1, None))
         }
         config::DualPointMode::Auto => {
-            greenup_driver::logger::log("SYS", "⚡ Dual charge point mode: AUTO (detecting from board reference)");
+            greenup_driver::logger::log(
+                "SYS",
+                "⚡ Dual charge point mode: AUTO (detecting from board reference via driver watch)",
+            );
             greenup_driver::logger::set_dual_station(false);
-            (Arc::new(StationManager::new(app_state_1, None)), true)
+            let st = Arc::new(StationManager::new(app_state_1, None));
+            st.watch_auto_dual_port(
+                app_config.serial.port.clone(),
+                app_config.serial.port2.clone(),
+                app_config.serial.baud_rate,
+                app_config.serial.watchdog_timeout_secs,
+                pkg_version.to_string(),
+            );
+            st
         }
     };
-
-    if should_watch_auto {
-        let station_clone = station.clone();
-        let port2_target = port2_candidate;
-        let baud = app_config.serial.baud_rate;
-        let wd = app_config.serial.watchdog_timeout_secs;
-        let ver = pkg_version.to_string();
-
-        tokio::spawn(async move {
-            for _ in 0..60 {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                if station_clone.is_dual() {
-                    return;
-                }
-                let (has_ref, is_2pt, ref_str) = {
-                    let info = station_clone.point1.info.lock().unwrap_or_else(|e| e.into_inner());
-                    let is_2pt = info.capabilities.as_ref().map(|c| c.charging_points == 2).unwrap_or(false);
-                    (!info.reference.is_empty(), is_2pt, info.reference.clone())
-                };
-
-                if has_ref {
-                    if is_2pt {
-                        greenup_driver::logger::log(
-                            "SYS",
-                            &format!(
-                                "⚡ Station reference '{}' identified as Dual Charge Point: automatically starting Point 2 on {}",
-                                ref_str, port2_target
-                            ),
-                        );
-                        let point_mode = station_clone.point1.mode();
-                        let (app_state_2, _tx2) = spawn_serial_worker(2, point_mode, port2_target, baud, wd, &ver);
-                        station_clone.attach_point2(app_state_2);
-                        greenup_driver::logger::set_dual_station(true);
-                    } else {
-                        greenup_driver::logger::log(
-                            "SYS",
-                            &format!("ℹ️ Station reference '{}' confirmed Single Charge Point", ref_str),
-                        );
-                    }
-                    return;
-                }
-            }
-        });
-    }
 
     // Start the Axum HTTP server
     let router = api::build_router(station, app_config.http.clone());
@@ -238,5 +161,7 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .unwrap_or_else(|e| panic!("Failed to bind {}: {}", addr, e));
-    axum::serve(listener, router).await.expect("Fatal web server error");
+    axum::serve(listener, router)
+        .await
+        .expect("Fatal web server error");
 }

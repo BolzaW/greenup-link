@@ -191,6 +191,7 @@ pub fn is_kiosk_permitted(method: &axum::http::Method, path: &str) -> bool {
         || path == "/api/logs/stream"
         || path == "/api/logs/level"
         || path == "/api/auth/status"
+        || path == "/api/driver/raw"
 }
 
 /// Axum middleware enforcing API authentication when `api_token` is configured.

@@ -1,13 +1,14 @@
 pub mod logger;
+pub mod raw_state;
 pub mod serial;
-pub mod session;
 pub mod state;
-pub mod telemetry;
-pub mod hardware_specs;
 
-pub use state::{SharedState, SharedStation, StationManager};
-pub use serial::{run_serial_loop, run_serial_loop_with_options, trigger_init_sequence, SerialOptions};
-pub use telemetry::{
-    ConnectorControl, ConnectorData, ConnectorGrid, ConnectorMeter, ConnectorStatus,
-    OcppChargePointStatus, StationData, StationSnapshot, SupervisionMode,
+pub use raw_state::{
+    AtmegaRawState, DriverSnapshot, SerialStatus, SupervisionMode, UsbLinkState,
 };
+pub use serial::{
+    check_tic_state_a, discover_candidate_ports, parse_incoming_line, run_serial_loop,
+    run_serial_loop_with_options, spawn_port, start_tic_detection, trigger_init_sequence,
+    SerialOptions, TicStartError,
+};
+pub use state::{DriverHandle, SharedDriver, TicDetectionState};

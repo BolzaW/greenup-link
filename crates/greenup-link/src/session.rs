@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use crate::logger;
+use greenup_driver::logger;
 use crate::telemetry::Telemetry;
 
 /// Returns true if the state indicates an immediate session termination
