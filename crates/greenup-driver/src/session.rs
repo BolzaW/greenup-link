@@ -20,6 +20,16 @@ pub fn is_connected_state(state: &str) -> bool {
     !is_immediate_termination_state(state) && state != "A" && state != "DISCONNECTED"
 }
 
+/// Returns true if the Legrand state corresponds to the domestic / Schuko 2P+T socket (F, G, H, O).
+pub fn is_domestic_state(state: &str) -> bool {
+    matches!(state, "F" | "G" | "H" | "O")
+}
+
+/// Returns true if the Legrand state corresponds to active power delivery (Type 2: D/E, Schuko: G/H).
+pub fn is_charging_state(state: &str) -> bool {
+    matches!(state, "D" | "E" | "G" | "H")
+}
+
 /// Formats duration in seconds into a human-readable string (e.g. "2h 10m 18s" or "45m 12s" or "32s").
 pub fn format_duration(seconds: u64) -> String {
     let hours = seconds / 3600;
@@ -135,7 +145,7 @@ impl ActiveSession {
         let effective_voltage = if tel.voltage > 50.0 { tel.voltage } else { 230.0 };
         let sample_power = if tel.power > 0.0 {
             tel.power
-        } else if tel.greenup_state == "D" || tel.greenup_state == "E" {
+        } else if is_charging_state(&tel.greenup_state) {
             effective_voltage * tel.current
         } else {
             0.0
@@ -243,6 +253,12 @@ pub fn start_session_for_side(side: u8, initial_state: &str, tel: &Telemetry) {
         &format!("Started charging session {} on Side {} (initial state: {})", session_id, side, initial_state),
     );
 
+    let initial_plug_type = if is_domestic_state(initial_state) {
+        "Schuko"
+    } else {
+        "Type 2"
+    };
+
     let mut session = ActiveSession {
         side,
         session_id,
@@ -258,7 +274,7 @@ pub fn start_session_for_side(side: u8, initial_state: &str, tel: &Telemetry) {
         cumulative_current_a_secs: 0.0,
         last_tick_instant: now_instant,
         phase: "Mono".to_string(),
-        plug_type: "Type 2".to_string(),
+        plug_type: initial_plug_type.to_string(),
         legrand_ticket: None,
         csv_path,
         txt_path,
@@ -286,8 +302,12 @@ pub fn on_state_change_for_side(side: u8, new_state: &str, tel: &Telemetry) {
         let now_instant = Instant::now();
         let now_local = Local::now();
 
+        if is_domestic_state(new_state) {
+            session.plug_type = "Schuko".to_string();
+        }
+
         // If transitioning away from an active charge state, integrate the remaining fraction
-        let was_charging = session.last_sample_state == "D" || session.last_sample_state == "E";
+        let was_charging = is_charging_state(&session.last_sample_state);
         if was_charging && session.last_sample_current > 0.05 {
             let dt = now_instant.duration_since(session.last_tick_instant).as_secs_f64().min(2.0);
             session.active_charging_duration_secs_f64 += dt;
@@ -365,7 +385,11 @@ pub fn on_telemetry_tick_for_side(side: u8, tel: &Telemetry) {
         session.last_tick_instant = now_instant;
         let dt = dt.min(2.0);
 
-        let is_charging = tel.greenup_state == "D" || tel.greenup_state == "E";
+        if is_domestic_state(&tel.greenup_state) {
+            session.plug_type = "Schuko".to_string();
+        }
+
+        let is_charging = is_charging_state(&tel.greenup_state);
         let effective_voltage = if tel.voltage > 50.0 { tel.voltage } else { 230.0 };
         let live_power = if tel.power > 0.0 {
             tel.power
@@ -489,7 +513,7 @@ pub fn end_session_for_side(side: u8, reason: &str, tel: &Telemetry) {
 
     let plug_type_str = if session.plug_type.is_empty() { "Type 2" } else { &session.plug_type };
 
-    let phase_str = if plug_type_str == "Domestique" {
+    let phase_str = if plug_type_str == "Domestique" || plug_type_str == "Schuko" {
         "1-phase"
     } else {
         match session.phase.as_str() {
@@ -818,7 +842,7 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
         let effective_voltage = if tel.voltage > 50.0 { tel.voltage } else { 230.0 };
         let live_power = if tel.power > 0.0 {
             tel.power
-        } else if tel.greenup_state == "D" || tel.greenup_state == "E" {
+        } else if is_charging_state(&tel.greenup_state) {
             effective_voltage * tel.current
         } else {
             0.0
@@ -850,7 +874,7 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
             avg_power_w: avg_power,
             state: tel.greenup_state.clone(),
             iec_state: tel.iec_state.clone(),
-            phase: if s.plug_type == "Domestique" {
+            phase: if s.plug_type == "Domestique" || s.plug_type == "Schuko" {
                 "1-phase".to_string()
             } else {
                 match s.phase.as_str() {
@@ -1289,6 +1313,41 @@ mod tests {
 
         // End session
         end_session("Test done", &tel);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_domestic_schuko_session_states_f_g_h() {
+        let dir = setup_test_dir();
+        let mut tel = Telemetry::default();
+        tel.greenup_state = "F".into();
+        tel.iec_state = Some("B".into());
+        tel.voltage = 230.0;
+
+        // Start session in State F (Schuko / domestic socket waiting for station)
+        start_session("F", &tel);
+        let act = get_active_session_summary(&tel).expect("active session");
+        assert_eq!(act.plug_type, "Schuko");
+        assert_eq!(act.phase, "1-phase");
+
+        // Transition to State G (Schuko charging)
+        tel.greenup_state = "G".into();
+        tel.iec_state = Some("C".into());
+        tel.current = 14.0;
+        tel.power = 3220.0;
+        on_state_change("G", &tel);
+
+        if let Some(ref mut session) = ACTIVE_SESSIONS.lock().unwrap()[0] {
+            session.active_charging_duration_secs_f64 = 120.0;
+            session.cumulative_energy_wh = 150.0; // 0.150 kWh
+        }
+
+        end_session("Session stopped (State: A > 60s)", &tel);
+        let sessions = list_saved_sessions();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].plug_type, "Schuko");
+        assert_eq!(sessions[0].phase, "1-phase");
+
         let _ = fs::remove_dir_all(&dir);
     }
 }

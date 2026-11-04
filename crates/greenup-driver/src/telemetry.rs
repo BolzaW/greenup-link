@@ -326,18 +326,27 @@ impl Telemetry {
         let error_code = self.error_code.clone();
         let has_error = !error_code.is_empty() && error_code != "0000";
 
-        // Determine IEC state
-        let iec = match raw_code.as_str() {
-            "A" | "DISCONNECTED" => "A".to_string(),
-            "B" => "B".to_string(),
-            "C" => "C".to_string(),
-            "D" => "D".to_string(),
-            "E" => "E".to_string(),
-            other => self.iec_state.clone().unwrap_or_else(|| other.to_string()),
+        // Determine IEC 61851 state from Legrand state machine (see docs/STATE_MACHINE.md):
+        // - A, L: Disconnected -> IEC A
+        // - B (T2 waiting station), C (T2 waiting EV), F (Schuko waiting station), I/J/K/M/N/O/P/W: Connected -> IEC B
+        // - D, E (T2 charging), G, H (Schuko charging): Charging -> IEC C
+        // - R, S, T, X: Fault / Error -> IEC E
+        // - U, V: Fatal power loss -> IEC F
+        let iec = if let Some(ref explicit_iec) = self.iec_state {
+            explicit_iec.clone()
+        } else {
+            match raw_code.as_str() {
+                "A" | "L" | "DISCONNECTED" => "A".to_string(),
+                "B" | "C" | "F" | "I" | "J" | "K" | "M" | "N" | "O" | "P" | "W" => "B".to_string(),
+                "D" | "E" | "G" | "H" => "C".to_string(),
+                "R" | "S" | "T" | "X" => "E".to_string(),
+                "U" | "V" => "F".to_string(),
+                other => other.to_string(),
+            }
         };
 
-        let vehicle_connected = iec != "A" && iec != "DISCONNECTED";
-        let is_charging = (iec == "C" || iec == "D") && self.current > 0.5 && !self.charge_paused;
+        let vehicle_connected = !matches!(raw_code.as_str(), "A" | "L" | "DISCONNECTED" | "Y" | "Z" | "") && iec != "A";
+        let is_charging = (matches!(raw_code.as_str(), "D" | "E" | "G" | "H") || iec == "C") && !self.charge_paused;
 
         let ocpp = if self.serial.status != SerialStatus::UsbConnected || self.mode == SupervisionMode::Local {
             if self.mode == SupervisionMode::Local && vehicle_connected {
@@ -351,14 +360,14 @@ impl Telemetry {
             } else {
                 OcppChargePointStatus::Available
             }
-        } else if has_error {
+        } else if has_error || iec == "E" || iec == "F" {
             OcppChargePointStatus::Faulted
-        } else if self.charge_paused {
+        } else if self.charge_paused || matches!(raw_code.as_str(), "J" | "K" | "M" | "N" | "O" | "P") {
             OcppChargePointStatus::SuspendedEVSE
         } else if is_charging {
             OcppChargePointStatus::Charging
         } else if vehicle_connected {
-            if self.charge_complete {
+            if self.charge_complete || raw_code == "C" || raw_code == "I" {
                 OcppChargePointStatus::SuspendedEV
             } else {
                 OcppChargePointStatus::Preparing
@@ -505,7 +514,7 @@ mod tests {
         assert_eq!(conn.control.setpoint_amps, 16);
         assert_eq!(conn.control.max_hardware_amps, 32);
 
-        // 2. Vehicle plugged in (State B)
+        // 2. Vehicle plugged in (State B: waiting for station, State F: Schuko waiting for station, State C: waiting for EV)
         tel.greenup_state = "B".to_string();
         let conn = tel.to_connector_data(&info);
         assert_eq!(conn.status.iec, "B");
@@ -513,17 +522,33 @@ mod tests {
         assert!(conn.status.vehicle_connected);
         assert!(!conn.status.charging);
 
-        // 3. Charging active (State C, 16A)
+        tel.greenup_state = "F".to_string();
+        let conn_f = tel.to_connector_data(&info);
+        assert_eq!(conn_f.status.iec, "B");
+        assert_eq!(conn_f.status.ocpp, OcppChargePointStatus::Preparing);
+        assert!(conn_f.status.vehicle_connected);
+        assert!(!conn_f.status.charging);
+
         tel.greenup_state = "C".to_string();
-        tel.current = 15.9;
-        tel.power = 3736.0;
-        let conn = tel.to_connector_data(&info);
-        assert_eq!(conn.status.iec, "C");
-        assert_eq!(conn.status.ocpp, OcppChargePointStatus::Charging);
-        assert!(conn.status.vehicle_connected);
-        assert!(conn.status.charging);
-        assert_eq!(conn.meter.power_w, 3736.0);
-        assert_eq!(conn.meter.current_a, 15.9);
+        let conn_c = tel.to_connector_data(&info);
+        assert_eq!(conn_c.status.iec, "B");
+        assert_eq!(conn_c.status.ocpp, OcppChargePointStatus::SuspendedEV);
+        assert!(conn_c.status.vehicle_connected);
+        assert!(!conn_c.status.charging);
+
+        // 3. Charging active (Legrand State D, E for Type 2, and G, H for Schuko -> IEC C)
+        for chg_state in &["D", "E", "G", "H"] {
+            tel.greenup_state = chg_state.to_string();
+            tel.current = 15.9;
+            tel.power = 3736.0;
+            let conn = tel.to_connector_data(&info);
+            assert_eq!(conn.status.iec, "C");
+            assert_eq!(conn.status.ocpp, OcppChargePointStatus::Charging);
+            assert!(conn.status.vehicle_connected);
+            assert!(conn.status.charging);
+            assert_eq!(conn.meter.power_w, 3736.0);
+            assert_eq!(conn.meter.current_a, 15.9);
+        }
 
         // 4. Charge paused
         tel.charge_paused = true;

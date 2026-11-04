@@ -107,7 +107,7 @@ def add_mock_log(category, level, message):
     return entry
 
 def apply_state(state_letter, target_side=1):
-    """Applies a Green'Up state (A, B, C, D, E) to the simulated connector."""
+    """Applies a Green'Up state (A, B, C, D, E, F, G, H) to the simulated connector."""
     state_letter = state_letter.upper()
     c = connectors_state.get(target_side, connectors_state[1])
     c["greenup_state"] = state_letter
@@ -118,7 +118,7 @@ def apply_state(state_letter, target_side=1):
         c["charge_authorized"] = True
         c["charge_paused"] = False
         c["charge_complete"] = False
-    elif state_letter == "B":
+    elif state_letter in ("B", "F"):
         c["iec_state"] = "B"
         c["current"] = 0.0
         c["power"] = 0.0
@@ -132,7 +132,7 @@ def apply_state(state_letter, target_side=1):
         c["charge_authorized"] = True
         c["charge_paused"] = False
         c["charge_complete"] = False
-    elif state_letter in ("D", "E"):
+    elif state_letter in ("D", "E", "G", "H"):
         c["iec_state"] = "C"
         c["current"] = float(c.get("eliot_limit_amps", 16))
         c["power"] = round(c["voltage"] * c["current"], 1)
@@ -191,14 +191,14 @@ def get_mock_station():
 
 def get_mock_connector(connector_id=1):
     c_state = connectors_state.get(connector_id, connectors_state[1])
-    is_charging = c_state["greenup_state"] in ("D", "E") and not c_state["charge_paused"]
+    is_charging = c_state["greenup_state"] in ("D", "E", "G", "H") and not c_state["charge_paused"]
     has_tic = mock_config["has_tic"]
 
     if is_charging:
         ocpp_status = "Charging"
     elif c_state["charge_paused"]:
         ocpp_status = "SuspendedEVSE"
-    elif c_state["greenup_state"] == "B":
+    elif c_state["greenup_state"] in ("B", "F"):
         ocpp_status = "Preparing"
     elif c_state["greenup_state"] == "C":
         ocpp_status = "SuspendedEV"
@@ -207,7 +207,7 @@ def get_mock_connector(connector_id=1):
 
     if is_charging:
         pilot_v = 6
-    elif c_state["greenup_state"] in ("B", "C"):
+    elif c_state["greenup_state"] in ("B", "C", "F"):
         pilot_v = 9
     else:
         pilot_v = 12
@@ -218,7 +218,7 @@ def get_mock_connector(connector_id=1):
             "ocpp": ocpp_status,
             "iec": c_state["iec_state"],
             "raw_code": c_state["greenup_state"],
-            "vehicle_connected": c_state["greenup_state"] in ("B", "C", "D", "E"),
+            "vehicle_connected": c_state["greenup_state"] in ("B", "C", "D", "E", "F", "G", "H"),
             "charging": is_charging,
             "paused": c_state["charge_paused"],
             "charge_complete": c_state["charge_complete"],
@@ -591,10 +591,10 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             mock_config["auth_required"] = True
             add_mock_log("SYS", "INFO", f"🔀 Authorized API token set via URL: '{token_val}'")
 
-        # State override via URL (?state=A, B, C, D, E)
+        # State override via URL (?state=A, B, C, D, E, F, G, H)
         if "state" in qs:
             st = qs["state"][0].upper()
-            if st in ("A", "B", "C", "D", "E"):
+            if st in ("A", "B", "C", "D", "E", "F", "G", "H"):
                 target_side = self.get_target_side()
                 apply_state(st, target_side)
 
@@ -963,12 +963,12 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 data = json.loads(body) if body else {}
                 st = data.get("state", "").upper()
                 target_side = data.get("side", self.get_target_side())
-                if st in ("A", "B", "C", "D", "E"):
+                if st in ("A", "B", "C", "D", "E", "F", "G", "H"):
                     apply_state(st, target_side)
                     self.send_json({"status": "success", "state": st, "side": target_side})
                     return
                 else:
-                    self.send_error(400, "Invalid state (must be A, B, C, D, or E)")
+                    self.send_error(400, "Invalid state (must be A, B, C, D, E, F, G, or H)")
                     return
             except Exception as e:
                 self.send_error(400, str(e))
@@ -1007,6 +1007,12 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                     apply_state("D", target_side)
                 elif cmd.upper() in ("STATE=E", "STATE:E", "SET_STATE:E"):
                     apply_state("E", target_side)
+                elif cmd.upper() in ("STATE=F", "STATE:F", "SET_STATE:F"):
+                    apply_state("F", target_side)
+                elif cmd.upper() in ("STATE=G", "STATE:G", "SET_STATE:G"):
+                    apply_state("G", target_side)
+                elif cmd.upper() in ("STATE=H", "STATE:H", "SET_STATE:H"):
+                    apply_state("H", target_side)
                 elif cmd == "State?":
                     add_mock_log("SERIAL_RX", "INFO", f"State:{c['greenup_state']}")
                 elif cmd == "CC?":
@@ -1157,9 +1163,9 @@ Bascules dynamiques à chaud (dans l'URL du navigateur) :
     parser.add_argument("--port", type=int, default=PORT, help=f"Port d'écoute HTTP (défaut: {PORT})")
     parser.add_argument("--dual", action="store_true", help="Simule une borne double point de charge (2 points)")
     parser.add_argument("--no-tic", action="store_true", help="Simule une borne sans support TIC (Linky masqué)")
-    parser.add_argument("--state", "-s", type=str.upper, choices=["A", "B", "C", "D", "E"], default="E",
-                        help="État Green'Up initial de la borne : A (Déconnectée), B (Attente borne), C (Attente véhicule), D (Charge std), E (Charge Green'Up) [défaut: E]")
-    parser.add_argument("--state-2", type=str.upper, choices=["A", "B", "C", "D", "E"], default=None,
+    parser.add_argument("--state", "-s", type=str.upper, choices=["A", "B", "C", "D", "E", "F", "G", "H"], default="E",
+                        help="État Green'Up initial de la borne : A (Déconnectée), B (Attente borne T2), C (Attente véhicule T2), D/E (Charge T2), F (Attente borne Schuko), G/H (Charge Schuko) [défaut: E]")
+    parser.add_argument("--state-2", type=str.upper, choices=["A", "B", "C", "D", "E", "F", "G", "H"], default=None,
                         help="État Green'Up initial pour le Point 2 (en mode double point, défaut: B)")
     parser.add_argument("--token", type=str, default=None,
                         help="Clé API autorisée sur la borne (défaut: 1234)")

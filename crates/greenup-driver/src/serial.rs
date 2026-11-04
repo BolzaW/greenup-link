@@ -535,9 +535,9 @@ pub fn run_serial_loop_with_options(
 use crate::telemetry::Telemetry;
 
 fn update_iec_state(tel: &mut Telemetry) {
-    if tel.greenup_state == "V" {
+    if tel.greenup_state == "U" || tel.greenup_state == "V" {
         tel.iec_state = Some("F".to_string());
-    } else if tel.greenup_state == "R" || tel.greenup_state == "X" {
+    } else if matches!(tel.greenup_state.as_str(), "R" | "S" | "T" | "X") {
         tel.iec_state = Some("E".to_string());
     } else if let Some(false) = tel.t2c_enabled {
         match tel.cp_voltage {
@@ -549,8 +549,8 @@ fn update_iec_state(tel: &mut Telemetry) {
     } else {
         match tel.greenup_state.as_str() {
             "A" | "L" => tel.iec_state = Some("A".to_string()),
-            "B" | "C" | "I" | "W" | "M" => tel.iec_state = Some("B".to_string()),
-            "D" | "E" => tel.iec_state = Some("C".to_string()),
+            "B" | "C" | "F" | "I" | "J" | "K" | "M" | "N" | "O" | "P" | "W" => tel.iec_state = Some("B".to_string()),
+            "D" | "E" | "G" | "H" => tel.iec_state = Some("C".to_string()),
             _ => {}
         }
     }
@@ -728,8 +728,8 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                 logger::log("SYS", "!!! CRITICAL ALERT: POWER OUTAGE DETECTED (State:V) - IMMINENT SHUTDOWN !!!");
             }
             if let Ok(mut tel) = state.telemetry.lock() {
-                let was_charging = tel.greenup_state == "D" || tel.greenup_state == "E";
-                let is_charging = state_val == "D" || state_val == "E";
+                let was_charging = matches!(tel.greenup_state.as_str(), "D" | "E" | "G" | "H");
+                let is_charging = matches!(state_val.as_str(), "D" | "E" | "G" | "H");
                 tel.greenup_state = state_val.clone();
                 update_iec_state(&mut tel);
 
@@ -846,7 +846,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
                 if tel.voltage_source != "external" {
                     tel.voltage = v;
                 }
-                if tel.greenup_state == "D" || tel.greenup_state == "E" {
+                if matches!(tel.greenup_state.as_str(), "D" | "E" | "G" | "H") {
                     tel.power = tel.voltage * tel.current;
                 } else {
                     tel.power = 0.0;
@@ -856,7 +856,7 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
         ProtocolEvent::Current(c) => {
             if let Ok(mut tel) = state.telemetry.lock() {
                 tel.evaluate_voltage();
-                if tel.greenup_state == "D" || tel.greenup_state == "E" {
+                if matches!(tel.greenup_state.as_str(), "D" | "E" | "G" | "H") {
                     let previous_power = tel.power;
                     tel.current = c;
                     tel.power = tel.voltage * tel.current;

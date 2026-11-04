@@ -90,11 +90,11 @@ function formatChartTimeLabel(totalSeconds, maxT = null, includeSeconds = false)
 function formatSessionState(st, iecState) {
     if (!st) return '--';
     const s = st.toUpperCase();
-    if (s === 'D' || s === 'E' || iecState === 'C') {
+    if (s === 'D' || s === 'E' || s === 'G' || s === 'H') {
         return `${t('sessions.state_charging') || 'En charge'} (${s})`;
     } else if (s === 'C') {
         return `${t('sessions.state_waiting_car') || 'Attente véhicule'} (${s})`;
-    } else if (s === 'B') {
+    } else if (s === 'B' || s === 'F') {
         return `${t('sessions.state_waiting_station') || 'Attente borne'} (${s})`;
     } else if (s === 'I') {
         return `${t('sessions.state_complete') || 'Charge terminée (Veille)'} (${s})`;
@@ -102,7 +102,7 @@ function formatSessionState(st, iecState) {
         return `${t('sessions.state_disconnected') || 'Débranché'} (${s})`;
     } else if (s === 'L') {
         return `${t('sessions.state_unlatched') || 'Câble déverrouillé'} (${s})`;
-    } else if (['R', 'V', 'X', 'ST', 'S', 'T', 'U', 'Y', 'Z'].includes(s) || iecState === 'E' || iecState === 'F') {
+    } else if (['R', 'V', 'X', 'ST', 'S', 'T', 'U', 'Y', 'Z'].includes(s)) {
         return `${t('sessions.state_fault') || 'Défaut borne'} (${s})`;
     }
     return `${t('state.connected') || 'Connecté'} (${s})`;
@@ -133,7 +133,8 @@ function formatTerminationReason(reason) {
 
 function formatPlugAndPhase(plugType, rawPhase) {
     const plug = plugType || 'Type 2';
-    if (plug.toLowerCase().includes('domestique') || plug.toLowerCase().includes('domestic')) {
+    const lower = plug.toLowerCase();
+    if (lower.includes('domestique') || lower.includes('domestic') || lower.includes('schuko')) {
         return `${plug} • 1-phase`;
     }
     const isTri = rawPhase && (rawPhase.includes('3') || rawPhase.toLowerCase().includes('tri'));
