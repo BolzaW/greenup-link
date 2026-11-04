@@ -171,9 +171,8 @@ pub async fn start_tic_detection(driver: &SharedDriver) -> Result<(), TicStartEr
         tic.is_active = true;
         tic.zero_count = 0;
     }
-    driver.update_both(|raw, usb| {
-        raw.tic_baud = Some("detecting".to_string());
-        usb.tic_detection_active = true;
+    driver.update_raw(|raw| {
+        raw.tic_tm = Some(true);
     });
 
     driver
@@ -346,8 +345,8 @@ pub fn run_serial_loop_with_options(
                     usb.message = format!("USB cable not detected ({})", e);
                     usb.last_rx_secs_ago = None;
                     usb.init_completed = false;
-                    usb.tic_detection_active = false;
                     raw.state = Some("DISCONNECTED".to_string());
+                    raw.tic_tm = None;
                     raw.cci = Some(0.0);
                     raw.cci_l2 = None;
                     raw.cci_l3 = None;
@@ -844,17 +843,21 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
 
             if val != "0" {
                 logger::log("SERIAL", &format!("🔌 TIC detected: {} baud", val));
-                driver.update_both(|raw, usb| {
-                    raw.tic_baud = Some(val.clone());
+                driver.update_raw(|raw| {
+                    raw.tic_test_b = Some(val.clone());
                     if should_stop_test {
-                        usb.tic_detection_active = false;
+                        raw.tic_tm = Some(false);
                     }
                 });
             } else if should_stop_test {
                 logger::log("SERIAL", "🔌 TIC not detected (absent)");
-                driver.update_both(|raw, usb| {
-                    raw.tic_baud = Some("0".to_string());
-                    usb.tic_detection_active = false;
+                driver.update_raw(|raw| {
+                    raw.tic_test_b = Some("0".to_string());
+                    raw.tic_tm = Some(false);
+                });
+            } else {
+                driver.update_raw(|raw| {
+                    raw.tic_test_b = Some("0".to_string());
                 });
             }
 
@@ -965,11 +968,7 @@ mod tests {
         // 3. State A -> Ok
         driver.update_raw(|r| r.state = Some("A".to_string()));
         assert_eq!(start_tic_detection(&driver).await, Ok(()));
-        assert_eq!(
-            driver.get_raw_state().tic_baud.as_deref(),
-            Some("detecting")
-        );
-        assert!(driver.get_usb_state().tic_detection_active);
+        assert_eq!(driver.get_raw_state().tic_tm, Some(true));
         assert_eq!(rx.recv().await, Some(Command::SetTicTestMode(true)));
     }
 }

@@ -256,7 +256,9 @@ impl AppState {
                 if let Some(ref err) = raw.error {
                     tel.error_code = err.clone();
                 }
-                if let Some(ref baud) = raw.tic_baud {
+                if raw.tic_tm == Some(true) {
+                    tel.tic_mode = "detecting".to_string();
+                } else if let Some(ref baud) = raw.tic_test_b {
                     tel.tic_mode = baud.clone();
                 }
                 if let Some(f) = raw.freq {
@@ -415,9 +417,8 @@ impl AppState {
                         tic.is_active = true;
                         tic.zero_count = 0;
                     }
-                    self.driver.update_both(|raw, usb| {
-                        raw.tic_baud = Some("detecting".to_string());
-                        usb.tic_detection_active = true;
+                    self.driver.update_raw(|raw| {
+                        raw.tic_tm = Some(true);
                     });
                 }
                 Err(TicStartError::NotSupported) => {

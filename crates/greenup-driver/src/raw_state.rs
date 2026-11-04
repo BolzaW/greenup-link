@@ -68,7 +68,6 @@ pub struct UsbLinkState {
     pub message: String,
     pub last_rx_secs_ago: Option<u64>,
     pub init_completed: bool,
-    pub tic_detection_active: bool,
     pub rx_frames_count: u64,
     pub tx_commands_count: u64,
 }
@@ -83,7 +82,6 @@ impl Default for UsbLinkState {
             message: String::from("USB cable not detected (/dev/ttyUSB0 not found)"),
             last_rx_secs_ago: None,
             init_completed: false,
-            tic_detection_active: false,
             rx_frames_count: 0,
             tx_commands_count: 0,
         }
@@ -152,15 +150,15 @@ pub struct AtmegaRawState {
     pub pa: Option<bool>,
     pub pafc: Option<bool>,
     pub d: Option<bool>,
-    pub dec_minutes: Option<u32>,
+    pub dec: Option<u32>,
     pub slp: Option<bool>,
     pub fm: Option<String>,
     pub fm2: Option<bool>,
     pub cau: Option<bool>,
 
     // --- 6. Modbus RS485 & Energy Metering ---
-    pub em_pulses: Option<u32>,
-    pub modbus_addr: Option<String>,
+    pub em: Option<u32>,
+    pub modbus_a: Option<String>,
     pub modbus_ema: Option<String>,
     pub modbus_dlma: Option<String>,
     pub modbus_p: Option<String>,
@@ -168,14 +166,14 @@ pub struct AtmegaRawState {
     pub modbus_sb: Option<String>,
 
     // --- 7. Access Control & RFID Badges ---
-    pub rfid_enabled: Option<bool>,
+    pub rfide: Option<bool>,
     pub rfid_um: Option<bool>,
-    pub rfid_auth: Option<String>,
-    pub rfid_last_id: Option<String>,
-    pub rfid_local_pass_result: Option<String>,
+    pub rfida: Option<String>,
+    pub rfid_id: Option<String>,
+    pub rfid_id_lp: Option<String>,
     pub ocpp_status: Option<String>,
     pub ocpp_pac: Option<bool>,
-    pub ocpp_cto_result: Option<String>,
+    pub ocpp_cto: Option<String>,
 
     // --- 8. Bluetooth Controller (BLE) ---
     pub bt: Option<bool>,
@@ -183,7 +181,7 @@ pub struct AtmegaRawState {
 
     // --- 9. Diagnostic, TIC & Spontaneous Session Tickets ---
     pub tic_tm: Option<bool>,
-    pub tic_baud: Option<String>,
+    pub tic_test_b: Option<String>,
     pub last_ticket: Option<String>,
     pub ticket_updates_count: u64,
 
@@ -390,7 +388,7 @@ impl AtmegaRawState {
                 true
             }
             ProtocolEvent::DeferredStartDelay(m) => {
-                self.dec_minutes = Some(*m);
+                self.dec = Some(*m);
                 true
             }
             ProtocolEvent::SleepState(b) => {
@@ -412,11 +410,11 @@ impl AtmegaRawState {
 
             // 6. Modbus RS485 & Energy Metering
             ProtocolEvent::EnergyMeterPulses(p) => {
-                self.em_pulses = Some(*p);
+                self.em = Some(*p);
                 true
             }
             ProtocolEvent::ModbusAddress(v) => {
-                self.modbus_addr = Some(v.clone());
+                self.modbus_a = Some(v.clone());
                 true
             }
             ProtocolEvent::ModbusEnergyMeterAddress(v) => {
@@ -442,7 +440,7 @@ impl AtmegaRawState {
 
             // 7. Access Control & RFID Badges
             ProtocolEvent::RfidEnabled(b) => {
-                self.rfid_enabled = Some(*b);
+                self.rfide = Some(*b);
                 true
             }
             ProtocolEvent::RfidUserManagement(b) => {
@@ -450,15 +448,15 @@ impl AtmegaRawState {
                 true
             }
             ProtocolEvent::RfidAuthorization(v) => {
-                self.rfid_auth = Some(v.clone());
+                self.rfida = Some(v.clone());
                 true
             }
             ProtocolEvent::RfidId(v) => {
-                self.rfid_last_id = Some(v.clone());
+                self.rfid_id = Some(v.clone());
                 true
             }
             ProtocolEvent::RfidLocalPassResult(v) => {
-                self.rfid_local_pass_result = Some(v.clone());
+                self.rfid_id_lp = Some(v.clone());
                 true
             }
             ProtocolEvent::OcppStatus(v) => {
@@ -470,7 +468,7 @@ impl AtmegaRawState {
                 true
             }
             ProtocolEvent::OcppConnectionTimeoutResult(v) => {
-                self.ocpp_cto_result = Some(v.clone());
+                self.ocpp_cto = Some(v.clone());
                 true
             }
 
@@ -489,10 +487,11 @@ impl AtmegaRawState {
                 self.tic_tm = Some(*b);
                 true
             }
-            ProtocolEvent::TicTestBaud(_) | ProtocolEvent::TicTestInit => {
-                // Handled by the driver's TIC detection state machine
-                false
+            ProtocolEvent::TicTestBaud(b) => {
+                self.tic_test_b = Some(b.clone());
+                true
             }
+            ProtocolEvent::TicTestInit => false,
             ProtocolEvent::SessionTicket(t) => {
                 self.last_ticket = Some(t.clone());
                 self.ticket_updates_count = self.ticket_updates_count.wrapping_add(1);
