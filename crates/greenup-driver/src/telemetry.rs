@@ -411,6 +411,7 @@ impl Telemetry {
         let (tic_connected, tic_mode, tic_baud_rate) = match self.tic_mode.as_str() {
             "9600" => (true, "standard".to_string(), Some(9600)),
             "1200" => (true, "historic".to_string(), Some(1200)),
+            "detecting" => (false, "detecting".to_string(), None),
             "0" => (false, "none".to_string(), None),
             _ => (false, "unknown".to_string(), None),
         };
@@ -549,11 +550,29 @@ mod tests {
         assert_eq!(conn.status.error_description, Some("Control pilot short-circuit (cable/vehicle)".to_string()));
         tel.error_code.clear();
 
-        // 6. TIC mode 9600
+        // 6. TIC modes (9600, 1200, detecting, 0)
         tel.tic_mode = "9600".to_string();
         let conn = tel.to_connector_data(&info);
         assert!(conn.grid.tic_connected);
         assert_eq!(conn.grid.tic_mode, "standard");
         assert_eq!(conn.grid.tic_baud_rate, Some(9600));
+
+        tel.tic_mode = "1200".to_string();
+        let conn = tel.to_connector_data(&info);
+        assert!(conn.grid.tic_connected);
+        assert_eq!(conn.grid.tic_mode, "historic");
+        assert_eq!(conn.grid.tic_baud_rate, Some(1200));
+
+        tel.tic_mode = "detecting".to_string();
+        let conn = tel.to_connector_data(&info);
+        assert!(!conn.grid.tic_connected);
+        assert_eq!(conn.grid.tic_mode, "detecting");
+        assert_eq!(conn.grid.tic_baud_rate, None);
+
+        tel.tic_mode = "0".to_string();
+        let conn = tel.to_connector_data(&info);
+        assert!(!conn.grid.tic_connected);
+        assert_eq!(conn.grid.tic_mode, "none");
+        assert_eq!(conn.grid.tic_baud_rate, None);
     }
 }

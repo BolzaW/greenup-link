@@ -269,7 +269,9 @@ async function refreshTicFromConfig() {
             feedback.innerText = (typeof t === 'function' ? t('system.tic_refreshing') : "Détection TIC lancée sur l'ATmega...") || "Détection TIC lancée sur l'ATmega...";
             feedback.className = 'sys-feedback sys-feedback-info animate-pulse';
         }
-        if (typeof updateTicSpeedBadge === 'function') {
+        if (typeof updateLinky === 'function') {
+            updateLinky('detecting');
+        } else if (typeof updateTicSpeedBadge === 'function') {
             updateTicSpeedBadge('detecting');
         }
         const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
