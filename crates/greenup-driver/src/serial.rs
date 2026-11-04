@@ -111,11 +111,29 @@ pub fn spawn_port(side: u8, mode: SupervisionMode, options: SerialOptions) -> Sh
     driver
 }
 
-/// Triggers the low-level ATmega initialization sequence (`RaspberryPiModeOK` + all `Command::startup_queries()`).
+/// Queries executed by the driver during the initialization sequence, matching the registers
+/// tracked in [`AtmegaRawState`] (excludes Sleep, EM, Modbus, RFID, and OCPP config commands,
+/// while keeping `OCPPPS?`).
+pub fn driver_startup_queries() -> Vec<Command> {
+    Command::startup_queries()
+        .into_iter()
+        .filter(|cmd| {
+            !matches!(
+                cmd,
+                Command::GetSleep
+                    | Command::GetEnergyMeterPulses
+                    | Command::GetRfidEnabled
+                    | Command::GetRfidUserManagement
+            )
+        })
+        .collect()
+}
+
+/// Triggers the low-level ATmega initialization sequence (`RaspberryPiModeOK` + [`driver_startup_queries`]).
 pub async fn trigger_init_sequence(driver: &SharedDriver) {
     let _ = driver.serial_tx.send(Command::RaspberryPiModeOk).await;
 
-    for cmd in Command::startup_queries() {
+    for cmd in driver_startup_queries() {
         let _ = driver.serial_tx.send(cmd).await;
     }
 }
@@ -287,7 +305,7 @@ pub fn send_init_sequence_sync(
         Command::RaspberryPiModeOk,
     );
 
-    for cmd in Command::startup_queries() {
+    for cmd in driver_startup_queries() {
         if !is_running.load(Ordering::Relaxed) {
             break;
         }

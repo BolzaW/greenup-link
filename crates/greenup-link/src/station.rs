@@ -261,9 +261,6 @@ impl AppState {
                 } else if let Some(ref baud) = raw.tic_test_b {
                     tel.tic_mode = baud.clone();
                 }
-                if let Some(f) = raw.freq {
-                    tel.frequency = f;
-                }
 
                 if let Some(ref phase) = raw.cph {
                     if cursor.last_cph.as_ref() != Some(phase) {
@@ -340,18 +337,6 @@ impl AppState {
                 tel.update_iec_state();
                 tel.update_charge_status();
 
-                if let Some(v) = raw.volt {
-                    tel.evaluate_voltage();
-                    if tel.voltage_source != "external" {
-                        tel.voltage = v;
-                    }
-                    if matches!(tel.greenup_state.as_str(), "D" | "E" | "G" | "H") {
-                        tel.power = tel.voltage * tel.current;
-                    } else {
-                        tel.power = 0.0;
-                    }
-                }
-
                 // Instantaneous phase current update & trapezoidal energy integration
                 if raw.cci_updates_count > cursor.last_cci_count {
                     cursor.last_cci_count = raw.cci_updates_count;
@@ -376,13 +361,9 @@ impl AppState {
                     crate::session::on_telemetry_tick_for_side(side, &tel);
                 }
 
-                if let Some(e) = raw.ener {
-                    tel.energy = e;
-                }
-
-                if raw.ticket_updates_count > cursor.last_ticket_count {
-                    cursor.last_ticket_count = raw.ticket_updates_count;
-                    if let Some(ref ticket) = raw.last_ticket {
+                if raw.wt_updates_count > cursor.last_ticket_count {
+                    cursor.last_ticket_count = raw.wt_updates_count;
+                    if let Some(ref ticket) = raw.wt {
                         crate::session::record_ticket_for_side(side, ticket);
                     }
                 }

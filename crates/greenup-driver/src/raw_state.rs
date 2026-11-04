@@ -144,52 +144,28 @@ pub struct AtmegaRawState {
     pub dom_2pc: Option<bool>,
     pub t2f: Option<bool>,
     pub dom_2pf: Option<bool>,
-    pub last_unlock_result: Option<String>,
 
     // --- 5. Planning, Scheduling & Modes ---
     pub pa: Option<bool>,
     pub pafc: Option<bool>,
     pub d: Option<bool>,
     pub dec: Option<u32>,
-    pub slp: Option<bool>,
     pub fm: Option<String>,
     pub fm2: Option<bool>,
     pub cau: Option<bool>,
 
-    // --- 6. Modbus RS485 & Energy Metering ---
-    pub em: Option<u32>,
-    pub modbus_a: Option<String>,
-    pub modbus_ema: Option<String>,
-    pub modbus_dlma: Option<String>,
-    pub modbus_p: Option<String>,
-    pub modbus_b: Option<String>,
-    pub modbus_sb: Option<String>,
-
-    // --- 7. Access Control & RFID Badges ---
-    pub rfide: Option<bool>,
-    pub rfid_um: Option<bool>,
-    pub rfida: Option<String>,
-    pub rfid_id: Option<String>,
-    pub rfid_id_lp: Option<String>,
+    // --- 6. OCPP Status ---
     pub ocpp_status: Option<String>,
-    pub ocpp_pac: Option<bool>,
-    pub ocpp_cto: Option<String>,
 
-    // --- 8. Bluetooth Controller (BLE) ---
+    // --- 7. Bluetooth Controller (BLE) ---
     pub bt: Option<bool>,
     pub mac_adr: Option<String>,
 
-    // --- 9. Diagnostic, TIC & Spontaneous Session Tickets ---
+    // --- 8. Diagnostic, TIC & Spontaneous Frames (WT, CPh, SBF) ---
     pub tic_tm: Option<bool>,
     pub tic_test_b: Option<String>,
-    pub last_ticket: Option<String>,
-    pub ticket_updates_count: u64,
-
-    // --- 10. Optional Simulator / Raw Meter Frames ---
-    pub volt: Option<f32>,
-    pub ener: Option<f32>,
-    pub freq: Option<f32>,
-    pub last_unrecognized_cmd: Option<String>,
+    pub wt: Option<String>,
+    pub wt_updates_count: u64,
 }
 
 impl AtmegaRawState {
@@ -369,10 +345,6 @@ impl AtmegaRawState {
                 self.dom_2pf = Some(*b);
                 true
             }
-            ProtocolEvent::UnlockResult(res) => {
-                self.last_unlock_result = Some(res.clone());
-                true
-            }
 
             // 5. Planning, Scheduling & Modes
             ProtocolEvent::PlanningAuthorization(b) => {
@@ -391,10 +363,6 @@ impl AtmegaRawState {
                 self.dec = Some(*m);
                 true
             }
-            ProtocolEvent::SleepState(b) => {
-                self.slp = Some(*b);
-                true
-            }
             ProtocolEvent::FmMode(m) => {
                 self.fm = Some(m.clone());
                 true
@@ -408,71 +376,13 @@ impl AtmegaRawState {
                 true
             }
 
-            // 6. Modbus RS485 & Energy Metering
-            ProtocolEvent::EnergyMeterPulses(p) => {
-                self.em = Some(*p);
-                true
-            }
-            ProtocolEvent::ModbusAddress(v) => {
-                self.modbus_a = Some(v.clone());
-                true
-            }
-            ProtocolEvent::ModbusEnergyMeterAddress(v) => {
-                self.modbus_ema = Some(v.clone());
-                true
-            }
-            ProtocolEvent::ModbusDlmAddress(v) => {
-                self.modbus_dlma = Some(v.clone());
-                true
-            }
-            ProtocolEvent::ModbusParity(v) => {
-                self.modbus_p = Some(v.clone());
-                true
-            }
-            ProtocolEvent::ModbusBaudRate(v) => {
-                self.modbus_b = Some(v.clone());
-                true
-            }
-            ProtocolEvent::ModbusStopBits(v) => {
-                self.modbus_sb = Some(v.clone());
-                true
-            }
-
-            // 7. Access Control & RFID Badges
-            ProtocolEvent::RfidEnabled(b) => {
-                self.rfide = Some(*b);
-                true
-            }
-            ProtocolEvent::RfidUserManagement(b) => {
-                self.rfid_um = Some(*b);
-                true
-            }
-            ProtocolEvent::RfidAuthorization(v) => {
-                self.rfida = Some(v.clone());
-                true
-            }
-            ProtocolEvent::RfidId(v) => {
-                self.rfid_id = Some(v.clone());
-                true
-            }
-            ProtocolEvent::RfidLocalPassResult(v) => {
-                self.rfid_id_lp = Some(v.clone());
-                true
-            }
+            // 6. OCPP Status
             ProtocolEvent::OcppStatus(v) => {
                 self.ocpp_status = Some(v.clone());
                 true
             }
-            ProtocolEvent::OcppPlugAndCharge(b) => {
-                self.ocpp_pac = Some(*b);
-                true
-            }
-            ProtocolEvent::OcppConnectionTimeoutResult(v) => {
-                self.ocpp_cto = Some(v.clone());
-                true
-            }
 
-            // 8. Bluetooth Controller (BLE)
+            // 7. Bluetooth Controller (BLE)
             ProtocolEvent::BluetoothState(b) => {
                 self.bt = Some(*b);
                 true
@@ -482,7 +392,7 @@ impl AtmegaRawState {
                 true
             }
 
-            // 9. Diagnostic, TIC & Session Tickets
+            // 8. Diagnostic, TIC & Spontaneous Frames (WT, CPh, SBF)
             ProtocolEvent::TicTestMode(b) => {
                 self.tic_tm = Some(*b);
                 true
@@ -491,30 +401,14 @@ impl AtmegaRawState {
                 self.tic_test_b = Some(b.clone());
                 true
             }
-            ProtocolEvent::TicTestInit => false,
             ProtocolEvent::SessionTicket(t) => {
-                self.last_ticket = Some(t.clone());
-                self.ticket_updates_count = self.ticket_updates_count.wrapping_add(1);
+                self.wt = Some(t.clone());
+                self.wt_updates_count = self.wt_updates_count.wrapping_add(1);
                 true
             }
 
-            // 10. Simulator / Raw Meter Frames
-            ProtocolEvent::Voltage(v) => {
-                self.volt = Some(*v);
-                true
-            }
-            ProtocolEvent::Energy(e) => {
-                self.ener = Some(*e);
-                true
-            }
-            ProtocolEvent::Frequency(f) => {
-                self.freq = Some(*f);
-                true
-            }
-            ProtocolEvent::CommandNotUnderstood(cmd) => {
-                self.last_unrecognized_cmd = Some(cmd.clone());
-                true
-            }
+            // Ignored acknowledgments and unsupported peripherals (Unlock, Sleep, EM, Modbus, RFID, OCPP config)
+            _ => false,
         }
     }
 }

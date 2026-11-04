@@ -85,7 +85,7 @@ impl EverestAdapter {
                 snap.atmega.state.as_deref(),
                 Some("D") | Some("E") | Some("G") | Some("H")
             );
-            let voltage_v = snap.atmega.volt.unwrap_or(230.0);
+            let voltage_v = 230.0_f32;
             let current_a = if is_charging {
                 snap.atmega.cci.unwrap_or(0.0)
             } else {
@@ -112,7 +112,7 @@ impl EverestAdapter {
                 voltage_v,
                 current_a,
                 power_w,
-                energy_wh: snap.atmega.ener.unwrap_or(cumulative_energy_wh),
+                energy_wh: cumulative_energy_wh,
             });
 
             if current_iec != last_iec {
