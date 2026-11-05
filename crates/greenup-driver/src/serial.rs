@@ -836,12 +836,6 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
                 &format!("🎫 Legrand session ticket received: {}", ticket),
             );
         }
-        ProtocolEvent::CommandNotUnderstood(cmd) => {
-            logger::log(
-                "SERIAL",
-                &format!("⚠️ Command not recognized by the charging station: {}", cmd),
-            );
-        }
         ProtocolEvent::TicTestBaud(val) => {
             let mut should_stop_test = false;
             if let Ok(mut tic) = driver.tic_detection.lock() {
@@ -888,9 +882,46 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
         _ => {}
     }
 
-    driver.update_raw(|raw| {
-        raw.apply_event(&event);
-    });
+    let applied = driver.update_raw(|raw| raw.apply_event(&event));
+
+    if !applied {
+        match &event {
+            ProtocolEvent::Ping | ProtocolEvent::Pong => {}
+            ProtocolEvent::CommandNotUnderstood(cmd) => {
+                logger::log_with_level_side(
+                    "SERIAL",
+                    Some(side),
+                    logger::LogLevel::Warn,
+                    &format!(
+                        "⚠️ Command rejected by charging station (Default): '{}'",
+                        cmd
+                    ),
+                );
+            }
+            ProtocolEvent::Unknown(raw_text) => {
+                logger::log_with_level_side(
+                    "SERIAL",
+                    Some(side),
+                    logger::LogLevel::Warn,
+                    &format!(
+                        "⚠️ Unknown serial frame received (unrecognized protocol): '{}'",
+                        raw_text
+                    ),
+                );
+            }
+            _ => {
+                logger::log_with_level_side(
+                    "SERIAL",
+                    Some(side),
+                    logger::LogLevel::Warn,
+                    &format!(
+                        "⚠️ Unmapped serial frame received (not retained in raw state model): '{}'",
+                        line
+                    ),
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -988,5 +1019,42 @@ mod tests {
         assert_eq!(start_tic_detection(&driver).await, Ok(()));
         assert_eq!(driver.get_raw_state().tic_tm, Some(true));
         assert_eq!(rx.recv().await, Some(Command::SetTicTestMode(true)));
+    }
+
+    #[tokio::test]
+    async fn test_parse_incoming_line_logs_warning_on_unmapped_and_unknown() {
+        let (tx, _rx) = tokio::sync::mpsc::channel(10);
+        let driver = Arc::new(DriverHandle::new(tx));
+
+        // 1. Mapped frame should update state and not produce unmapped warning
+        parse_incoming_line("State:B", &driver);
+        assert_eq!(driver.get_raw_state().state.as_deref(), Some("B"));
+
+        // 2. Unmapped frame (e.g. EM:12345, RFIDId:ABCDEF) should log a warning
+        parse_incoming_line("EM:12345", &driver);
+        let recent = logger::get_recent_logs();
+        assert!(recent.iter().any(|entry| {
+            entry.level == "WARN"
+                && entry.message.contains("Unmapped serial frame")
+                && entry.message.contains("EM:12345")
+        }));
+
+        // 3. Completely unknown frame should log an unknown frame warning
+        parse_incoming_line("UNKNOWN_CUSTOM_CMD:999", &driver);
+        let recent = logger::get_recent_logs();
+        assert!(recent.iter().any(|entry| {
+            entry.level == "WARN"
+                && entry.message.contains("Unknown serial frame")
+                && entry.message.contains("UNKNOWN_CUSTOM_CMD:999")
+        }));
+
+        // 4. Default command rejection should log Default warning
+        parse_incoming_line("Default:BadCmd", &driver);
+        let recent = logger::get_recent_logs();
+        assert!(recent.iter().any(|entry| {
+            entry.level == "WARN"
+                && entry.message.contains("Default")
+                && entry.message.contains("BadCmd")
+        }));
     }
 }

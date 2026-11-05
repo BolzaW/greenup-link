@@ -155,15 +155,17 @@ impl DriverHandle {
     }
 
     /// Mutates [`AtmegaRawState`] and immediately broadcasts the new [`DriverSnapshot`].
-    pub fn update_raw<F>(&self, f: F)
+    /// Returns the value returned by closure `f`.
+    pub fn update_raw<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(&mut AtmegaRawState),
+        F: FnOnce(&mut AtmegaRawState) -> R,
     {
-        {
+        let res = {
             let mut raw_guard = self.raw.lock().unwrap_or_else(|e| e.into_inner());
-            f(&mut raw_guard);
-        }
+            f(&mut raw_guard)
+        };
         self.publish_snapshot();
+        res
     }
 
     /// Mutates [`UsbLinkState`] and immediately broadcasts the new [`DriverSnapshot`].
