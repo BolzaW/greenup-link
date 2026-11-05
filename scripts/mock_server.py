@@ -91,6 +91,10 @@ mock_logs = []
 log_counter = 0
 
 def add_mock_log(category, level, message):
+    current_level = state.get("log_level", "INFO").upper()
+    weights = {"ERROR": 1, "WARN": 2, "INFO": 3, "DEBUG": 4, "TRACE": 5}
+    if weights.get(level.upper(), 3) > weights.get(current_level, 3):
+        return None
     global log_counter
     log_counter += 1
     now = datetime.datetime.now().strftime("%H:%M:%S.%f")[:-3]
@@ -879,10 +883,11 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                     ]
                     cat, msg = debug_messages[(counter // 2) % len(debug_messages)]
                     entry = add_mock_log(cat, "DEBUG", msg)
-                    data = json.dumps(entry)
-                    self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
-                    self.wfile.flush()
-                    last_sent_id = entry["id"]
+                    if entry is not None:
+                        data = json.dumps(entry)
+                        self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                        self.wfile.flush()
+                        last_sent_id = entry["id"]
 
                 # Periodically generate mock serial telemetry log every ~4s
                 if counter % 8 == 0:
@@ -890,10 +895,11 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                     i = round(state["current"], 1)
                     msg = f"I:{i} V:{v} State:{state['greenup_state']}"
                     entry = add_mock_log("SERIAL_RX", "INFO", msg)
-                    data = json.dumps(entry)
-                    self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
-                    self.wfile.flush()
-                    last_sent_id = entry["id"]
+                    if entry is not None:
+                        data = json.dumps(entry)
+                        self.wfile.write(f"data: {data}\n\n".encode("utf-8"))
+                        self.wfile.flush()
+                        last_sent_id = entry["id"]
 
                 time.sleep(0.5)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, ConnectionError):
