@@ -23,10 +23,13 @@ pub fn is_session_start_state(state: &str) -> bool {
     matches!(state, "B" | "C" | "D" | "E" | "F" | "G" | "H")
 }
 
-/// Returns true if the state indicates a connected vehicle session.
-/// Strictly restricted to eligible start states (B, C, D, E, F, G, H).
+/// Returns true if the state indicates a connected vehicle / plug on the station
+/// according to `STATE_MACHINE.md` (active charge, waiting, or suspended with cable plugged in).
 pub fn is_connected_state(state: &str) -> bool {
-    is_session_start_state(state)
+    matches!(
+        state,
+        "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "M" | "N" | "O" | "P"
+    )
 }
 
 /// Returns true if the Legrand state corresponds to the domestic / Schuko 2P+T socket (F, G, H, O).
@@ -1159,7 +1162,12 @@ mod tests {
             assert!(is_connected_state(state), "State {} should be connected state", state);
             assert!(is_session_start_state(state), "State {} should be session start state", state);
         }
-        for state in &["A", "I", "J", "K", "M", "N", "O", "P", "DISCONNECTED"] {
+        for state in &["I", "J", "K", "M", "N", "O", "P"] {
+            assert!(!is_immediate_termination_state(state), "State {} should NOT be termination state", state);
+            assert!(is_connected_state(state), "State {} should be connected state", state);
+            assert!(!is_session_start_state(state), "State {} must NOT be session start state", state);
+        }
+        for state in &["A", "DISCONNECTED"] {
             assert!(!is_session_start_state(state), "State {} must NOT be session start state", state);
             assert!(!is_connected_state(state), "State {} must NOT be connected state", state);
         }

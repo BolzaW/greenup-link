@@ -324,10 +324,12 @@ impl AppState {
                                 tel.energy = 0.0;
                                 tel.charge_complete = false;
                             }
-                        } else if crate::session::is_active_for_side(side) {
-                            crate::session::on_state_change_for_side(side, state_val, &tel);
-                        } else if crate::session::is_session_start_state(state_val) {
-                            crate::session::start_session_for_side(side, state_val, &tel);
+                        } else if crate::session::is_connected_state(state_val) {
+                            if crate::session::is_active_for_side(side) {
+                                crate::session::on_state_change_for_side(side, state_val, &tel);
+                            } else if crate::session::is_session_start_state(state_val) {
+                                crate::session::start_session_for_side(side, state_val, &tel);
+                            }
                         }
                     }
                 }
