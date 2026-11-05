@@ -15,9 +15,18 @@ pub fn is_immediate_termination_state(state: &str) -> bool {
     matches!(state, "L" | "R" | "ST" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z")
 }
 
+/// Returns true if the Legrand state indicates an eligible charging session start state.
+/// Sessions can ONLY start in:
+/// - Type 2: B (waiting station), C (waiting vehicle), D/E (charging)
+/// - Domestic 2P+T (Schuko): F (waiting station), G/H (charging)
+pub fn is_session_start_state(state: &str) -> bool {
+    matches!(state, "B" | "C" | "D" | "E" | "F" | "G" | "H")
+}
+
 /// Returns true if the state indicates a connected vehicle session.
+/// Strictly restricted to eligible start states (B, C, D, E, F, G, H).
 pub fn is_connected_state(state: &str) -> bool {
-    !is_immediate_termination_state(state) && state != "A" && state != "DISCONNECTED"
+    is_session_start_state(state)
 }
 
 /// Returns true if the Legrand state corresponds to the domestic / Schuko 2P+T socket (F, G, H, O).
@@ -207,7 +216,19 @@ pub fn get_active_session_id() -> Option<String> {
 }
 
 /// Starts a new session on the specified side when vehicle is plugged in.
+/// A session can ONLY start in states B, C, D, E, F, G, or H.
 pub fn start_session_for_side(side: u8, initial_state: &str, tel: &Telemetry) {
+    if !is_session_start_state(initial_state) {
+        logger::warn(
+            "SESSION",
+            &format!(
+                "Side {}: Ignoring start_session request in state '{}' (sessions can only start in B, C, D, E, F, G, H)",
+                side, initial_state
+            ),
+        );
+        return;
+    }
+
     let idx = side_to_idx(side);
     let mut lock = ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
 
@@ -1131,13 +1152,44 @@ mod tests {
         for state in &["L", "R", "ST", "S", "T", "U", "V", "W", "X", "Y", "Z"] {
             assert!(is_immediate_termination_state(state), "State {} should be termination state", state);
             assert!(!is_connected_state(state), "State {} should NOT be connected state", state);
+            assert!(!is_session_start_state(state), "State {} should NOT be session start state", state);
         }
-        for state in &["B", "C", "D", "E", "I", "J"] {
+        for state in &["B", "C", "D", "E", "F", "G", "H"] {
             assert!(!is_immediate_termination_state(state), "State {} should NOT be termination state", state);
             assert!(is_connected_state(state), "State {} should be connected state", state);
+            assert!(is_session_start_state(state), "State {} should be session start state", state);
         }
-        assert!(!is_connected_state("A"));
-        assert!(!is_connected_state("DISCONNECTED"));
+        for state in &["A", "I", "J", "K", "M", "N", "O", "P", "DISCONNECTED"] {
+            assert!(!is_session_start_state(state), "State {} must NOT be session start state", state);
+            assert!(!is_connected_state(state), "State {} must NOT be connected state", state);
+        }
+    }
+
+    #[test]
+    fn test_session_cannot_start_in_non_eligible_states() {
+        let dir = setup_test_dir();
+        let tel = Telemetry::default();
+
+        // Must reject starting in State I
+        start_session("I", &tel);
+        assert!(!is_active(), "Session must not start in State I");
+
+        // Must reject starting in State A
+        start_session("A", &tel);
+        assert!(!is_active(), "Session must not start in State A");
+
+        // Must reject starting in State M or J
+        start_session("M", &tel);
+        assert!(!is_active(), "Session must not start in State M");
+        start_session("J", &tel);
+        assert!(!is_active(), "Session must not start in State J");
+
+        // Must succeed in starting in State B
+        start_session("B", &tel);
+        assert!(is_active(), "Session must start in State B");
+
+        end_session("Test done", &tel);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
