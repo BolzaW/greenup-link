@@ -663,7 +663,7 @@ pub fn reset_serial_filters() {
 }
 
 /// Determines the logging category/level for an incoming serial line:
-/// - `CCI:xx`: logged in INFO (`"SERIAL_RX"`) only if variation >= 0.5A (otherwise `"TRACE"`)
+/// - `CCI:xx`: logged in INFO (`"SERIAL_RX"`) only if variation >= 0.8A (otherwise `"TRACE"`)
 /// - `CC:xx`: logged in INFO (`"SERIAL_RX"`) only if variation >= 1A (otherwise `"TRACE"`)
 /// - `CPh:xx`: logged in INFO (`"SERIAL_RX"`) on first reception or value change (otherwise `"DEBUG"`)
 /// - Other frames: logged in INFO (`"SERIAL_RX"`)
@@ -674,9 +674,9 @@ pub fn determine_rx_log_category(line: &str) -> &'static str {
             let mut last = LAST_LOGGED_CCI.lock().unwrap_or_else(|e| e.into_inner());
             let diff = match *last {
                 Some(prev) => (current_val - prev).abs(),
-                None => 0.5,
+                None => 0.8,
             };
-            if diff >= 0.5 {
+            if diff >= 0.8 {
                 *last = Some(current_val);
                 "SERIAL_RX"
             } else {
@@ -992,7 +992,8 @@ mod tests {
 
         assert_eq!(determine_rx_log_category("CCI:16.00"), "SERIAL_RX");
         assert_eq!(determine_rx_log_category("CCI:16.20"), "TRACE");
-        assert_eq!(determine_rx_log_category("CCI:16.55"), "SERIAL_RX");
+        assert_eq!(determine_rx_log_category("CCI:16.55"), "TRACE");
+        assert_eq!(determine_rx_log_category("CCI:16.85"), "SERIAL_RX");
         assert_eq!(determine_rx_log_category("pong"), "TRACE");
     }
 

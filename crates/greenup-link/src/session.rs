@@ -108,12 +108,12 @@ impl ActiveSession {
     ///
     /// Adaptive high-fidelity rules:
     /// - Immediate sampling on `State` change.
-    /// - 1 sample per second during transitions (measured current variation > 0.5A).
-    /// - 1 sample every 60 seconds during steady state (variation <= 0.5A or idle/waiting).
+    /// - 1 sample per second during transitions (measured current variation > 0.8A).
+    /// - 1 sample every 60 seconds during steady state (variation <= 0.8A or idle/waiting).
     pub fn should_sample(&self, state: &str, current: f32, now: Instant) -> bool {
         let state_changed = state != self.last_sample_state;
         let current_diff = (current - self.last_sample_current).abs();
-        let current_changed = current_diff > 0.5;
+        let current_changed = current_diff > 0.8;
 
         match self.last_sample_instant {
             None => true,
@@ -1001,11 +1001,11 @@ mod tests {
         // 1. State change -> immediate sample
         assert!(session.should_sample("B", 16.0, now));
 
-        // 2. Current variation > 0.5A with >= 900ms elapsed -> sample
-        assert!(session.should_sample("D", 16.6, now));
+        // 2. Current variation > 0.8A with >= 900ms elapsed -> sample
+        assert!(session.should_sample("D", 16.9, now));
 
-        // 3. Current variation <= 0.5A and elapsed < 60s -> DO NOT sample
-        assert!(!session.should_sample("D", 16.3, now));
+        // 3. Current variation <= 0.8A and elapsed < 60s -> DO NOT sample
+        assert!(!session.should_sample("D", 16.6, now));
 
         // 4. Stable current after 60s -> sample
         let now_60s = now + Duration::from_secs(61);
