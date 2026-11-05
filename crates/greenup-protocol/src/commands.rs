@@ -626,6 +626,8 @@ impl Command {
             Command::GetEliotCurrentLimit,
             Command::GetConsolidatedCurrentLimit,
             Command::GetTicCurrentLimit,
+            Command::GetBleShuntCurrentLimit,
+            Command::GetBleStandardCurrentLimit,
             // 4. Sockets & Functioning Modes
             Command::GetT2CEnabled,
             Command::GetDomesticEnabled,
@@ -639,8 +641,10 @@ impl Command {
             Command::GetDeferredStartDelay,
             Command::GetSleep,
             Command::GetEmergencyStop,
-            // 5. Metering, RFID & OCPP
+            // 5. Metering, RFID, Modbus & OCPP
             Command::GetEnergyMeterPulses,
+            Command::GetModbusEnergyMeterAddress,
+            Command::GetModbusDlmAddress,
             Command::GetRfidEnabled,
             Command::GetRfidUserManagement,
             Command::GetOcppParameters,

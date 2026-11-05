@@ -166,6 +166,10 @@ pub struct AtmegaRawState {
     pub tic_test_b: Option<String>,
     pub wt: Option<String>,
     pub wt_updates_count: u64,
+
+    // --- 9. Modbus Settings ---
+    pub modbus_ema: Option<String>,
+    pub modbus_dlma: Option<String>,
 }
 
 impl AtmegaRawState {
@@ -407,7 +411,21 @@ impl AtmegaRawState {
                 true
             }
 
-            // Ignored acknowledgments and unsupported peripherals (Unlock, Sleep, EM, Modbus, RFID, OCPP config)
+            // 9. Modbus Settings
+            ProtocolEvent::ModbusEnergyMeterAddress(v) => {
+                if !v.starts_with("ok") {
+                    self.modbus_ema = Some(v.clone());
+                }
+                true
+            }
+            ProtocolEvent::ModbusDlmAddress(v) => {
+                if !v.starts_with("ok") {
+                    self.modbus_dlma = Some(v.clone());
+                }
+                true
+            }
+
+            // Ignored acknowledgments and unsupported peripherals (Unlock, Sleep, EM, other Modbus, RFID, OCPP config)
             _ => false,
         }
     }
@@ -451,6 +469,11 @@ mod tests {
         assert!(raw.apply_event(&parse_line("T2C:1")));
         assert!(raw.apply_event(&parse_line("FM2:0")));
         assert!(raw.apply_event(&parse_line("D:1")));
+        assert!(raw.apply_event(&parse_line("CCBLES:16")));
+        assert!(raw.apply_event(&parse_line("CCBLESh:32")));
+        assert!(raw.apply_event(&parse_line("ModbusEMA:2")));
+        assert!(raw.apply_event(&parse_line("ModbusDLMA:3")));
+        assert!(raw.apply_event(&parse_line("ModbusEMA:ok*")));
 
         assert_eq!(raw.kit_com, Some(true));
         assert_eq!(raw.initialized, Some(true));
@@ -460,6 +483,10 @@ mod tests {
         assert_eq!(raw.state.as_deref(), Some("D"));
         assert_eq!(raw.cc, Some(20));
         assert_eq!(raw.cc_el, Some(16));
+        assert_eq!(raw.cc_bles, Some(16));
+        assert_eq!(raw.cc_blesh, Some(32));
+        assert_eq!(raw.modbus_ema.as_deref(), Some("2"));
+        assert_eq!(raw.modbus_dlma.as_deref(), Some("3"));
         assert_eq!(raw.cci, Some(15.8));
         assert_eq!(raw.cci_l2, Some(15.9));
         assert_eq!(raw.cci_l3, Some(16.0));
@@ -477,6 +504,10 @@ mod tests {
         assert_eq!(json_val["atmega"]["reference"], "058001");
         assert_eq!(json_val["atmega"]["state"], "D");
         assert_eq!(json_val["atmega"]["cc_el"], 16);
+        assert_eq!(json_val["atmega"]["cc_bles"], 16);
+        assert_eq!(json_val["atmega"]["cc_blesh"], 32);
+        assert_eq!(json_val["atmega"]["modbus_ema"], "2");
+        assert_eq!(json_val["atmega"]["modbus_dlma"], "3");
         assert_eq!(json_val["usb"]["status"], "usb_disconnected");
     }
 }

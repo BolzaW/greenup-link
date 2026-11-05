@@ -112,8 +112,8 @@ pub fn spawn_port(side: u8, mode: SupervisionMode, options: SerialOptions) -> Sh
 }
 
 /// Queries executed by the driver during the initialization sequence, matching the registers
-/// tracked in [`AtmegaRawState`] (excludes Sleep, EM, Modbus, RFID, and OCPP config commands,
-/// while keeping `OCPPPS?`).
+/// tracked in [`AtmegaRawState`] (excludes Sleep, EM, RFID, and OCPP config commands,
+/// while keeping `ModbusEMA?`, `ModbusDLMA?`, and `OCPPPS?`).
 pub fn driver_startup_queries() -> Vec<Command> {
     Command::startup_queries()
         .into_iter()
