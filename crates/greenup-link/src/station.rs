@@ -247,8 +247,6 @@ impl AppState {
                 }
                 if let Some(sb) = raw.sb {
                     tel.charge_paused = !sb;
-                } else if let Some(sbf) = raw.sbf {
-                    tel.charge_paused = !sbf;
                 }
                 if let Some(fcs) = raw.fcs {
                     tel.charge_complete = fcs;

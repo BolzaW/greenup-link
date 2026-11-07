@@ -805,7 +805,7 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
                 logger::log("SERIAL", &format!("⚠️ Unknown FM Mode detected = {}", fm_val));
             }
         }
-        ProtocolEvent::ExternalSignal(enabled) => {
+        ProtocolEvent::ExternalSignal(enabled) | ProtocolEvent::ExternalSignalForced(enabled) => {
             logger::log(
                 "SERIAL",
                 &format!(
@@ -886,7 +886,7 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
 
     if !applied {
         match &event {
-            ProtocolEvent::Ping | ProtocolEvent::Pong => {}
+            ProtocolEvent::Ping | ProtocolEvent::Pong | ProtocolEvent::TicTestInit => {}
             ProtocolEvent::CommandNotUnderstood(cmd) => {
                 logger::log_with_level_side(
                     "SERIAL",
@@ -1057,5 +1057,18 @@ mod tests {
                 && entry.message.contains("Default")
                 && entry.message.contains("BadCmd")
         }));
+
+        // 5. TICTestC:XXX must be silently ignored (no warning emitted)
+        parse_incoming_line("TICTestC:1200", &driver);
+        let recent = logger::get_recent_logs();
+        assert!(!recent.iter().any(|entry| {
+            entry.level == "WARN" && entry.message.contains("TICTestC:1200")
+        }));
+
+        // 6. FM2F and SBF update FM2 and SB in raw state without warning
+        parse_incoming_line("FM2F:1", &driver);
+        parse_incoming_line("SBF:0", &driver);
+        assert_eq!(driver.get_raw_state().fm2, Some(true));
+        assert_eq!(driver.get_raw_state().sb, Some(false));
     }
 }

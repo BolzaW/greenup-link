@@ -123,7 +123,6 @@ pub struct AtmegaRawState {
     pub fcs: Option<bool>,
     pub dom: Option<bool>,
     pub sb: Option<bool>,
-    pub sbf: Option<bool>,
     pub cph: Option<String>,
 
     // --- 3. Current & Power Modulation ---
@@ -279,12 +278,8 @@ impl AtmegaRawState {
                 self.dom = Some(*b);
                 true
             }
-            ProtocolEvent::SbState(b) => {
+            ProtocolEvent::SbState(b) | ProtocolEvent::SbfState(b) => {
                 self.sb = Some(*b);
-                true
-            }
-            ProtocolEvent::SbfState(b) => {
-                self.sbf = Some(*b);
                 true
             }
             ProtocolEvent::ChargePhases(p) => {
@@ -371,7 +366,7 @@ impl AtmegaRawState {
                 self.fm = Some(m.clone());
                 true
             }
-            ProtocolEvent::ExternalSignal(b) => {
+            ProtocolEvent::ExternalSignal(b) | ProtocolEvent::ExternalSignalForced(b) => {
                 self.fm2 = Some(*b);
                 true
             }
@@ -474,6 +469,8 @@ mod tests {
         assert!(raw.apply_event(&parse_line("ModbusEMA:2")));
         assert!(raw.apply_event(&parse_line("ModbusDLMA:3")));
         assert!(raw.apply_event(&parse_line("ModbusEMA:ok*")));
+        assert!(raw.apply_event(&parse_line("SBF:1")));
+        assert!(raw.apply_event(&parse_line("FM2F:1")));
 
         assert_eq!(raw.kit_com, Some(true));
         assert_eq!(raw.initialized, Some(true));
@@ -492,7 +489,8 @@ mod tests {
         assert_eq!(raw.cci_l3, Some(16.0));
         assert_eq!(raw.cci_updates_count, 1);
         assert_eq!(raw.t2c, Some(true));
-        assert_eq!(raw.fm2, Some(false));
+        assert_eq!(raw.sb, Some(true));
+        assert_eq!(raw.fm2, Some(true));
         assert_eq!(raw.d, Some(true));
 
         let snap = DriverSnapshot {
