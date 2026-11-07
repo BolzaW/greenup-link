@@ -2,14 +2,12 @@
 //! and broadcasting [`DriverSnapshot`] updates over a `tokio::sync::watch` channel.
 
 use std::sync::{
-    atomic::{AtomicU64, AtomicU8, Ordering},
+    atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering},
     Arc, Mutex,
 };
 use tokio::sync::{mpsc, watch};
 
-pub use crate::raw_state::{
-    AtmegaRawState, DriverSnapshot, SerialStatus, SupervisionMode, UsbLinkState,
-};
+pub use crate::raw_state::{AtmegaRawState, DriverSnapshot, SerialStatus, UsbLinkState};
 
 #[derive(Default, Debug, Clone)]
 pub struct TicDetectionState {
@@ -24,8 +22,8 @@ pub struct TicDetectionState {
 pub struct DriverHandle {
     /// Physical charge point side (`1` or `2`).
     pub side: AtomicU8,
-    /// UART supervision mode (`0` = Remote active, `1` = Local passive).
-    pub mode: AtomicU8,
+    /// Passive UART listen-only mode (`true` = Sniffer mode, zero TX commands).
+    pub sniffer_mode: AtomicBool,
     /// Monotonic sequence counter incremented on every state change.
     pub seq: AtomicU64,
     /// Raw ATmega2560 registers reported over serial.
@@ -48,19 +46,19 @@ impl DriverHandle {
     }
 
     pub fn new_with_side(side: u8, serial_tx: mpsc::Sender<greenup_protocol::Command>) -> Self {
-        Self::new_with_side_and_mode(side, SupervisionMode::Remote, serial_tx)
+        Self::new_with_side_and_sniffer(side, false, serial_tx)
     }
 
-    pub fn new_with_side_and_mode(
+    pub fn new_with_side_and_sniffer(
         side: u8,
-        mode: SupervisionMode,
+        sniffer_mode: bool,
         serial_tx: mpsc::Sender<greenup_protocol::Command>,
     ) -> Self {
         let mut raw = AtmegaRawState::default();
         raw.side = Some(side);
 
         let mut usb = UsbLinkState::default();
-        usb.mode = mode;
+        usb.sniffer_mode = sniffer_mode;
 
         let initial_snap = DriverSnapshot {
             seq: 0,
@@ -69,14 +67,9 @@ impl DriverHandle {
         };
         let (watch_tx, watch_rx) = watch::channel(initial_snap);
 
-        let mode_val = match mode {
-            SupervisionMode::Remote => 0,
-            SupervisionMode::Local => 1,
-        };
-
         Self {
             side: AtomicU8::new(side),
-            mode: AtomicU8::new(mode_val),
+            sniffer_mode: AtomicBool::new(sniffer_mode),
             seq: AtomicU64::new(0),
             raw: Mutex::new(raw),
             usb: Mutex::new(usb),
@@ -100,25 +93,9 @@ impl DriverHandle {
         });
     }
 
-    /// Returns the current UART supervision mode (`Remote` or `Local`).
-    pub fn mode(&self) -> SupervisionMode {
-        if self.mode.load(Ordering::Relaxed) == 1 {
-            SupervisionMode::Local
-        } else {
-            SupervisionMode::Remote
-        }
-    }
-
-    /// Updates the UART supervision mode and broadcasts the updated snapshot.
-    pub fn set_mode(&self, mode: SupervisionMode) {
-        let mode_val = match mode {
-            SupervisionMode::Remote => 0,
-            SupervisionMode::Local => 1,
-        };
-        self.mode.store(mode_val, Ordering::Relaxed);
-        self.update_usb(|usb| {
-            usb.mode = mode;
-        });
+    /// Returns `true` if the driver is configured in Sniffer mode (passive listen-only, zero TX).
+    pub fn sniffer_mode(&self) -> bool {
+        self.sniffer_mode.load(Ordering::Relaxed)
     }
 
     /// Returns `true` if the USB serial link is actively communicating with the ATmega.
@@ -232,15 +209,12 @@ mod tests {
     #[tokio::test]
     async fn test_driver_handle_watch_notifications() {
         let (tx, _rx) = mpsc::channel(8);
-        let driver = Arc::new(DriverHandle::new_with_side_and_mode(
-            1,
-            SupervisionMode::Remote,
-            tx,
-        ));
+        let driver = Arc::new(DriverHandle::new_with_side_and_sniffer(1, false, tx));
         let mut sub = driver.subscribe();
 
         assert_eq!(sub.borrow().seq, 0);
-        assert_eq!(driver.mode(), SupervisionMode::Remote);
+        assert!(!driver.sniffer_mode());
+        assert!(!sub.borrow().usb.sniffer_mode);
 
         driver.update_raw(|raw| {
             raw.reference = Some("058001".to_string());
@@ -252,9 +226,5 @@ mod tests {
         assert_eq!(snap.seq, 1);
         assert_eq!(snap.atmega.reference.as_deref(), Some("058001"));
         assert_eq!(snap.atmega.state.as_deref(), Some("A"));
-
-        driver.set_mode(SupervisionMode::Local);
-        sub.changed().await.unwrap();
-        assert_eq!(sub.borrow().usb.mode, SupervisionMode::Local);
     }
 }

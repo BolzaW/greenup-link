@@ -11,7 +11,7 @@ use station::{AppState, StationManager};
 
 fn spawn_supervised_point(
     side: u8,
-    mode: telemetry::SupervisionMode,
+    sniffer_mode: bool,
     port_name: String,
     baud_rate: u32,
     watchdog_timeout_secs: u64,
@@ -19,7 +19,7 @@ fn spawn_supervised_point(
 ) -> Arc<AppState> {
     let driver = greenup_driver::spawn_port(
         side,
-        mode,
+        sniffer_mode,
         greenup_driver::SerialOptions {
             port: port_name,
             baud_rate,
@@ -68,10 +68,10 @@ async fn main() {
         ),
     );
     if app_config.http.api_token.is_some() {
-        let auth_desc = if app_config.http.auth_ihm {
-            "STRICT (Web GUI & REST APIs protected)"
+        let auth_desc = if app_config.http.kiosk_mode {
+            "KIOSK (Web GUI & read-only GET APIs open, commands & settings protected)"
         } else {
-            "KIOSK (Web GUI open for consultation, commands & settings protected)"
+            "STANDARD (Web GUI & all REST APIs protected)"
         };
         greenup_driver::logger::log("SYS", &format!("🔒 API authentication: ENABLED [{}]", auth_desc));
     } else {
@@ -81,19 +81,16 @@ async fn main() {
         );
     }
 
-    match app_config.station.mode {
-        telemetry::SupervisionMode::Local => {
-            greenup_driver::logger::warn(
-                "SYS",
-                "👂 Supervision mode: LOCAL (passive monitoring - no commands will be sent to ATmega)",
-            );
-        }
-        telemetry::SupervisionMode::Remote => {
-            greenup_driver::logger::log(
-                "SYS",
-                "⚡ Supervision mode: REMOTE (active supervision enabled)",
-            );
-        }
+    if app_config.station.sniffer_mode {
+        greenup_driver::logger::warn(
+            "SYS",
+            "👂 Sniffer mode: ENABLED (passive monitoring — zero TX commands will be sent to ATmega)",
+        );
+    } else {
+        greenup_driver::logger::log(
+            "SYS",
+            "⚡ Sniffer mode: DISABLED (active supervision enabled)",
+        );
     }
 
     let (port1_name, port2_candidate) = greenup_driver::discover_candidate_ports(
@@ -111,7 +108,7 @@ async fn main() {
 
     let app_state_1 = spawn_supervised_point(
         1,
-        app_config.station.mode,
+        app_config.station.sniffer_mode,
         port1_name,
         app_config.serial.baud_rate,
         app_config.serial.watchdog_timeout_secs,
@@ -129,7 +126,7 @@ async fn main() {
             );
             let app_state_2 = spawn_supervised_point(
                 2,
-                app_config.station.mode,
+                app_config.station.sniffer_mode,
                 port2_candidate,
                 app_config.serial.baud_rate,
                 app_config.serial.watchdog_timeout_secs,

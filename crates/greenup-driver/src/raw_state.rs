@@ -21,50 +21,13 @@ pub enum SerialStatus {
     UsbNoResponse,
 }
 
-/// Operating mode of the serial driver on the UART bus.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum SupervisionMode {
-    /// Active supervision mode (`RaspberryPiModeOK`, startup queries, watchdog pings, commands allowed).
-    #[default]
-    Remote,
-    /// Passive monitoring mode (RX-only listen mode, zero spontaneous TX frames).
-    Local,
-}
-
-impl std::str::FromStr for SupervisionMode {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_lowercase().as_str() {
-            "remote" => Ok(SupervisionMode::Remote),
-            "local" => Ok(SupervisionMode::Local),
-            _ => Err(()),
-        }
-    }
-}
-
-impl SupervisionMode {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            SupervisionMode::Remote => "remote",
-            SupervisionMode::Local => "local",
-        }
-    }
-
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
-        s.parse().ok()
-    }
-}
-
 /// JSON-serializable state of the USB serial link managed by `greenup-driver`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UsbLinkState {
     pub status: SerialStatus,
     pub port: String,
     pub baud_rate: u32,
-    pub mode: SupervisionMode,
+    pub sniffer_mode: bool,
     pub message: String,
     pub last_rx_secs_ago: Option<u64>,
     pub init_completed: bool,
@@ -78,7 +41,7 @@ impl Default for UsbLinkState {
             status: SerialStatus::UsbDisconnected,
             port: String::from("/dev/ttyUSB0"),
             baud_rate: 115_200,
-            mode: SupervisionMode::Remote,
+            sniffer_mode: false,
             message: String::from("USB cable not detected (/dev/ttyUSB0 not found)"),
             last_rx_secs_ago: None,
             init_completed: false,

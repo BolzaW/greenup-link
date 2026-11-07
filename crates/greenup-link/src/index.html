@@ -528,22 +528,16 @@
                     <span id="cfgHttpBind" class="sys-kv-value font-mono">0.0.0.0:8080</span>
                 </div>
 
-                <!-- Mode de Supervision / Pilotage Toggle Row -->
-                <div class="sys-mode-section pt-3 pb-3 border-t border-slate-800/60 mt-3">
-                    <div class="flex items-center justify-between mb-1">
-                        <div class="sys-card-title">
-                            <svg width="15" height="15" class="text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
-                            </svg>
-                            <span data-i18n="system.supervision_title">Pilotage de la borne</span>
-                        </div>
-                        <div class="sys-toggle-wrap">
-                            <input type="checkbox" name="toggleMode" id="modeToggle" onchange="toggleSupervisionMode()" class="toggle-checkbox absolute block rounded-full bg-slate-200 border-4 appearance-none cursor-pointer transition-transform duration-200 ease-in-out" checked/>
-                            <label for="modeToggle" class="toggle-label block overflow-hidden h-6 rounded-full bg-slate-800 cursor-pointer transition-colors duration-200 ease-in-out border border-slate-700"></label>
-                        </div>
+                <!-- Read-only Operating Modes (Sniffer Mode & Kiosk Mode) -->
+                <div class="sys-grid-2">
+                    <div class="sys-kv-box">
+                        <span class="sys-kv-label" data-i18n="system.sniffer_mode_label">Mode Sniffer</span>
+                        <span id="cfgSnifferModeBadge" class="sys-badge sys-badge-muted">--</span>
                     </div>
-                    <p id="cfgModeDesc" class="sys-module-desc text-[11px] text-slate-400 mt-1" data-i18n="system.mode_remote_desc">Mode normal : Green'Up Link pilote la borne et envoie les commandes à l'ATmega (autorisations, consigne de courant, TIC).</p>
-                    <div id="cfgModeFeedback" class="sys-feedback"></div>
+                    <div class="sys-kv-box">
+                        <span class="sys-kv-label" data-i18n="system.kiosk_mode_label">Mode Kiosk</span>
+                        <span id="cfgKioskModeBadge" class="sys-badge sys-badge-muted">--</span>
+                    </div>
                 </div>
 
                 <!-- Client API Token Row -->

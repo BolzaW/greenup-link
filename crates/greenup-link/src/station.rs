@@ -11,7 +11,7 @@
 //! - Managing power/energy integration and driving [`crate::session`] CSV/TXT recording.
 
 use std::sync::{
-    atomic::{AtomicU8, Ordering},
+    atomic::{AtomicBool, AtomicU8, Ordering},
     Arc, Mutex, RwLock,
 };
 use tokio::sync::mpsc;
@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 use crate::hardware_specs::HardwareCapabilities;
 pub use crate::telemetry::{
     BoardInfo, ConnectorData, OcppChargePointStatus, SerialConnection, SerialStatus, StationData,
-    StationSnapshot, SupervisionMode, Telemetry,
+    StationSnapshot, Telemetry,
 };
 use greenup_driver::{
     logger, DriverHandle, DriverSnapshot, SerialOptions, SharedDriver, TicStartError,
@@ -43,8 +43,8 @@ pub struct AppState {
     pub driver: SharedDriver,
     /// Charge point side: 1 for Side 1 (Right / Droit), 2 for Side 2 (Left / Gauche).
     pub side: AtomicU8,
-    /// Supervision mode: 0 for Remote (active), 1 for Local (passive).
-    pub mode: AtomicU8,
+    /// Passive UART listen-only mode (`true` = Sniffer mode, zero TX commands).
+    pub sniffer_mode: AtomicBool,
     /// High-level interpreted telemetry (power, energy, IEC/OCPP state, external voltage).
     pub telemetry: Mutex<Telemetry>,
     /// High-level board metadata and hardware capabilities deduced from `Reference:`.
@@ -61,17 +61,17 @@ impl AppState {
     }
 
     pub fn new_with_side(side: u8, serial_tx: mpsc::Sender<Command>) -> Self {
-        Self::new_with_side_and_mode(side, SupervisionMode::Remote, serial_tx)
+        Self::new_with_side_and_sniffer(side, false, serial_tx)
     }
 
-    pub fn new_with_side_and_mode(
+    pub fn new_with_side_and_sniffer(
         side: u8,
-        mode: SupervisionMode,
+        sniffer_mode: bool,
         serial_tx: mpsc::Sender<Command>,
     ) -> Self {
-        let driver = Arc::new(DriverHandle::new_with_side_and_mode(
+        let driver = Arc::new(DriverHandle::new_with_side_and_sniffer(
             side,
-            mode,
+            sniffer_mode,
             serial_tx,
         ));
         Self::from_driver(driver, env!("CARGO_PKG_VERSION"))
@@ -80,26 +80,21 @@ impl AppState {
     /// Creates a high-level `AppState` attached to an existing low-level [`SharedDriver`].
     pub fn from_driver(driver: SharedDriver, link_version: &str) -> Self {
         let side = driver.side();
-        let mode = driver.mode();
+        let sniffer_mode = driver.sniffer_mode();
         let serial_tx = driver.serial_tx.clone();
 
         let mut tel = Telemetry::default();
         tel.side = side;
-        tel.mode = mode;
+        tel.sniffer_mode = sniffer_mode;
 
         let mut info = BoardInfo::default();
         info.side = Some(side);
         info.link_version = link_version.to_string();
 
-        let mode_val = match mode {
-            SupervisionMode::Remote => 0,
-            SupervisionMode::Local => 1,
-        };
-
         Self {
             driver,
             side: AtomicU8::new(side),
-            mode: AtomicU8::new(mode_val),
+            sniffer_mode: AtomicBool::new(sniffer_mode),
             telemetry: Mutex::new(tel),
             info: Mutex::new(info),
             serial_tx,
@@ -196,14 +191,8 @@ impl AppState {
             {
                 let mut tel = self.telemetry.lock().unwrap_or_else(|e| e.into_inner());
                 tel.side = side;
-                tel.mode = usb.mode;
-                self.mode.store(
-                    match usb.mode {
-                        SupervisionMode::Remote => 0,
-                        SupervisionMode::Local => 1,
-                    },
-                    Ordering::Relaxed,
-                );
+                tel.sniffer_mode = usb.sniffer_mode;
+                self.sniffer_mode.store(usb.sniffer_mode, Ordering::Relaxed);
 
                 let prev_usb_status = tel.serial.status.clone();
                 tel.serial.status = usb.status.clone();
@@ -372,7 +361,7 @@ impl AppState {
                 cursor.auto_tic_triggered = false;
             } else if usb.init_completed
                 && !cursor.auto_tic_triggered
-                && usb.mode == SupervisionMode::Remote
+                && !usb.sniffer_mode
             {
                 cursor.auto_tic_triggered = true;
                 should_auto_start_tic = true;
@@ -431,26 +420,9 @@ impl AppState {
         self.driver.set_side(s);
     }
 
-    /// Returns current active supervision mode (Remote or Local).
-    pub fn mode(&self) -> SupervisionMode {
-        if self.mode.load(Ordering::Relaxed) == 1 {
-            SupervisionMode::Local
-        } else {
-            SupervisionMode::Remote
-        }
-    }
-
-    /// Sets the supervision mode on both the high-level state and low-level driver.
-    pub fn set_mode(&self, mode: SupervisionMode) {
-        let mode_val = match mode {
-            SupervisionMode::Remote => 0,
-            SupervisionMode::Local => 1,
-        };
-        self.mode.store(mode_val, Ordering::Relaxed);
-        if let Ok(mut tel) = self.telemetry.lock() {
-            tel.mode = mode;
-        }
-        self.driver.set_mode(mode);
+    /// Returns `true` if the station is operating in Sniffer mode (passive listen-only, zero TX).
+    pub fn sniffer_mode(&self) -> bool {
+        self.sniffer_mode.load(Ordering::Relaxed)
     }
 
     /// Returns true if the USB serial link is active and actively communicating with the ATmega.
@@ -606,10 +578,10 @@ impl StationManager {
                                     ref_str, port2_target
                                 ),
                             );
-                            let point_mode = station.point1.mode();
+                            let sniffer_mode = station.point1.sniffer_mode();
                             let driver2 = greenup_driver::spawn_port(
                                 2,
-                                point_mode,
+                                sniffer_mode,
                                 SerialOptions {
                                     port: port2_target,
                                     baud_rate,
@@ -746,7 +718,7 @@ impl StationManager {
             hardware_version: p1_info.hardware_version.clone(),
             firmware_version: p1_info.software_version.clone(),
             link_version: p1_info.link_version.clone(),
-            supervision_mode: self.point1.mode(),
+            sniffer_mode: self.point1.sniffer_mode(),
             serial_connection: p1_tel.serial.clone(),
             is_dual,
             available_connectors,

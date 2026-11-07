@@ -3,9 +3,10 @@
 window.isAuthResolved = false;
 window.isAuthRequired = false;
 window.isAuthenticated = false;
-window.isAuthIhm = true;
+window.isKioskMode = false;
+window.isSnifferMode = false;
 window.canReadData = function() {
-    return window.isAuthResolved && (!window.isAuthRequired || window.isAuthenticated || !window.isAuthIhm);
+    return window.isAuthResolved && (!window.isAuthRequired || window.isAuthenticated || window.isKioskMode);
 };
 window.isDualStation = false;
 window.currentSide = 1;
@@ -64,10 +65,13 @@ async function probeServerReconnection() {
         window.isAuthResolved = true;
         window.isAuthRequired = !!status.auth_required;
         window.isAuthenticated = !!status.authenticated;
-        window.isAuthIhm = status.auth_ihm !== false;
+        window.isKioskMode = !!status.kiosk_mode;
         updateLogoutButton();
+        if (typeof updateSystemModesUi === 'function') {
+            updateSystemModesUi(window.isSnifferMode, window.isKioskMode);
+        }
 
-        if (window.isAuthRequired && !window.isAuthenticated && window.isAuthIhm) {
+        if (window.isAuthRequired && !window.isAuthenticated && !window.isKioskMode) {
             handleUnauthorized();
         } else {
             hideAuthModal();
@@ -136,7 +140,7 @@ async function apiFetch(url, options = {}) {
             });
         }
     } else if (window.isAuthRequired && !window.isAuthenticated) {
-        if (window.isAuthIhm || isProtected) {
+        if (!window.isKioskMode || isProtected) {
             if (!url.includes('/api/auth/status')) {
                 return new Response(JSON.stringify({ error: 'Unauthorized: valid API token required' }), {
                     status: 401,
@@ -167,7 +171,7 @@ async function apiFetch(url, options = {}) {
 
 function handleUnauthorized() {
     window.isAuthenticated = false;
-    if (window.isAuthIhm) {
+    if (!window.isKioskMode) {
         stopTelemetryPolling();
         if (typeof stopLogStream === 'function') {
             stopLogStream();
@@ -188,7 +192,7 @@ function showAuthModal(showError = false) {
         else errMsg.classList.add('hidden');
     }
     if (btnCancel) {
-        if (!window.isAuthIhm) {
+        if (window.isKioskMode) {
             btnCancel.classList.remove('hidden');
         } else {
             btnCancel.classList.add('hidden');
@@ -226,7 +230,7 @@ function updateLogoutButton() {
         btn.title = (typeof t === 'function' ? t('auth.logout_title') : "Session authentifiée (cliquer pour verrouiller)") || "Session authentifiée (cliquer pour verrouiller)";
         if (iconLockClosed) iconLockClosed.classList.remove('hidden');
         if (iconLockOpen) iconLockOpen.classList.add('hidden');
-    } else if (!window.isAuthIhm) {
+    } else if (window.isKioskMode) {
         // 🔓 Mode Kiosk / Consultation Libre: sky blue padlock
         btn.className = 'header-auth-btn auth-kiosk';
         btn.title = (typeof t === 'function' ? t('auth.kiosk_tooltip') : "Mode consultation libre (cliquer pour vous authentifier)") || "Mode consultation libre (cliquer pour vous authentifier)";
@@ -288,7 +292,7 @@ function logoutApiToken() {
     if (cfgInput) cfgInput.value = '';
     if (typeof updateClientTokenBadge === 'function') updateClientTokenBadge();
 
-    if (window.isAuthIhm) {
+    if (!window.isKioskMode) {
         stopTelemetryPolling();
         if (typeof stopLogStream === 'function') {
             stopLogStream();
@@ -321,13 +325,13 @@ function setupAuthModalListeners() {
     }
     if (modal) {
         modal.addEventListener('click', (e) => {
-            if (e.target === modal && !window.isAuthIhm) {
+            if (e.target === modal && window.isKioskMode) {
                 hideAuthModal();
             }
         });
     }
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && !window.isAuthIhm) {
+        if (e.key === 'Escape' && window.isKioskMode) {
             hideAuthModal();
         }
     });
@@ -351,10 +355,13 @@ async function submitAuthToken() {
             window.isAuthResolved = true;
             window.isAuthRequired = !!status.auth_required;
             window.isAuthenticated = true;
-            window.isAuthIhm = status.auth_ihm !== false;
+            window.isKioskMode = !!status.kiosk_mode;
             updateLogoutButton();
             hideAuthModal();
             if (typeof updateClientTokenBadge === 'function') updateClientTokenBadge();
+            if (typeof updateSystemModesUi === 'function') {
+                updateSystemModesUi(window.isSnifferMode, window.isKioskMode);
+            }
             const cfgInput = document.getElementById('cfgClientToken');
             if (cfgInput) cfgInput.value = candidate;
             await onAuthenticatedStart();
@@ -376,11 +383,14 @@ async function checkAuthAndStart() {
         window.isAuthResolved = true;
         window.isAuthRequired = !!status.auth_required;
         window.isAuthenticated = !!status.authenticated;
-        window.isAuthIhm = status.auth_ihm !== false;
+        window.isKioskMode = !!status.kiosk_mode;
         updateLogoutButton();
+        if (typeof updateSystemModesUi === 'function') {
+            updateSystemModesUi(window.isSnifferMode, window.isKioskMode);
+        }
 
         if (window.isAuthRequired && !window.isAuthenticated) {
-            if (window.isAuthIhm) {
+            if (!window.isKioskMode) {
                 showAuthModal(false);
             } else {
                 hideAuthModal();
@@ -542,7 +552,7 @@ function updateUsbStatus(serial) {
             usbStatusBadge.innerText = t('usb.status_connected');
         }
         usbAlertBanner.className = 'sys-alert-banner hidden';
-        if (controlsPanel && !isActionPending && window.currentSupervisionMode !== 'local') {
+        if (controlsPanel && !isActionPending && !window.isSnifferMode) {
             controlsPanel.classList.remove('opacity-40', 'pointer-events-none');
             controlsPanel.removeAttribute('title');
         }
@@ -668,7 +678,7 @@ async function fetchTelemetry() {
             charge_paused: conn.status.paused,
             charge_complete: conn.status.charge_complete,
             tic_mode: conn.grid.tic_mode,
-            mode: station ? station.supervision_mode : 'remote',
+            sniffer_mode: station ? !!station.sniffer_mode : false,
         };
         window.lastTelemetry = data;
 
@@ -714,11 +724,8 @@ async function fetchTelemetry() {
         updateLinky(conn.grid.tic_mode);
         updateVisuals(conn.status.raw_code, conn.status.charge_complete, conn.status.iec, conn.status.error_code, conn.status.paused, conn.control.charge_authorized);
 
-        if (station && station.supervision_mode) {
-            const canSwitch = conn.status.raw_code === 'A' || conn.status.raw_code === 'DISCONNECTED';
-            if (typeof updateSupervisionModeUi === 'function') {
-                updateSupervisionModeUi(station.supervision_mode, canSwitch);
-            }
+        if (station && typeof updateSystemModesUi === 'function') {
+            updateSystemModesUi(!!station.sniffer_mode, window.isKioskMode);
         }
 
         if (typeof onTelemetryUpdateForSessions === 'function') {

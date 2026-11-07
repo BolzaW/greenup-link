@@ -82,7 +82,7 @@
     "disable": "DISABLE",
     "pause": "PAUSE",
     "resume": "RESUME",
-    "local_mode_notice": "Listen-only mode active: station operates autonomously. Charge controls are locked."
+    "local_mode_notice": "Sniffer mode (listen-only): station operates autonomously. Commands are locked."
   },
   "tic": {
     "standard": "Standard TIC\n(9600 baud)",
@@ -218,7 +218,7 @@
     "token_status_auth": "Authenticated",
     "token_status_unauth": "Unauthenticated",
     "token_status_missing": "Token missing",
-    "token_status_kiosk": "Consultation mode",
+    "token_status_kiosk": "Kiosk mode",
     "token_status_no_auth": "Free access (no auth)",
     "token_saved_valid": "API token saved & validated",
     "token_saved_local": "Token saved locally",
@@ -228,20 +228,10 @@
     "tic_unsupported_badge": "Unsupported",
     "ble_status_on": "Bluetooth active on station",
     "ble_status_off": "Bluetooth disabled on station",
-    "supervision_title": "Station Control",
-    "supervision_desc": "Toggle between active control and passive listen-only monitoring on the serial link",
-    "mode_remote": "Active Control (Normal)",
-    "mode_remote_short": "Active Control",
-    "mode_remote_desc": "Normal mode: Green'Up Link controls the station and sends commands to the ATmega (authorizations, current setpoint, TIC).",
-    "mode_local": "Passive (Listen-only)",
-    "mode_local_short": "Listen-only",
-    "mode_local_desc": "Listen-only mode (passive): station operates autonomously, Green'Up Link sends no commands to the ATmega.",
-    "mode_badge_active": "Active",
-    "mode_state_a_required": "Mode switching is only permitted when the station is in State A (standby / disconnected).",
-    "mode_switch_confirm_local": "Warning: disabling active control will send a Reset to the ATmega to release the board, then cease all command transmissions. Do you want to proceed?",
-    "mode_switch_confirm_remote": "Do you want to re-enable active station control (normal mode) and initialize communication with the ATmega?",
-    "mode_switching": "Switching mode...",
-    "mode_switch_success": "Station control mode updated successfully"
+    "sniffer_mode_label": "Sniffer Mode",
+    "kiosk_mode_label": "Kiosk Mode",
+    "mode_enabled": "Enabled",
+    "mode_disabled": "Disabled"
   },
   "dual": {
     "selector_title": "Active Charge Point",

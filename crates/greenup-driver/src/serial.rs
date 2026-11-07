@@ -10,7 +10,7 @@
 //! - Updating `AtmegaRawState` and broadcasting `DriverSnapshot` on `tokio::sync::watch`.
 
 use crate::logger;
-use crate::raw_state::{AtmegaRawState, SerialStatus, SupervisionMode};
+use crate::raw_state::{AtmegaRawState, SerialStatus};
 use crate::state::{DriverHandle, SharedDriver};
 use greenup_protocol::{
     commands::FunctioningMode,
@@ -94,9 +94,13 @@ pub fn discover_candidate_ports(
 
 /// Spawns a new low-level USB serial driver thread for the given port and returns its [`SharedDriver`] handle.
 /// Can be called at startup for Point 1, and dynamically by `greenup-link` when initializing a 2nd USB port.
-pub fn spawn_port(side: u8, mode: SupervisionMode, options: SerialOptions) -> SharedDriver {
+pub fn spawn_port(side: u8, sniffer_mode: bool, options: SerialOptions) -> SharedDriver {
     let (tx, rx) = tokio::sync::mpsc::channel::<Command>(64);
-    let driver = Arc::new(DriverHandle::new_with_side_and_mode(side, mode, tx));
+    let driver = Arc::new(DriverHandle::new_with_side_and_sniffer(
+        side,
+        sniffer_mode,
+        tx,
+    ));
     driver.update_usb(|usb| {
         usb.port = options.port.clone();
         usb.baud_rate = options.baud_rate;
@@ -509,12 +513,12 @@ pub fn run_serial_loop_with_options(
         });
 
         reset_serial_filters();
-        if driver.mode() == SupervisionMode::Remote {
+        if !driver.sniffer_mode() {
             send_init_sequence_sync(&mut port, &driver, &internal_rx, &is_running);
         } else {
             logger::info(
                 "SERIAL",
-                "👂 Operating in Local mode: passive monitoring enabled. ATmega init sequence bypassed (zero serial transmission).",
+                "👂 Operating in Sniffer mode: passive monitoring enabled. ATmega init sequence bypassed (zero serial transmission).",
             );
         }
 
@@ -535,11 +539,11 @@ pub fn run_serial_loop_with_options(
             };
 
             if let Some(cmd) = cmd_opt {
-                if driver.mode() == SupervisionMode::Local && cmd != Command::Reset {
+                if driver.sniffer_mode() {
                     logger::warn(
                         "SERIAL",
                         &format!(
-                            "⛔ Command {} dropped: station operating in Local mode (passive)",
+                            "⛔ Command {} dropped: station operating in Sniffer mode (passive)",
                             cmd.as_frame()
                         ),
                     );
@@ -573,7 +577,7 @@ pub fn run_serial_loop_with_options(
                 Duration::from_secs(options.watchdog_timeout_secs.saturating_sub(15).max(5));
 
             if elapsed_since_rx >= probe_threshold && elapsed_since_rx < watchdog_timeout {
-                if driver.mode() == SupervisionMode::Remote
+                if !driver.sniffer_mode()
                     && last_watchdog_probe.elapsed() >= Duration::from_secs(7)
                 {
                     last_watchdog_probe = Instant::now();
@@ -620,7 +624,7 @@ pub fn run_serial_loop_with_options(
                     }
                 }
 
-                if driver.mode() == SupervisionMode::Remote
+                if !driver.sniffer_mode()
                     && last_watchdog_probe.elapsed() >= Duration::from_secs(15)
                 {
                     last_watchdog_probe = Instant::now();
@@ -741,13 +745,13 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
 
     match &event {
         ProtocolEvent::Ping => {
-            if driver.mode() == SupervisionMode::Remote {
+            if !driver.sniffer_mode() {
                 logger::log("SERIAL", "🤝 Hardware ping detected, sending RaspberryPiModeOK");
                 let _ = driver.serial_tx.try_send(Command::RaspberryPiModeOk);
             } else {
                 logger::log(
                     "SERIAL",
-                    "👂 Hardware ping detected, ignored in Local mode (no RaspberryPiModeOK sent)",
+                    "👂 Hardware ping detected, ignored in Sniffer mode (no RaspberryPiModeOK sent)",
                 );
             }
         }

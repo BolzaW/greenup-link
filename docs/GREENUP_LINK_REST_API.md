@@ -5,7 +5,8 @@ This API allows interfacing the Green'Up Link software with any standard home au
 ## 🔒 Authentication (Optional)
 
 By default, `api_token` is empty (`""`) in `greenup.toml` (open access on trusted local networks).
-If you configure a non-empty `api_token` in `/opt/greenup-link/greenup.toml` (or via the `GREENUP_API_TOKEN` environment variable), all `/api/*` endpoints require authentication.
+If you configure a non-empty `api_token` in `/opt/greenup-link/greenup.toml` (or via the `GREENUP_API_TOKEN` environment variable), all `/api/*` endpoints require authentication by default (`kiosk_mode = false`).
+If `kiosk_mode = true` is configured under `[http]`, the Web IHM and read-only `GET` endpoints are accessible without a token, while all write/action endpoints (`POST`, `DELETE`) and `/api/logs/export` remain protected by `api_token`.
 
 Three standard authentication methods are supported simultaneously against the same `api_token`:
 
@@ -64,8 +65,6 @@ Three standard authentication methods are supported simultaneously against the s
 ### Control & Actions
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/mode` | Get current supervision mode (`"remote"` or `"local"`) |
-| `POST` | `/api/mode` | Switch supervision mode dynamically (`{"mode": "local"|"remote"}`) |
 | `POST` | `/api/charge` | Control charge state (`enable`, `disable`, `pause`, `resume`) |
 | `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`, 7A to 32A) |
 | `POST` | `/api/voltage` | Inject external grid voltage (`{"voltage": 230.0}`) |
@@ -103,7 +102,7 @@ Three standard authentication methods are supported simultaneously against the s
       "hardware_version": "V02.01.01",
       "production_date": "42W22",
       "link_version": "0.5.0-dev",
-      "supervision_mode": "remote",
+      "sniffer_mode": false,
       "connector_count": 1,
       "capabilities": {
         "phases": 1,
@@ -171,7 +170,7 @@ Three standard authentication methods are supported simultaneously against the s
     "hardware_version": "V02.01.01",
     "production_date": "42W22",
     "link_version": "0.5.0-dev",
-    "supervision_mode": "remote",
+    "sniffer_mode": false,
     "connector_count": 1,
     "capabilities": { ... },
     "serial": { ... }
@@ -234,17 +233,6 @@ Three standard authentication methods are supported simultaneously against the s
     "voltage_v": 230.0,
     "frequency_hz": 50.0,
     "voltage_source": "internal"
-  }
-  ```
-
-### 5. Get supervision mode
-- **URL**: `/api/mode`
-- **Method**: `GET`
-- **Description**: Returns the current runtime supervision mode (`"remote"` or `"local"`).
-- **Typical Response**:
-  ```json
-  {
-    "mode": "remote"
   }
   ```
 
@@ -346,7 +334,7 @@ Three standard authentication methods are supported simultaneously against the s
 - **Validation & Security**:
   - Whitelist: only characters matching `[a-zA-Z0-9:?]` are accepted (strictly eliminates CRLF `\r`, `\n`, control characters, and injection attempts).
   - Length: maximum 20 characters (`1..=20`).
-  - Blocked in Local supervision mode (`403 Forbidden`).
+  - Blocked in Sniffer mode (`sniffer_mode = true` → `403 Forbidden`).
   - If invalid, returns HTTP `400 Bad Request`:
     ```json
     {
@@ -367,25 +355,10 @@ Three standard authentication methods are supported simultaneously against the s
   { "voltage": 234.5 }
   ```
 - **Description**: Injects a measured grid voltage from an external smart meter (Shelly, Enedis Linky, Home Assistant, etc.). When injected, Green'Up Link uses this exact voltage to compute active power ($P = U \times I$) instead of the default nominal 230V. External voltage automatically expires after 30 seconds if not refreshed.
-- **Validation**: Accepts voltage values between `180.0` and `280.0` V. Allowed even in Local supervision mode.
+- **Validation**: Accepts voltage values between `180.0` and `280.0` V. Allowed even in Sniffer mode (`sniffer_mode = true`).
 - **Typical Response**:
   ```json
   { "status": "success", "message": "External voltage updated" }
-  ```
-
-### 11. Switch supervision mode (Local / Remote)
-- **URL**: `/api/mode`
-- **Method**: `POST`
-- **Body (JSON)**:
-  ```json
-  { "mode": "local" }
-  ```
-  *(Supported modes: `"local"`, `"remote"`)*
-- **Description**: Switches the station between **Remote** mode (active bidirectional control by Green'Up Link) and **Local** mode (pure passive spy/sniffer without sending any frame or `RaspberryPiModeOK` to the ATmega).
-- **Safety Safeguard**: Hot-switching to Local mode is **only allowed when the station is idle (`State:A`)** and first sends a `Reset` to ensure the ATmega returns to autonomous operation without expecting Green'Up Link. In any charging state (`B`, `C`, etc.), switching to Local mode is rejected with `400 Bad Request`.
-- **Typical Response**:
-  ```json
-  { "status": "success", "mode": "local", "message": "Switched to local mode. Serial commands are now silenced." }
   ```
 
 ---

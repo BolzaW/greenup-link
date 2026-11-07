@@ -25,7 +25,7 @@ async function setLanguage(lang) {
         });
 
         if (lastReportedTicMode) updateLinky(lastReportedTicMode);
-        if (typeof updateSupervisionModeUi === 'function' && window.currentSupervisionMode) updateSupervisionModeUi(window.currentSupervisionMode);
+        if (typeof updateSystemModesUi === 'function') updateSystemModesUi(window.isSnifferMode, window.isKioskMode);
         window.lastVisualState = null; // force visual update on next poll
         if (typeof updateLogoutButton === 'function') updateLogoutButton();
         if (typeof updateSessionsDropdown === 'function') updateSessionsDropdown(false);
