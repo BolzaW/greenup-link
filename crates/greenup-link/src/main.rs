@@ -43,6 +43,15 @@ async fn main() {
     )));
     greenup_driver::logger::init();
 
+    // Reconcile any orphan session CSVs left from previous interrupted runs
+    let recovered_sessions = session::reconcile_orphan_sessions();
+    if recovered_sessions > 0 {
+        greenup_driver::logger::log(
+            "SYS",
+            &format!("📊 Reconciled {} orphan charging session(s) from previous run", recovered_sessions),
+        );
+    }
+
     let pkg_version = env!("CARGO_PKG_VERSION");
 
     greenup_driver::logger::log("SYS", "===================================================");
@@ -152,8 +161,8 @@ async fn main() {
         }
     };
 
-    // Start the Axum HTTP server
-    let router = api::build_router(station, app_config.http.clone());
+    // Start the Axum HTTP server with graceful shutdown handling
+    let router = api::build_router(station.clone(), app_config.http.clone());
 
     let addr = &app_config.http.bind;
     greenup_driver::logger::log("SYS", &format!("🌍 Web server started: http://{}", addr));
@@ -161,7 +170,48 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind(addr)
         .await
         .unwrap_or_else(|e| panic!("Failed to bind {}: {}", addr, e));
+
+    let shutdown_handle = async {
+        shutdown_signal().await;
+        greenup_driver::logger::log(
+            "SYS",
+            "🛑 Shutdown signal received (SIGTERM / Ctrl+C), terminating web server...",
+        );
+    };
+
     axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown_handle)
         .await
         .expect("Fatal web server error");
+
+    greenup_driver::logger::log(
+        "SYS",
+        "🛑 Closing any active charging sessions before exit...",
+    );
+    session::close_all_active_sessions("Service stopped (shutdown signal)", &station);
+    greenup_driver::logger::log("SYS", "👋 Green'up Link stopped cleanly");
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install Ctrl+C signal handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("Failed to install SIGTERM signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
 }

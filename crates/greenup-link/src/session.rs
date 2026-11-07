@@ -642,6 +642,30 @@ pub fn end_session(reason: &str, tel: &Telemetry) {
     end_session_for_side(1, reason, tel);
 }
 
+/// Closes all active sessions gracefully with a specific reason.
+pub fn close_all_active_sessions_with_reason(reason: &str, tel: &Telemetry) {
+    for side in [1, 2] {
+        if is_active_for_side(side) {
+            end_session_for_side(side, reason, tel);
+        }
+    }
+}
+
+/// Closes all active sessions gracefully across all available charge points of the station.
+pub fn close_all_active_sessions(reason: &str, station: &crate::station::StationManager) {
+    for side in station.available_points() {
+        if is_active_for_side(side) {
+            let point = station.get_point(Some(side));
+            let tel = point.telemetry.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            logger::info(
+                "SESSION",
+                &format!("Closing active session on Side {} ({})", side, reason),
+            );
+            end_session_for_side(side, reason, &tel);
+        }
+    }
+}
+
 /// Validates session identifier to prevent path traversal or malformed requests.
 pub fn is_valid_session_id(id: &str) -> bool {
     !id.is_empty()
@@ -823,6 +847,307 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
     })
 }
 
+struct CsvSample {
+    timestamp_str: String,
+    elapsed_s: u64,
+    state: String,
+    current_a: f32,
+    #[allow(dead_code)]
+    limit_a: u32,
+    #[allow(dead_code)]
+    voltage_v: f32,
+    power_w: f32,
+    energy_kwh: f64,
+}
+
+fn parse_csv_line(line: &str) -> Option<CsvSample> {
+    let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
+    if parts.len() < 8 {
+        return None;
+    }
+    let timestamp_str = parts[0].to_string();
+    let elapsed_s = parts[1].parse::<u64>().ok()?;
+    let state = parts[2].to_string();
+    let current_a = parts[3].parse::<f32>().ok()?;
+    let limit_a = parts[4].parse::<u32>().unwrap_or(0);
+    let voltage_v = parts[5].parse::<f32>().unwrap_or(230.0);
+    let power_w = parts[6].parse::<f32>().unwrap_or(0.0);
+    let energy_kwh = parts[7].parse::<f64>().ok()?;
+
+    Some(CsvSample {
+        timestamp_str,
+        elapsed_s,
+        state,
+        current_a,
+        limit_a,
+        voltage_v,
+        power_w,
+        energy_kwh,
+    })
+}
+
+fn format_csv_timestamp_for_summary(raw_ts: &str, session_id: &str, fallback_offset_s: u64) -> String {
+    if let Ok(dt) = DateTime::parse_from_rfc3339(raw_ts) {
+        return dt.format("%Y-%m-%d %H:%M:%S").to_string();
+    }
+    if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(raw_ts, "%Y-%m-%d %H:%M:%S") {
+        return naive.format("%Y-%m-%d %H:%M:%S").to_string();
+    }
+    // Fallback: extract date and time from session_id (e.g. session_side1_2026-11-05_14-30-00)
+    let parts: Vec<&str> = session_id.split('_').collect();
+    for i in 0..parts.len() {
+        if parts[i].len() == 10 && parts[i].chars().filter(|c| *c == '-').count() == 2 {
+            let date_part = parts[i];
+            if i + 1 < parts.len() {
+                let time_part = parts[i + 1].replace('-', ":");
+                let combined = format!("{} {}", date_part, time_part);
+                if let Ok(naive) = chrono::NaiveDateTime::parse_from_str(&combined, "%Y-%m-%d %H:%M:%S") {
+                    let final_dt = naive + chrono::Duration::seconds(fallback_offset_s as i64);
+                    return final_dt.format("%Y-%m-%d %H:%M:%S").to_string();
+                }
+                return combined;
+            }
+        }
+    }
+    raw_ts.to_string()
+}
+
+/// Scans the sessions directory for orphan CSV files (sessions interrupted without a companion `.txt` summary).
+/// - If the CSV is empty, unparseable, or negligible (< 0.02 kWh and < 15s charge), discards it.
+/// - If the CSV contains a valid charge, recalculates metrics and generates the companion `.txt` summary
+///   with termination reason "Session interrupted (unexpected stop / power loss)".
+///
+/// Returns the number of orphan sessions successfully recovered.
+pub fn reconcile_orphan_sessions() -> usize {
+    let sessions_dir = get_sessions_dir();
+    if !sessions_dir.exists() {
+        return 0;
+    }
+
+    let active_csv_paths: Vec<PathBuf> = {
+        let lock = ACTIVE_SESSIONS.lock().unwrap_or_else(|e| e.into_inner());
+        lock.iter()
+            .filter_map(|s| s.as_ref().map(|sess| sess.csv_path.clone()))
+            .collect()
+    };
+
+    let entries = match fs::read_dir(&sessions_dir) {
+        Ok(e) => e,
+        Err(e) => {
+            logger::error("SESSION", &format!("Failed to read sessions dir {:?}: {}", sessions_dir, e));
+            return 0;
+        }
+    };
+
+    let mut recovered_count = 0;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("csv") {
+            continue;
+        }
+        let file_name = match path.file_name().and_then(|f| f.to_str()) {
+            Some(f) => f,
+            None => continue,
+        };
+        if !file_name.starts_with("session_") {
+            continue;
+        }
+
+        // Skip currently recording active sessions
+        if active_csv_paths.contains(&path) {
+            continue;
+        }
+
+        let txt_path = path.with_extension("txt");
+        if txt_path.exists() {
+            // Already has companion TXT
+            continue;
+        }
+
+        let session_id = match path.file_stem().and_then(|s| s.to_str()) {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+
+        let content = match fs::read_to_string(&path) {
+            Ok(c) => c,
+            Err(e) => {
+                logger::warn("SESSION", &format!("Could not read orphan session CSV {:?}: {}", path, e));
+                continue;
+            }
+        };
+
+        let mut samples = Vec::new();
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with("timestamp") {
+                continue;
+            }
+            if let Some(sample) = parse_csv_line(trimmed) {
+                samples.push(sample);
+            }
+        }
+
+        if samples.is_empty() {
+            logger::info(
+                "SESSION",
+                &format!("Discarded empty or corrupt orphan session CSV: {}", file_name),
+            );
+            let _ = fs::remove_file(&path);
+            continue;
+        }
+
+        let first_sample = &samples[0];
+        let last_sample = &samples[samples.len() - 1];
+
+        let start_time_str = format_csv_timestamp_for_summary(&first_sample.timestamp_str, &session_id, 0);
+        let end_time_str = format_csv_timestamp_for_summary(&last_sample.timestamp_str, &session_id, last_sample.elapsed_s);
+        let total_duration_secs = last_sample.elapsed_s;
+
+        let mut active_charging_duration_secs = 0u64;
+        let mut cumulative_current_a_secs = 0.0f64;
+        let mut max_current = 0.0f32;
+        let mut max_power = 0.0f32;
+        let mut final_energy_kwh = 0.0f64;
+        let mut is_domestic = false;
+
+        for i in 0..samples.len() {
+            let s = &samples[i];
+            if s.current_a > max_current {
+                max_current = s.current_a;
+            }
+            if s.power_w > max_power {
+                max_power = s.power_w;
+            }
+            if s.energy_kwh > final_energy_kwh {
+                final_energy_kwh = s.energy_kwh;
+            }
+            if is_domestic_state(&s.state) {
+                is_domestic = true;
+            }
+
+            if is_charging_state(&s.state) && s.current_a > 0.05 {
+                let dt = if i + 1 < samples.len() {
+                    samples[i + 1].elapsed_s.saturating_sub(s.elapsed_s)
+                } else {
+                    1
+                };
+                active_charging_duration_secs += dt;
+                cumulative_current_a_secs += (s.current_a as f64) * (dt as f64);
+            }
+        }
+
+        let is_negligible = final_energy_kwh < 0.02 && active_charging_duration_secs < 15;
+        if is_negligible {
+            logger::info(
+                "SESSION",
+                &format!(
+                    "Discarded negligible orphan session {} (< 0.02 kWh and < 15s charge)",
+                    session_id
+                ),
+            );
+            let _ = fs::remove_file(&path);
+            continue;
+        }
+
+        let idle_duration_secs = total_duration_secs.saturating_sub(active_charging_duration_secs);
+        let avg_active_current_a = if active_charging_duration_secs > 0 && cumulative_current_a_secs > 0.0 {
+            (cumulative_current_a_secs / active_charging_duration_secs as f64) as f32
+        } else {
+            0.0
+        };
+        let avg_active_power_w = if active_charging_duration_secs > 0 && final_energy_kwh > 0.0 {
+            (final_energy_kwh * 1000.0) / (active_charging_duration_secs as f64 / 3600.0)
+        } else {
+            0.0
+        };
+
+        let side = if session_id.contains("_side2_") || session_id.starts_with("session_side2_") { 2 } else { 1 };
+        let side_label = if side == 2 {
+            "Side 2 (Left / Gauche)"
+        } else {
+            "Side 1 (Right / Droit)"
+        };
+        let plug_type_str = if is_domestic { "Schuko" } else { "Type 2" };
+        let phase_str = "1-phase";
+        let reason = "Session interrupted (unexpected stop / power loss)";
+        let ticket_str = "N/A (Ticket not emitted)";
+
+        let summary_content = format!(
+"================================================================================
+GREENUP-LINK CHARGING SESSION SUMMARY
+================================================================================
+Session ID:           {}
+Charge Point:         {}
+Start Time:           {}
+End Time:             {}
+Termination Reason:   {}
+
+--------------------------------------------------------------------------------
+DURATIONS
+--------------------------------------------------------------------------------
+Total Connected:      {} ({} s)
+Active Charging:      {} ({} s)
+Idle / Waiting:       {} ({} s)
+
+--------------------------------------------------------------------------------
+ENERGY & ELECTRICAL METRICS
+--------------------------------------------------------------------------------
+Total Energy:         {:.3} kWh
+Phase Detection:      {}
+Plug Type:            {}
+Max Current:          {:.2} A
+Average Current:      {:.2} A
+Max Power:            {:.0} W
+Average Active Power: {:.0} W
+
+--------------------------------------------------------------------------------
+RAW LEGRAND TICKET
+--------------------------------------------------------------------------------
+{}
+================================================================================
+",
+            session_id,
+            side_label,
+            start_time_str,
+            end_time_str,
+            reason,
+            format_duration(total_duration_secs),
+            total_duration_secs,
+            format_duration(active_charging_duration_secs),
+            active_charging_duration_secs,
+            format_duration(idle_duration_secs),
+            idle_duration_secs,
+            final_energy_kwh,
+            phase_str,
+            plug_type_str,
+            max_current,
+            avg_active_current_a,
+            max_power,
+            avg_active_power_w,
+            ticket_str
+        );
+
+        if let Err(e) = fs::write(&txt_path, summary_content) {
+            logger::error("SESSION", &format!("Failed to write recovered TXT summary {:?}: {}", txt_path, e));
+        } else {
+            logger::info(
+                "SESSION",
+                &format!(
+                    "Recovered orphan charging session {} ({:.3} kWh, {}) -> generated companion TXT",
+                    session_id,
+                    final_energy_kwh,
+                    format_duration(total_duration_secs)
+                ),
+            );
+            recovered_count += 1;
+        }
+    }
+
+    recovered_count
+}
+
 /// Lists all saved sessions from disk, optionally filtered by side.
 pub fn list_saved_sessions_filtered(side_filter: Option<u8>) -> Vec<SessionSummary> {
     let mut summaries = list_saved_sessions();
@@ -834,6 +1159,7 @@ pub fn list_saved_sessions_filtered(side_filter: Option<u8>) -> Vec<SessionSumma
 
 /// Lists all saved sessions from disk, sorted in reverse chronological order (newest first).
 pub fn list_saved_sessions() -> Vec<SessionSummary> {
+    let _ = reconcile_orphan_sessions();
     let sessions_dir = get_sessions_dir();
     let mut summaries = Vec::new();
 
@@ -1407,6 +1733,134 @@ mod tests {
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].plug_type, "Schuko");
         assert_eq!(sessions[0].phase, "1-phase");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_reconcile_orphan_empty_or_negligible_session_is_deleted() {
+        let dir = setup_test_dir();
+
+        // 1. Empty CSV
+        let empty_csv = dir.join("session_side1_2026-11-05_10-00-00.csv");
+        fs::write(&empty_csv, "timestamp,elapsed_s,state,current_a,limit_a,voltage_v,power_w,energy_kwh\n").unwrap();
+        assert!(empty_csv.exists());
+
+        // 2. Negligible CSV (< 0.02 kWh and < 15s)
+        let negligible_csv = dir.join("session_side1_2026-11-05_10-05-00.csv");
+        let neg_content = "timestamp,elapsed_s,state,current_a,limit_a,voltage_v,power_w,energy_kwh\n\
+                           2026-11-05T10:05:00+01:00,0,B,0.00,16,230.0,0,0.000\n\
+                           2026-11-05T10:05:05+01:00,5,C,0.00,16,230.0,0,0.000\n";
+        fs::write(&negligible_csv, neg_content).unwrap();
+        assert!(negligible_csv.exists());
+
+        let count = reconcile_orphan_sessions();
+        assert_eq!(count, 0);
+
+        // Both negligible orphan CSVs must be removed, and no TXT generated
+        assert!(!empty_csv.exists());
+        assert!(!negligible_csv.exists());
+        assert!(!dir.join("session_side1_2026-11-05_10-00-00.txt").exists());
+        assert!(!dir.join("session_side1_2026-11-05_10-05-00.txt").exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_reconcile_orphan_valid_session_generates_txt_and_allows_delete() {
+        let dir = setup_test_dir();
+
+        let csv_path = dir.join("session_side1_2026-11-05_14-30-00.csv");
+        let txt_path = dir.join("session_side1_2026-11-05_14-30-00.txt");
+
+        let valid_csv_content = "\
+timestamp,elapsed_s,state,current_a,limit_a,voltage_v,power_w,energy_kwh\n\
+2026-11-05T14:30:00+01:00,0,B,0.00,16,230.0,0,0.000\n\
+2026-11-05T14:30:10+01:00,10,C,0.00,16,230.0,0,0.000\n\
+2026-11-05T14:30:20+01:00,20,D,15.80,16,230.0,3634,0.010\n\
+2026-11-05T14:31:00+01:00,60,D,15.80,16,230.0,3634,0.050\n\
+2026-11-05T14:32:00+01:00,120,D,15.80,16,230.0,3634,0.111\n";
+
+        fs::write(&csv_path, valid_csv_content).unwrap();
+        assert!(csv_path.exists());
+        assert!(!txt_path.exists());
+
+        // Reconcile
+        let recovered = reconcile_orphan_sessions();
+        assert_eq!(recovered, 1);
+
+        assert!(csv_path.exists());
+        assert!(txt_path.exists());
+
+        // Now list_saved_sessions must report it
+        let list = list_saved_sessions();
+        assert_eq!(list.len(), 1);
+        let s = &list[0];
+        assert_eq!(s.id, "session_side1_2026-11-05_14-30-00");
+        assert_eq!(s.side, 1);
+        assert_eq!(s.total_duration_seconds, 120);
+        assert!(s.total_energy_kwh >= 0.110);
+        assert_eq!(s.plug_type, "Type 2");
+        assert!(s.termination_reason.contains("interrupted"));
+
+        // Now test delete_session on the recovered session
+        let del_res = delete_session("session_side1_2026-11-05_14-30-00");
+        assert_eq!(del_res, Ok(true));
+        assert!(!csv_path.exists());
+        assert!(!txt_path.exists());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_reconcile_orphan_skips_active_session() {
+        let dir = setup_test_dir();
+        let mut tel = Telemetry::default();
+        tel.greenup_state = "B".into();
+
+        start_session("B", &tel);
+        assert!(is_active());
+
+        // Active session CSV exists without TXT
+        let active_id = get_active_session_id().unwrap();
+        let active_csv = dir.join(format!("{}.csv", active_id));
+        let active_txt = dir.join(format!("{}.txt", active_id));
+        assert!(active_csv.exists());
+        assert!(!active_txt.exists());
+
+        // Reconcile must skip the active session
+        let recovered = reconcile_orphan_sessions();
+        assert_eq!(recovered, 0);
+        assert!(active_csv.exists());
+        assert!(!active_txt.exists());
+
+        end_session("Test done", &tel);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_close_all_active_sessions_with_reason() {
+        let dir = setup_test_dir();
+        let mut tel = Telemetry::default();
+        tel.greenup_state = "B".into();
+        tel.voltage = 230.0;
+        tel.current = 16.0;
+
+        start_session("B", &tel);
+        assert!(is_active());
+
+        // Simulate some charge so it's not discarded
+        if let Some(ref mut session) = ACTIVE_SESSIONS.lock().unwrap()[0] {
+            session.active_charging_duration_secs_f64 = 60.0;
+            session.cumulative_energy_wh = 100.0;
+        }
+
+        close_all_active_sessions_with_reason("Service stopped (shutdown signal)", &tel);
+        assert!(!is_active());
+
+        let saved = list_saved_sessions();
+        assert_eq!(saved.len(), 1);
+        assert!(saved[0].termination_reason.contains("Service stopped"));
 
         let _ = fs::remove_dir_all(&dir);
     }
