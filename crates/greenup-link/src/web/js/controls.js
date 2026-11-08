@@ -68,6 +68,41 @@ function updateControlButtons(charge_authorized, charge_paused) {
     }
 }
 
+function updateAppliedLimitBadge(appliedAmps, setpointAmps) {
+    const box = document.getElementById('boxAppliedValue');
+    const lbl = document.getElementById('lblAppliedLimit');
+    if (!box || !lbl) return;
+
+    if (!window.isUsbConnected || appliedAmps == null) {
+        lbl.innerText = '--';
+        box.className = 'bg-slate-800/40 px-2.5 py-1 rounded border border-slate-700/50 transition-all duration-300';
+        lbl.className = 'font-bold text-slate-500 font-mono text-sm transition-colors';
+        return;
+    }
+
+    const applied = Number(appliedAmps);
+    const setpoint = Number(setpointAmps);
+    lbl.innerText = `${applied} A`;
+
+    const tooltipBase = (typeof t === 'function' ? t('controls.applied_limit_tooltip') : 'Consigne réellement appliquée par la borne (CC)') || 'Consigne réellement appliquée par la borne (CC)';
+    box.title = `${tooltipBase} : ${applied} A`;
+
+    if (applied === setpoint) {
+        // Identique -> Vert (Emerald)
+        box.className = 'bg-emerald-500/15 px-2.5 py-1 rounded border border-emerald-500/30 transition-all duration-300 cursor-help';
+        lbl.className = 'font-bold text-emerald-400 font-mono text-sm transition-colors';
+    } else if (applied < setpoint) {
+        // Plus basse -> Orange (Amber)
+        box.className = 'bg-amber-500/15 px-2.5 py-1 rounded border border-amber-500/30 transition-all duration-300 cursor-help';
+        lbl.className = 'font-bold text-amber-400 font-mono text-sm transition-colors';
+    } else {
+        // Plus haute -> Rouge (Rose)
+        box.className = 'bg-rose-500/15 px-2.5 py-1 rounded border border-rose-500/30 transition-all duration-300 cursor-help';
+        lbl.className = 'font-bold text-rose-400 font-mono text-sm transition-colors';
+    }
+}
+window.updateAppliedLimitBadge = updateAppliedLimitBadge;
+
 function updateControlsForMode(isSniffer) {
     const notice = typeof t === 'function' ? t('controls.local_mode_notice') : "Commandes verrouillées : mode Sniffer actif (écoute seule)";
     const sliderBox = document.getElementById('sliderBox');
@@ -139,6 +174,9 @@ slider.addEventListener('touchend', () => isDraggingSlider = false);
 
 slider.addEventListener('input', (e) => {
     lblSlider.innerText = e.target.value + " A";
+    if (window.lastAppliedLimitAmps != null) {
+        updateAppliedLimitBadge(window.lastAppliedLimitAmps, Number(e.target.value));
+    }
 });
 slider.addEventListener('change', (e) => {
     if (window.isSnifferMode) return;

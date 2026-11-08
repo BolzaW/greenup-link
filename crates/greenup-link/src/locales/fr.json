@@ -78,6 +78,8 @@
   "controls": {
     "charge_params": "Paramètres de charge",
     "current_limit": "Consigne de Courant",
+    "applied_limit_tooltip": "Consigne réellement appliquée par la borne (CC)",
+    "setpoint_limit_tooltip": "Consigne demandée par le superviseur (CCEl)",
     "enable": "ACTIVER",
     "disable": "DÉSACTIVER",
     "pause": "PAUSE",

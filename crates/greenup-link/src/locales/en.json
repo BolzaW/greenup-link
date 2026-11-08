@@ -78,6 +78,8 @@
   "controls": {
     "charge_params": "Charge parameters",
     "current_limit": "Current Setpoint",
+    "applied_limit_tooltip": "Current limit effectively applied by the station (CC)",
+    "setpoint_limit_tooltip": "Current setpoint requested by supervisor (CCEl)",
     "enable": "ENABLE",
     "disable": "DISABLE",
     "pause": "PAUSE",

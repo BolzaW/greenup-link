@@ -58,6 +58,7 @@ connectors_state = {
         "power": 3692.0,
         "energy": 14250.0,
         "eliot_limit_amps": 16,
+        "applied_limit_amps": 16,
         "error_code": "0000",
     },
     2: {
@@ -72,6 +73,7 @@ connectors_state = {
         "power": 0.0,
         "energy": 5120.0,
         "eliot_limit_amps": 32,
+        "applied_limit_amps": 32,
         "error_code": "0000",
     },
 }
@@ -232,7 +234,8 @@ def get_mock_connector(connector_id=1):
         },
         "control": {
             "setpoint_amps": c_state["eliot_limit_amps"],
-            "pilot_limit_amps": c_state["eliot_limit_amps"],
+            "applied_limit_amps": c_state.get("applied_limit_amps", c_state["eliot_limit_amps"]),
+            "pilot_limit_amps": c_state.get("applied_limit_amps", c_state["eliot_limit_amps"]),
             "min_allowed_amps": 7,
             "max_hardware_amps": 32,
             "charge_authorized": c_state["charge_authorized"] and not c_state["charge_paused"],
@@ -679,6 +682,17 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
             state["serial"]["sniffer_mode"] = state["sniffer_mode"]
             add_mock_log("SYS", "INFO", f"🔀 Sniffer mode set via URL: {state['sniffer_mode']}")
 
+        # Applied CC limit override via URL (?cc=16, ?applied_limit=10)
+        if "cc" in qs or "applied_limit" in qs:
+            try:
+                val = int((qs.get("cc") or qs.get("applied_limit"))[0])
+                target_side = self.get_target_side()
+                c = connectors_state.get(target_side, connectors_state[1])
+                c["applied_limit_amps"] = val
+                add_mock_log("SYS", "INFO", f"🔀 Applied limit CC set to {val}A (Point {target_side}) via URL")
+            except ValueError:
+                pass
+
         # Full auth check if kiosk_mode=false
         if mock_config["auth_required"] and not mock_config["kiosk_mode"]:
             is_public = url in ("/", "/favicon.ico", "/css/style.css", "/api/auth/status") or url.startswith(("/js/", "/locales/"))
@@ -957,11 +971,20 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 target_side = self.get_target_side()
                 c = connectors_state.get(target_side, connectors_state[1])
                 c["eliot_limit_amps"] = amps
-                c["current"] = float(amps) if c["charge_authorized"] and not c["charge_paused"] else 0.0
+                if c.get("greenup_state") == "A":
+                    c["applied_limit_amps"] = amps
+                    add_mock_log("API", "INFO", f"⚡ Setpoint changed in State A: {amps}A (synchronizing CCEl:{amps:02d} and CC:{amps:02d})")
+                    add_mock_log("SERIAL_TX", "INFO", f"CCEl:{amps:02d}")
+                    add_mock_log("SERIAL_RX", "INFO", f"CCEl:{amps:02d}:OK")
+                    add_mock_log("SERIAL_TX", "INFO", f"CC:{amps:02d}")
+                    add_mock_log("SERIAL_RX", "INFO", f"CC:{amps:02d}")
+                else:
+                    c["applied_limit_amps"] = amps
+                    add_mock_log("API", "INFO", f"⚡ Setpoint changed to: {amps}A (sending CCEl:{amps:02d})")
+                    add_mock_log("SERIAL_TX", "INFO", f"CCEl:{amps:02d}")
+                    add_mock_log("SERIAL_RX", "INFO", f"CCEl:{amps:02d}:OK")
+                c["current"] = float(amps) if c["charge_authorized"] and not c["charge_paused"] and c.get("greenup_state") in ("D", "E", "G", "H") else 0.0
                 c["power"] = c["voltage"] * c["current"]
-                add_mock_log("API", "INFO", f"⚡ Setpoint changed to: {amps}A (Point {target_side})")
-                add_mock_log("SERIAL_TX", "INFO", f"FM1:{amps}")
-                add_mock_log("SERIAL_RX", "INFO", f"FM1:{amps}:OK")
                 self.send_json({"status": "success", "message": f"Current limit set to {amps}A"})
             except ValueError:
                 self.send_error(400, "Invalid amps value")

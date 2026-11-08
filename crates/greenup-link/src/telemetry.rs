@@ -236,6 +236,7 @@ pub struct ConnectorStatus {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ConnectorControl {
     pub setpoint_amps: u32,
+    pub applied_limit_amps: u32,
     pub pilot_limit_amps: u32,
     pub min_allowed_amps: u32,
     pub max_hardware_amps: u32,
@@ -386,6 +387,7 @@ impl Telemetry {
 
         let control = ConnectorControl {
             setpoint_amps: setpoint,
+            applied_limit_amps: self.limit_amps,
             pilot_limit_amps: self.limit_amps,
             min_allowed_amps: 7,
             max_hardware_amps: max_hardware,

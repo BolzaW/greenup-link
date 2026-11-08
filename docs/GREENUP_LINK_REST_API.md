@@ -133,10 +133,12 @@ Three standard authentication methods are supported simultaneously against the s
           "error_description": "No error"
         },
         "control": {
+          "setpoint_amps": 16,
+          "applied_limit_amps": 16,
+          "pilot_limit_amps": 16,
+          "min_allowed_amps": 7,
+          "max_hardware_amps": 32,
           "charge_authorized": true,
-          "charge_paused": false,
-          "limit_amps": 16,
-          "eliot_limit_amps": 16,
           "pilot_voltage": 6
         },
         "meter": {
@@ -279,8 +281,8 @@ Three standard authentication methods are supported simultaneously against the s
 - **URL**: `/api/current/:amps`
 - **Method**: `POST`
 - **URL Parameter**: `:amps` (integer between **7** and **32**).
-- **Description**: Sets the current limit target (sends `CCEl:XX`, always 2-digit formatted).
-- **Security**: The API rejects any value outside `[7, 32]` with a `400` error. While the ATmega board can technically accept values above 32A, they have not been tested in real conditions to avoid hardware risks. Using `CCEl` (Eliot limit) instead of directly forcing `CC` is a deliberate choice: it allows the ATmega to keep its internal safeguards active, computing the final safe limit (`CC`) based on other hardware factors. Finally, note that below 6A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8A.
+- **Description**: Sets the current limit target. When the station is in `State:A` (vehicle unplugged), Green'Up Link sends both `CCEl:XX` and `CC:XX` to keep the ATmega limits synchronized while idle. In all other operating states (`B`, `C`, etc.), only `CCEl:XX` is sent, allowing the ATmega to dynamically consolidate internal hardware limits (`CC = min(DIP, CCCa, CCEl, CCTIC)`).
+- **Security**: The API rejects any value outside `[7, 32]` with a `400` error. While the ATmega board can technically accept values above 32A, they have not been tested in real conditions to avoid hardware risks. Using `CCEl` (Eliot limit) instead of directly forcing `CC` in active states is a deliberate safety choice: it allows the ATmega to keep its internal safeguards active, computing the final safe limit (`CC`) based on other hardware factors. Finally, note that below 6A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8A.
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Current limit set to 16A" }

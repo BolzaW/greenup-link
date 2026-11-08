@@ -459,9 +459,9 @@ async fn set_current(
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
-    let cmd = match u8::try_from(amps).ok().map(Command::set_current_limit) {
-        Some(Ok(cmd)) => cmd,
-        _ => {
+    let validated_amps = match u8::try_from(amps).ok().and_then(|a| Command::set_current_limit(a).ok().map(|_| a)) {
+        Some(a) => a,
+        None => {
             logger::log("API", &format!("⛔ Rejecting out of bounds current: {}A", amps));
             return (
                 StatusCode::BAD_REQUEST,
@@ -473,21 +473,55 @@ async fn set_current(
         }
     };
 
-    logger::log("API", &format!("⚡ Current limit modification → {}A", amps));
-    
-    if state.serial_tx.send(cmd).await.is_ok() {
-        (
-            StatusCode::OK,
-            Json(json!({
-                "status": "success", 
-                "message": format!("Current limit set to {}A", amps)
-            })),
-        )
+    state.sync_from_driver();
+    let current_greenup_state = state
+        .telemetry
+        .lock()
+        .map(|t| t.greenup_state.clone())
+        .unwrap_or_else(|_| "Unknown".to_string());
+
+    if current_greenup_state == "A" {
+        logger::log(
+            "API",
+            &format!(
+                "⚡ Current limit modification in State A → {}A (synchronizing CCEl:{:02} and CC:{:02})",
+                amps, validated_amps, validated_amps
+            ),
+        );
+        let _ = state.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await;
+        if state.serial_tx.send(Command::SetDirectCurrentLimit(validated_amps)).await.is_ok() {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "status": "success",
+                    "message": format!("Current limit set to {}A (CCEl and CC synchronized in State A)", amps)
+                })),
+            )
+        } else {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Internal error: Failed to communicate with serial thread"})),
+            )
+        }
     } else {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": "Internal error: Failed to communicate with serial thread"})),
-        )
+        logger::log(
+            "API",
+            &format!("⚡ Current limit modification → {}A (sending CCEl:{:02})", amps, validated_amps),
+        );
+        if state.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await.is_ok() {
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "status": "success",
+                    "message": format!("Current limit set to {}A", amps)
+                })),
+            )
+        } else {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Internal error: Failed to communicate with serial thread"})),
+            )
+        }
     }
 }
 
@@ -1375,6 +1409,7 @@ mod tests {
         {
             let mut tel = point1.telemetry.lock().unwrap();
             tel.serial.status = SerialStatus::UsbConnected;
+            tel.greenup_state = "A".to_string();
         }
 
         // 2. Out of bounds current (< 7 or > 32) -> 400
@@ -1384,11 +1419,21 @@ mod tests {
         let res_high = set_current(State(station.clone()), axum::extract::Path(33), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_high.status(), StatusCode::BAD_REQUEST);
 
-        // 3. Valid current limit -> 200 OK
+        // 3. Valid current limit in State A -> 200 OK, sends SetCurrentLimit(24) AND SetDirectCurrentLimit(24)
         let res = set_current(State(station.clone()), axum::extract::Path(24), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
-        let cmd = rx.recv().await.unwrap();
-        assert_eq!(cmd, Command::SetCurrentLimit(24));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(24));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(24));
+
+        // 4. Valid current limit in State C -> sends ONLY SetCurrentLimit(16)
+        {
+            let mut tel = point1.telemetry.lock().unwrap();
+            tel.greenup_state = "C".to_string();
+        }
+        let res = set_current(State(station.clone()), axum::extract::Path(16), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(16));
+        assert!(rx.try_recv().is_err());
     }
 
     #[tokio::test]

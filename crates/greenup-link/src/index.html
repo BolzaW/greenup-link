@@ -641,8 +641,13 @@
                 <div id="sliderBox" class="bg-slate-950/50 p-4 rounded-xl border border-slate-800 transition-all duration-300">
                     <div class="flex justify-between items-end mb-4">
                         <label id="lblSliderTitle" class="text-xs font-bold text-slate-400 uppercase tracking-wide transition-colors" data-i18n="controls.current_limit">Consigne de Courant</label>
-                        <div id="boxSliderValue" class="bg-sky-500/10 px-3 py-1 rounded border border-sky-500/20 transition-all duration-300">
-                            <span id="lblSlider" class="font-bold text-sky-400 font-mono text-sm transition-colors">16 A</span>
+                        <div class="flex items-center gap-2">
+                            <div id="boxAppliedValue" class="bg-emerald-500/15 px-2.5 py-1 rounded border border-emerald-500/30 transition-all duration-300 cursor-help" title="Consigne réellement appliquée par la borne (CC)">
+                                <span id="lblAppliedLimit" class="font-bold text-emerald-400 font-mono text-sm transition-colors">16 A</span>
+                            </div>
+                            <div id="boxSliderValue" class="bg-sky-500/10 px-3 py-1 rounded border border-sky-500/20 transition-all duration-300">
+                                <span id="lblSlider" class="font-bold text-sky-400 font-mono text-sm transition-colors">16 A</span>
+                            </div>
                         </div>
                     </div>
                     <input type="range" id="currentSlider" min="7" max="32" step="1" value="16">
