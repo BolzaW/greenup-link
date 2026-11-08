@@ -435,6 +435,96 @@ else
     fi
 fi
 
+# Install reference template greenup.toml.example
+CONFIG_EXAMPLE="$TARGET_DIR/greenup.toml.example"
+cat << 'EOF' > "$CONFIG_EXAMPLE"
+# ==============================================================================
+# Green'Up Link - Configuration File (Template / Example)
+# ==============================================================================
+
+[http]
+# Network interface and port to listen on.
+# Default: "0.0.0.0:8080" (all network interfaces).
+bind = "0.0.0.0:8080"
+
+# Optional API token / password to protect the Web GUI and REST API.
+# - Leave empty ("") to disable authentication (open access on trusted LAN).
+# - Set a secret string to require authentication on all /api/* routes.
+#   Compatible with:
+#     * Bearer Token : Authorization: Bearer <api_token>  (EVCC, Home Assistant, Web GUI)
+#     * API Key      : X-API-Key: <api_token>
+#     * Basic Auth   : Authorization: Basic <base64(user:api_token)>  (curl -u :token)
+#
+# Note: When set, this token is also used as the default MQTT password under [mqtt]!
+api_token = ""
+
+# Kiosk mode (open consultation):
+# - false : (Default) Standard mode. Full authentication required on the Web GUI and all REST APIs (when api_token is set).
+# - true  : Kiosk mode. Read-only GET APIs and Web GUI consultation are accessible without authentication.
+#           Write/control actions (charge, current, commands, settings) remain protected by api_token.
+kiosk_mode = false
+
+[storage]
+# Directory where daily log files are stored.
+# Default: "logs" (or "/opt/greenup-link/logs" if running as system service)
+log_dir = "logs"
+
+# Directory where charging sessions (CSV data and summaries) are stored.
+# Default: "sessions" (or "/opt/greenup-link/sessions")
+sessions_dir = "sessions"
+
+[serial]
+# Dual charge point mode:
+# - "auto"  : Automatically detects 1 or 2 charge points based on the station hardware reference (Default)
+# - "true"  : Force 2 charge points mode
+# - "false" : Force 1 charge point mode
+dual_point = "auto"
+
+# Optional serial port(s) to bind.
+# If omitted or left empty / "auto", Green'Up Link automatically discovers available USB serial ports.
+# port = "/dev/ttyUSB0"
+# port2 = "/dev/ttyUSB1"
+
+# Baud rate for communication with the ATmega2560 board.
+# Default: 115200
+baud_rate = 115200
+
+# Silence timeout before alerting on loss of communication (seconds).
+# Default: 60
+watchdog_timeout_secs = 60
+
+[station]
+# Sniffer mode (passive UART listener):
+# - false : (Default) Active supervision — manages charging and communicates with the ATmega board.
+# - true  : Sniffer mode — passive RX-only monitoring, zero TX commands are ever sent to the ATmega.
+sniffer_mode = false
+
+[mqtt]
+# Enable or disable the MQTT client:
+# - false : (Default) MQTT client is not started.
+# - true  : Green'up Link connects to the MQTT broker, publishes telemetry, and listens for commands.
+enabled = false
+
+# MQTT broker host and port (e.g. Mosquitto, Home Assistant broker).
+# Default: "127.0.0.1:1883"
+broker = "127.0.0.1:1883"
+
+# Optional MQTT username.
+# When set (or when api_token is configured under [http]), greenup-link authenticates
+# using `username` (defaults to "greenup-link" if empty) and `http.api_token` as password.
+username = ""
+
+# Base MQTT topic prefix.
+# Default: "greenup"
+base_topic = "greenup"
+
+# Publish Home Assistant MQTT Auto-Discovery payloads (`homeassistant/.../config`).
+# Default: true
+ha_discovery = true
+EOF
+chmod 644 "$CONFIG_EXAMPLE"
+echo "  -> Installed reference template at $CONFIG_EXAMPLE"
+
 if [ ! -f "$CONFIG_FILE" ]; then
     cat << EOF > "$CONFIG_FILE"
 # ==============================================================================
@@ -453,7 +543,73 @@ bind = "0.0.0.0:8080"
 #     * Bearer Token : Authorization: Bearer <api_token>  (EVCC, Home Assistant, Web GUI)
 #     * API Key      : X-API-Key: <api_token>
 #     * Basic Auth   : Authorization: Basic <base64(user:api_token)>  (curl -u :token)
+#
+# Note: When set, this token is also used as the default MQTT password under [mqtt]!
 api_token = "$TOKEN_SET"
+
+# Kiosk mode (open consultation):
+# - false : (Default) Standard mode. Full authentication required on the Web GUI and all REST APIs (when api_token is set).
+# - true  : Kiosk mode. Read-only GET APIs and Web GUI consultation are accessible without authentication.
+#           Write/control actions (charge, current, commands, settings) remain protected by api_token.
+kiosk_mode = false
+
+[storage]
+# Directory where daily log files are stored.
+# Default: "logs" (or "/opt/greenup-link/logs" if running as system service)
+log_dir = "logs"
+
+# Directory where charging sessions (CSV data and summaries) are stored.
+# Default: "sessions" (or "/opt/greenup-link/sessions")
+sessions_dir = "sessions"
+
+[serial]
+# Dual charge point mode:
+# - "auto"  : Automatically detects 1 or 2 charge points based on the station hardware reference (Default)
+# - "true"  : Force 2 charge points mode
+# - "false" : Force 1 charge point mode
+dual_point = "auto"
+
+# Optional serial port(s) to bind.
+# If omitted or left empty / "auto", Green'Up Link automatically discovers available USB serial ports.
+# port = "/dev/ttyUSB0"
+# port2 = "/dev/ttyUSB1"
+
+# Baud rate for communication with the ATmega2560 board.
+# Default: 115200
+baud_rate = 115200
+
+# Silence timeout before alerting on loss of communication (seconds).
+# Default: 60
+watchdog_timeout_secs = 60
+
+[station]
+# Sniffer mode (passive UART listener):
+# - false : (Default) Active supervision — manages charging and communicates with the ATmega board.
+# - true  : Sniffer mode — passive RX-only monitoring, zero TX commands are ever sent to the ATmega.
+sniffer_mode = false
+
+[mqtt]
+# Enable or disable the MQTT client:
+# - false : (Default) MQTT client is not started.
+# - true  : Green'up Link connects to the MQTT broker, publishes telemetry, and listens for commands.
+enabled = false
+
+# MQTT broker host and port (e.g. Mosquitto, Home Assistant broker).
+# Default: "127.0.0.1:1883"
+broker = "127.0.0.1:1883"
+
+# Optional MQTT username.
+# When set (or when api_token is configured under [http]), greenup-link authenticates
+# using `username` (defaults to "greenup-link" if empty) and `http.api_token` as password.
+username = ""
+
+# Base MQTT topic prefix.
+# Default: "greenup"
+base_topic = "greenup"
+
+# Publish Home Assistant MQTT Auto-Discovery payloads (`homeassistant/.../config`).
+# Default: true
+ha_discovery = true
 EOF
     echo "  -> Created configuration file at $CONFIG_FILE"
 elif [ "$DO_SET_TOKEN" = true ]; then
