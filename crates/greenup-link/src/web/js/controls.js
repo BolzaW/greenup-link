@@ -87,18 +87,16 @@ function updateAppliedLimitBadge(appliedAmps, setpointAmps) {
     const tooltipBase = (typeof t === 'function' ? t('controls.applied_limit_tooltip') : 'Consigne réellement appliquée par la borne (CC)') || 'Consigne réellement appliquée par la borne (CC)';
     box.title = `${tooltipBase} : ${applied} A`;
 
+    box.classList.remove('state-equal', 'state-lower', 'state-higher');
     if (applied === setpoint) {
         // Identique -> Vert (Emerald)
-        box.className = 'bg-emerald-500/15 px-2.5 py-1 rounded border border-emerald-500/30 transition-all duration-300 cursor-help';
-        lbl.className = 'font-bold text-emerald-400 font-mono text-sm transition-colors';
+        box.classList.add('state-equal');
     } else if (applied < setpoint) {
         // Plus basse -> Orange (Amber)
-        box.className = 'bg-amber-500/15 px-2.5 py-1 rounded border border-amber-500/30 transition-all duration-300 cursor-help';
-        lbl.className = 'font-bold text-amber-400 font-mono text-sm transition-colors';
+        box.classList.add('state-lower');
     } else {
         // Plus haute -> Rouge (Rose)
-        box.className = 'bg-rose-500/15 px-2.5 py-1 rounded border border-rose-500/30 transition-all duration-300 cursor-help';
-        lbl.className = 'font-bold text-rose-400 font-mono text-sm transition-colors';
+        box.classList.add('state-higher');
     }
 }
 window.updateAppliedLimitBadge = updateAppliedLimitBadge;
@@ -108,6 +106,8 @@ function updateControlsForMode(isSniffer) {
     const sliderBox = document.getElementById('sliderBox');
     const boxSliderValue = document.getElementById('boxSliderValue');
     const lblSlider = document.getElementById('lblSlider');
+    const boxAppliedValue = document.getElementById('boxAppliedValue');
+    const lblAppliedLimit = document.getElementById('lblAppliedLimit');
     const btnInit = document.getElementById('btnSerialInit');
     const btnReset = document.getElementById('btnSerialReset');
     const btToggle = document.getElementById('btToggle');
@@ -118,6 +118,8 @@ function updateControlsForMode(isSniffer) {
         if (sliderBox) sliderBox.classList.add('slider-disabled');
         if (boxSliderValue) boxSliderValue.classList.add('slider-disabled');
         if (lblSlider) lblSlider.classList.add('slider-disabled');
+        if (boxAppliedValue) boxAppliedValue.classList.add('slider-disabled');
+        if (lblAppliedLimit) lblAppliedLimit.classList.add('slider-disabled');
         if (btnEnableDisable) {
             btnEnableDisable.disabled = true;
             btnEnableDisable.title = notice;
@@ -138,6 +140,8 @@ function updateControlsForMode(isSniffer) {
         if (sliderBox) sliderBox.classList.remove('slider-disabled');
         if (boxSliderValue) boxSliderValue.classList.remove('slider-disabled');
         if (lblSlider) lblSlider.classList.remove('slider-disabled');
+        if (boxAppliedValue) boxAppliedValue.classList.remove('slider-disabled');
+        if (lblAppliedLimit) lblAppliedLimit.classList.remove('slider-disabled');
         if (btnEnableDisable && window.isUsbConnected) {
             btnEnableDisable.disabled = false;
             btnEnableDisable.removeAttribute('title');

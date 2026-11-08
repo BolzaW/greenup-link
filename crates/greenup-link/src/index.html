@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Green'Up Link</title>
-    <link rel="icon" href="/favicon.ico?v=5">
-    <link rel="stylesheet" href="/css/style.css?v=5">
+    <link rel="icon" href="/favicon.ico?v=6">
+    <link rel="stylesheet" href="/css/style.css?v=6">
 </head>
 <body class="min-h-screen flex flex-col p-4 md:p-8 selection:bg-sky-500/30">
 
@@ -642,11 +642,11 @@
                     <div class="flex justify-between items-end mb-4">
                         <label id="lblSliderTitle" class="text-xs font-bold text-slate-400 uppercase tracking-wide transition-colors" data-i18n="controls.current_limit">Consigne de Courant</label>
                         <div class="flex items-center gap-2">
-                            <div id="boxAppliedValue" class="bg-emerald-500/15 px-2.5 py-1 rounded border border-emerald-500/30 transition-all duration-300 cursor-help" title="Consigne réellement appliquée par la borne (CC)">
-                                <span id="lblAppliedLimit" class="font-bold text-emerald-400 font-mono text-sm transition-colors">16 A</span>
+                            <div id="boxAppliedValue" class="limit-badge-applied state-equal" title="Consigne réellement appliquée par la borne (CC)" data-i18n-title="controls.applied_limit_tooltip">
+                                <span id="lblAppliedLimit">16 A</span>
                             </div>
-                            <div id="boxSliderValue" class="bg-sky-500/10 px-3 py-1 rounded border border-sky-500/20 transition-all duration-300">
-                                <span id="lblSlider" class="font-bold text-sky-400 font-mono text-sm transition-colors">16 A</span>
+                            <div id="boxSliderValue" class="limit-badge-slider">
+                                <span id="lblSlider">16 A</span>
                             </div>
                         </div>
                     </div>
