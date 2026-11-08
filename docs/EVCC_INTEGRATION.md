@@ -219,13 +219,13 @@ loadpoints:
   - title: Garage Point 1 (Right)
     charger: greenup_point1
     mode: pv
-    mincurrent: 6
+    mincurrent: 7   # Legrand Green'up hardware minimum (7A)
     maxcurrent: 32
 
   - title: Garage Point 2 (Left)
     charger: greenup_point2
     mode: pv
-    mincurrent: 6
+    mincurrent: 7   # Legrand Green'up hardware minimum (7A)
     maxcurrent: 32
 ```
 
@@ -356,7 +356,7 @@ loadpoints:
   - title: Garage
     charger: greenup
     mode: pv        # 'pv' (solar / smart price), 'now' (fast charge), or 'minpv'
-    mincurrent: 6   # Minimum 6A (IEC standard)
+    mincurrent: 7   # Minimum 7A for Legrand Green'up (hardware threshold)
     maxcurrent: 32  # Maximum 32A (7.4 kW monophase / 22 kW triphase)
 
 site:
