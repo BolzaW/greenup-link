@@ -235,7 +235,6 @@ def get_mock_connector(connector_id=1):
         "control": {
             "setpoint_amps": c_state["eliot_limit_amps"],
             "applied_limit_amps": c_state.get("applied_limit_amps", c_state["eliot_limit_amps"]),
-            "pilot_limit_amps": c_state.get("applied_limit_amps", c_state["eliot_limit_amps"]),
             "min_allowed_amps": 7,
             "max_hardware_amps": 32,
             "charge_authorized": c_state["charge_authorized"] and not c_state["charge_paused"],

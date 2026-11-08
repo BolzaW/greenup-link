@@ -772,7 +772,6 @@ mod tests {
         assert_eq!(snap.connectors[0].status.ocpp, OcppChargePointStatus::Available);
         assert_eq!(snap.connectors[0].control.setpoint_amps, 16);
         assert_eq!(snap.connectors[0].control.applied_limit_amps, 20);
-        assert_eq!(snap.connectors[0].control.pilot_limit_amps, 20);
     }
 
     #[tokio::test]

@@ -668,7 +668,7 @@ async function fetchTelemetry() {
 
         window.lastConnector = conn;
 
-        const appliedAmps = conn.control.applied_limit_amps ?? conn.control.pilot_limit_amps;
+        const appliedAmps = conn.control.applied_limit_amps ?? conn.control.setpoint_amps;
         const setpointAmps = conn.control.setpoint_amps;
         window.lastAppliedLimitAmps = appliedAmps;
         window.lastSetpointAmps = setpointAmps;

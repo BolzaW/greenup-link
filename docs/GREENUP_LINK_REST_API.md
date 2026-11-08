@@ -135,7 +135,6 @@ Three standard authentication methods are supported simultaneously against the s
         "control": {
           "setpoint_amps": 16,
           "applied_limit_amps": 16,
-          "pilot_limit_amps": 16,
           "min_allowed_amps": 7,
           "max_hardware_amps": 32,
           "charge_authorized": true,
