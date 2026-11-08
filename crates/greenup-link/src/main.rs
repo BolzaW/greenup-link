@@ -14,7 +14,6 @@ fn spawn_supervised_point(
     side: u8,
     sniffer_mode: bool,
     port_name: String,
-    baud_rate: u32,
     watchdog_timeout_secs: u64,
     link_version: &str,
 ) -> Arc<AppState> {
@@ -23,7 +22,7 @@ fn spawn_supervised_point(
         sniffer_mode,
         greenup_driver::SerialOptions {
             port: port_name,
-            baud_rate,
+            baud_rate: greenup_driver::ATMEGA_BAUD_RATE,
             timeout_ms: 100,
             watchdog_timeout_secs,
         },
@@ -111,7 +110,6 @@ async fn main() {
         1,
         app_config.station.sniffer_mode,
         port1_name,
-        app_config.serial.baud_rate,
         app_config.serial.watchdog_timeout_secs,
         pkg_version,
     );
@@ -129,7 +127,6 @@ async fn main() {
                 2,
                 app_config.station.sniffer_mode,
                 port2_candidate,
-                app_config.serial.baud_rate,
                 app_config.serial.watchdog_timeout_secs,
                 pkg_version,
             );
@@ -151,7 +148,6 @@ async fn main() {
             st.watch_auto_dual_port(
                 app_config.serial.port.clone(),
                 app_config.serial.port2.clone(),
-                app_config.serial.baud_rate,
                 app_config.serial.watchdog_timeout_secs,
                 pkg_version.to_string(),
             );

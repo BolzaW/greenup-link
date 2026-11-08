@@ -485,10 +485,6 @@ dual_point = "auto"
 # port = "/dev/ttyUSB0"
 # port2 = "/dev/ttyUSB1"
 
-# Baud rate for communication with the ATmega2560 board.
-# Default: 115200
-baud_rate = 115200
-
 # Silence timeout before alerting on loss of communication (seconds).
 # Default: 60
 watchdog_timeout_secs = 60
@@ -573,10 +569,6 @@ dual_point = "auto"
 # If omitted or left empty / "auto", Green'Up Link automatically discovers available USB serial ports.
 # port = "/dev/ttyUSB0"
 # port2 = "/dev/ttyUSB1"
-
-# Baud rate for communication with the ATmega2560 board.
-# Default: 115200
-baud_rate = 115200
 
 # Silence timeout before alerting on loss of communication (seconds).
 # Default: 60

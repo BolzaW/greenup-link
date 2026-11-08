@@ -550,7 +550,6 @@ impl StationManager {
         self: &Arc<Self>,
         configured_port1: Option<String>,
         configured_port2: Option<String>,
-        baud_rate: u32,
         watchdog_timeout_secs: u64,
         link_version: String,
     ) {
@@ -584,7 +583,7 @@ impl StationManager {
                                 sniffer_mode,
                                 SerialOptions {
                                     port: port2_target,
-                                    baud_rate,
+                                    baud_rate: greenup_driver::ATMEGA_BAUD_RATE,
                                     timeout_ms: 100,
                                     watchdog_timeout_secs,
                                 },

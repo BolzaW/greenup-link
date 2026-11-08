@@ -22,6 +22,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+/// Fixed hardware UART baud rate of the Legrand ATmega2560 power board (115200 bps, 8N1).
+pub const ATMEGA_BAUD_RATE: u32 = 115_200;
+
 #[derive(Clone, Debug)]
 pub struct SerialOptions {
     pub port: String,
@@ -34,7 +37,7 @@ impl Default for SerialOptions {
     fn default() -> Self {
         Self {
             port: "/dev/ttyUSB0".to_string(),
-            baud_rate: 115_200,
+            baud_rate: ATMEGA_BAUD_RATE,
             timeout_ms: 100,
             watchdog_timeout_secs: 60,
         }

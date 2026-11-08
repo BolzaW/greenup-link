@@ -50,10 +50,6 @@ dual_point = "auto"
 # port = "/dev/ttyUSB0"
 # port2 = "/dev/ttyUSB1"
 
-# Baud rate for communication with the ATmega2560 board.
-# Default: 115200
-baud_rate = 115200
-
 # Silence timeout before alerting on loss of communication (seconds).
 # Default: 60
 watchdog_timeout_secs = 60
@@ -149,7 +145,6 @@ pub struct SerialConfig {
     pub dual_point: DualPointMode,
     pub port: Option<String>,
     pub port2: Option<String>,
-    pub baud_rate: u32,
     pub watchdog_timeout_secs: u64,
 }
 
@@ -159,7 +154,6 @@ impl Default for SerialConfig {
             dual_point: DualPointMode::Auto,
             port: None,
             port2: None,
-            baud_rate: 115_200,
             watchdog_timeout_secs: 60,
         }
     }
@@ -337,11 +331,6 @@ impl AppConfig {
                                 config.serial.port2 = None;
                             } else {
                                 config.serial.port2 = Some(trimmed.to_string());
-                            }
-                        }
-                        "baud_rate" => {
-                            if let Ok(b) = val.parse::<u32>() {
-                                config.serial.baud_rate = b;
                             }
                         }
                         "watchdog_timeout_secs" => {
