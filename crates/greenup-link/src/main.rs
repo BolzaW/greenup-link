@@ -2,6 +2,7 @@ mod api;
 mod auth;
 mod config;
 pub mod hardware_specs;
+pub mod mqtt;
 pub mod session;
 pub mod station;
 pub mod telemetry;
@@ -157,6 +158,24 @@ async fn main() {
             st
         }
     };
+
+    // Start MQTT background client service if enabled in configuration
+    if app_config.mqtt.enabled {
+        greenup_driver::logger::log(
+            "SYS",
+            &format!(
+                "📡 MQTT client: ENABLED (broker: {}, base topic: '{}', HA discovery: {})",
+                app_config.mqtt.broker, app_config.mqtt.base_topic, app_config.mqtt.ha_discovery
+            ),
+        );
+        mqtt::spawn_mqtt_service(
+            station.clone(),
+            app_config.mqtt.clone(),
+            app_config.http.api_token.clone(),
+        );
+    } else {
+        greenup_driver::logger::log("SYS", "📡 MQTT client: DISABLED (enable in greenup.toml)");
+    }
 
     // Start the Axum HTTP server with graceful shutdown handling
     let router = api::build_router(station.clone(), app_config.http.clone());

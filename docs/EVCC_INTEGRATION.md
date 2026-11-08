@@ -186,7 +186,51 @@ loadpoints:
     maxcurrent: 32
 ```
 
-### 3.3 Full Minimal Example (Single Charger)
+### 3.3 MQTT-based Configuration (Recommended)
+
+When MQTT is enabled in Green'up Link (`[mqtt]` in `greenup.toml`), you can pilot your charger using native MQTT without running local shell `curl` commands:
+
+```yaml
+chargers:
+  - name: greenup_mqtt
+    type: custom
+
+    # 1. IEC Operating State (A, B, C, E, F)
+    status:
+      source: mqtt
+      topic: greenup/connector/1/status/state
+
+    # 2. Real-time Power (Watts)
+    power:
+      source: mqtt
+      topic: greenup/connector/1/meter/active_power_w
+
+    # 3. Total Energy (kWh)
+    energy:
+      source: mqtt
+      topic: greenup/connector/1/meter/energy_total_kwh
+
+    # 4. Charger Enable State
+    enabled:
+      source: mqtt
+      topic: greenup/connector/1/control/charge
+      jq: . == "ON"
+
+    # 5. Enable / Disable Command
+    enable:
+      source: mqtt
+      topic: greenup/connector/1/control/charge/set
+      payload: ${enable:ON:OFF}
+
+    # 6. Dynamic Current Regulation (Amperes)
+    maxcurrent:
+      source: mqtt
+      topic: greenup/connector/1/control/setpoint_amps/set
+```
+
+For full MQTT topic reference and Home Assistant discovery, see [GREENUP_LINK_MQTT.md](GREENUP_LINK_MQTT.md).
+
+### 3.4 Full Minimal Example (Single Charger)
 
 To make EVCC work, you must link the charger to a `loadpoint` and a `site`. Here is a complete minimal `evcc.yaml`:
 

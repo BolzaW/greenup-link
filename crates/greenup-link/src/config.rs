@@ -63,6 +63,28 @@ watchdog_timeout_secs = 60
 # - false : (Default) Active supervision — manages charging and communicates with the ATmega board.
 # - true  : Sniffer mode — passive RX-only monitoring, zero TX commands are ever sent to the ATmega.
 sniffer_mode = false
+
+[mqtt]
+# Enable or disable the MQTT client.
+# Default: false
+enabled = false
+
+# MQTT broker host and port (e.g. Mosquitto / Home Assistant broker).
+# Default: "127.0.0.1:1883"
+broker = "127.0.0.1:1883"
+
+# Optional MQTT username.
+# When set (or when api_token is configured under [http]), greenup-link authenticates
+# using `username` (defaults to "greenup-link" if empty) and `http.api_token` as password.
+username = ""
+
+# Base MQTT topic prefix.
+# Default: "greenup"
+base_topic = "greenup"
+
+# Publish Home Assistant MQTT Auto-Discovery payloads (`homeassistant/.../config`).
+# Default: true
+ha_discovery = true
 "#;
 
 #[derive(Debug, Clone)]
@@ -147,12 +169,34 @@ pub struct StationConfig {
     pub sniffer_mode: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct MqttConfig {
+    pub enabled: bool,
+    pub broker: String,
+    pub username: Option<String>,
+    pub base_topic: String,
+    pub ha_discovery: bool,
+}
+
+impl Default for MqttConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            broker: "127.0.0.1:1883".to_string(),
+            username: None,
+            base_topic: "greenup".to_string(),
+            ha_discovery: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct AppConfig {
     pub http: HttpConfig,
     pub storage: StorageConfig,
     pub serial: SerialConfig,
     pub station: StationConfig,
+    pub mqtt: MqttConfig,
 }
 
 impl AppConfig {
@@ -314,6 +358,44 @@ impl AppConfig {
                             _ => {}
                         }
                     }
+                } else if current_section == "mqtt" {
+                    match key.as_str() {
+                        "enabled" => {
+                            match val.trim().to_lowercase().as_str() {
+                                "true" | "1" | "yes" => config.mqtt.enabled = true,
+                                "false" | "0" | "no" => config.mqtt.enabled = false,
+                                _ => {}
+                            }
+                        }
+                        "broker" => {
+                            let trimmed = val.trim();
+                            if !trimmed.is_empty() {
+                                config.mqtt.broker = trimmed.to_string();
+                            }
+                        }
+                        "username" => {
+                            let trimmed = val.trim();
+                            if trimmed.is_empty() {
+                                config.mqtt.username = None;
+                            } else {
+                                config.mqtt.username = Some(trimmed.to_string());
+                            }
+                        }
+                        "base_topic" => {
+                            let trimmed = val.trim().trim_matches('/');
+                            if !trimmed.is_empty() {
+                                config.mqtt.base_topic = trimmed.to_string();
+                            }
+                        }
+                        "ha_discovery" => {
+                            match val.trim().to_lowercase().as_str() {
+                                "true" | "1" | "yes" => config.mqtt.ha_discovery = true,
+                                "false" | "0" | "no" => config.mqtt.ha_discovery = false,
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
         }
@@ -373,6 +455,29 @@ mod tests {
         assert!(!cfg.station.sniffer_mode, "Default sniffer_mode should be false");
         assert_eq!(cfg.storage.log_dir, "logs");
         assert_eq!(cfg.storage.sessions_dir, "sessions");
+        assert!(!cfg.mqtt.enabled, "Default mqtt.enabled should be false");
+        assert_eq!(cfg.mqtt.broker, "127.0.0.1:1883");
+        assert_eq!(cfg.mqtt.username, None);
+        assert_eq!(cfg.mqtt.base_topic, "greenup");
+        assert!(cfg.mqtt.ha_discovery, "Default mqtt.ha_discovery should be true");
+    }
+
+    #[test]
+    fn test_mqtt_config_parsing() {
+        let toml = r#"
+        [mqtt]
+        enabled = true
+        broker = "192.168.1.50:1883"
+        username = "my_mqtt_user"
+        base_topic = "home/evse"
+        ha_discovery = false
+        "#;
+        let cfg = AppConfig::parse_toml(toml);
+        assert!(cfg.mqtt.enabled);
+        assert_eq!(cfg.mqtt.broker, "192.168.1.50:1883");
+        assert_eq!(cfg.mqtt.username.as_deref(), Some("my_mqtt_user"));
+        assert_eq!(cfg.mqtt.base_topic, "home/evse");
+        assert!(!cfg.mqtt.ha_discovery);
     }
 
     #[test]
