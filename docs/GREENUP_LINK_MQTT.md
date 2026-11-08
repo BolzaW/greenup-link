@@ -35,15 +35,9 @@ kiosk_mode = false
 # - true  : Green'up Link connects to the MQTT broker, publishes telemetry, and listens for commands.
 enabled = true
 
-# MQTT broker host (IP address or hostname, e.g. Mosquitto, Home Assistant).
-# Default: "127.0.0.1"
-host = "192.168.1.100"
-
-# MQTT broker TCP port.
-# Default: 1883
-port = 1883
-
-# (Optional: `broker = "host:port"` is also supported for convenience)
+# MQTT broker host and port (e.g. Mosquitto / Home Assistant broker).
+# Default: "127.0.0.1:1883"
+broker = "192.168.1.100:1883"
 
 # Optional MQTT username.
 # When api_token is set under [http], greenup-link authenticates

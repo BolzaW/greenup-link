@@ -164,8 +164,8 @@ async fn main() {
         greenup_driver::logger::log(
             "SYS",
             &format!(
-                "📡 MQTT client: ENABLED (broker: {}:{}, base topic: '{}', HA discovery: {})",
-                app_config.mqtt.host, app_config.mqtt.port, app_config.mqtt.base_topic, app_config.mqtt.ha_discovery
+                "📡 MQTT client: ENABLED (broker: {}, base topic: '{}', HA discovery: {})",
+                app_config.mqtt.broker, app_config.mqtt.base_topic, app_config.mqtt.ha_discovery
             ),
         );
         mqtt::spawn_mqtt_service(

@@ -67,16 +67,12 @@ sniffer_mode = false
 [mqtt]
 # Enable or disable the MQTT client:
 # - false : (Default) MQTT client is not started.
-# - true  : Green'up Link connects to the MQTT broker, publishes telemetry and listens for commands.
+# - true  : Green'up Link connects to the MQTT broker, publishes telemetry, and listens for commands.
 enabled = false
 
-# MQTT broker host (IP address or hostname, e.g. Mosquitto, Home Assistant).
-# Default: "127.0.0.1"
-host = "127.0.0.1"
-
-# MQTT broker TCP port.
-# Default: 1883
-port = 1883
+# MQTT broker host and port (e.g. Mosquitto, Home Assistant broker).
+# Default: "127.0.0.1:1883"
+broker = "127.0.0.1:1883"
 
 # Optional MQTT username.
 # When set (or when api_token is configured under [http]), greenup-link authenticates
@@ -177,8 +173,7 @@ pub struct StationConfig {
 #[derive(Debug, Clone)]
 pub struct MqttConfig {
     pub enabled: bool,
-    pub host: String,
-    pub port: u16,
+    pub broker: String,
     pub username: Option<String>,
     pub base_topic: String,
     pub ha_discovery: bool,
@@ -188,8 +183,7 @@ impl Default for MqttConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            host: "127.0.0.1".to_string(),
-            port: 1883,
+            broker: "127.0.0.1:1883".to_string(),
             username: None,
             base_topic: "greenup".to_string(),
             ha_discovery: true,
@@ -374,35 +368,10 @@ impl AppConfig {
                                 _ => {}
                             }
                         }
-                        "host" => {
-                            let trimmed = val.trim();
-                            if !trimmed.is_empty() {
-                                if let Some((h, p)) = trimmed.split_once(':') {
-                                    config.mqtt.host = h.trim().to_string();
-                                    if let Ok(parsed_port) = p.trim().parse::<u16>() {
-                                        config.mqtt.port = parsed_port;
-                                    }
-                                } else {
-                                    config.mqtt.host = trimmed.to_string();
-                                }
-                            }
-                        }
-                        "port" => {
-                            if let Ok(p) = val.trim().parse::<u16>() {
-                                config.mqtt.port = p;
-                            }
-                        }
                         "broker" => {
                             let trimmed = val.trim();
                             if !trimmed.is_empty() {
-                                if let Some((h, p)) = trimmed.split_once(':') {
-                                    config.mqtt.host = h.trim().to_string();
-                                    if let Ok(parsed_port) = p.trim().parse::<u16>() {
-                                        config.mqtt.port = parsed_port;
-                                    }
-                                } else {
-                                    config.mqtt.host = trimmed.to_string();
-                                }
+                                config.mqtt.broker = trimmed.to_string();
                             }
                         }
                         "username" => {
@@ -488,8 +457,7 @@ mod tests {
         assert_eq!(cfg.storage.log_dir, "logs");
         assert_eq!(cfg.storage.sessions_dir, "sessions");
         assert!(!cfg.mqtt.enabled, "Default mqtt.enabled should be false");
-        assert_eq!(cfg.mqtt.host, "127.0.0.1");
-        assert_eq!(cfg.mqtt.port, 1883);
+        assert_eq!(cfg.mqtt.broker, "127.0.0.1:1883");
         assert_eq!(cfg.mqtt.username, None);
         assert_eq!(cfg.mqtt.base_topic, "greenup");
         assert!(cfg.mqtt.ha_discovery, "Default mqtt.ha_discovery should be true");
@@ -500,30 +468,17 @@ mod tests {
         let toml = r#"
         [mqtt]
         enabled = true
-        host = "192.168.1.50"
-        port = 1884
+        broker = "192.168.1.50:1883"
         username = "my_mqtt_user"
         base_topic = "home/evse"
         ha_discovery = false
         "#;
         let cfg = AppConfig::parse_toml(toml);
         assert!(cfg.mqtt.enabled);
-        assert_eq!(cfg.mqtt.host, "192.168.1.50");
-        assert_eq!(cfg.mqtt.port, 1884);
+        assert_eq!(cfg.mqtt.broker, "192.168.1.50:1883");
         assert_eq!(cfg.mqtt.username.as_deref(), Some("my_mqtt_user"));
         assert_eq!(cfg.mqtt.base_topic, "home/evse");
         assert!(!cfg.mqtt.ha_discovery);
-
-        // Also test legacy/convenience "broker = host:port" format
-        let toml_broker = r#"
-        [mqtt]
-        enabled = 1
-        broker = "10.0.0.5:1885"
-        "#;
-        let cfg_broker = AppConfig::parse_toml(toml_broker);
-        assert!(cfg_broker.mqtt.enabled);
-        assert_eq!(cfg_broker.mqtt.host, "10.0.0.5");
-        assert_eq!(cfg_broker.mqtt.port, 1885);
     }
 
     #[test]

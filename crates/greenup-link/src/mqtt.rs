@@ -912,8 +912,7 @@ async fn run_mqtt_loop(
     config: MqttConfig,
     api_token: Option<String>,
 ) {
-    let host = config.host.clone();
-    let port = config.port;
+    let (host, port) = parse_broker_address(&config.broker);
     let base_topic = config.base_topic.trim_matches('/').to_string();
     let credentials = resolve_credentials(config.username.as_deref(), api_token.as_deref());
 
