@@ -81,6 +81,7 @@ state = connectors_state[1]
 state["serial"] = {
     "status": "usb_connected",
     "port": "/dev/ttyUSB0",
+    "sniffer_mode": False,
     "message": "USB serial link active - Station connected",
     "last_rx_secs_ago": 0,
 }
@@ -168,6 +169,7 @@ add_mock_log("SYS", "ERROR", "❌ Simulated minor error check (mock error)")
 def get_mock_station():
     is_dual = mock_config["dual"]
     has_tic = mock_config["has_tic"]
+    state["serial"]["sniffer_mode"] = state.get("sniffer_mode", False)
     return {
         "vendor": "Legrand",
         "model": "059002" if is_dual else "059001",
@@ -176,7 +178,6 @@ def get_mock_station():
         "firmware_version": "17.77",
         "production_date": "12/20",
         "link_version": "0.5.0-mock",
-        "sniffer_mode": state.get("sniffer_mode", False),
         "serial_connection": state["serial"],
         "is_dual": is_dual,
         "available_connectors": [1, 2] if is_dual else [1],
@@ -675,6 +676,7 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         if "sniffer" in qs or "sniffer_mode" in qs:
             val = (qs.get("sniffer") or qs.get("sniffer_mode"))[0].lower()
             state["sniffer_mode"] = val in ("1", "true", "yes")
+            state["serial"]["sniffer_mode"] = state["sniffer_mode"]
             add_mock_log("SYS", "INFO", f"🔀 Sniffer mode set via URL: {state['sniffer_mode']}")
 
         # Full auth check if kiosk_mode=false
@@ -1259,6 +1261,7 @@ def main():
     mock_config["dual"] = args.dual
     mock_config["has_tic"] = not args.no_tic
     state["sniffer_mode"] = args.sniffer_mode
+    state["serial"]["sniffer_mode"] = args.sniffer_mode
 
     # Apply initial state
     apply_state(args.state, 1)

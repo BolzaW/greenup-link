@@ -85,7 +85,7 @@ impl AppState {
 
         let mut tel = Telemetry::default();
         tel.side = side;
-        tel.sniffer_mode = sniffer_mode;
+        tel.serial.sniffer_mode = sniffer_mode;
 
         let mut info = BoardInfo::default();
         info.side = Some(side);
@@ -191,7 +191,7 @@ impl AppState {
             {
                 let mut tel = self.telemetry.lock().unwrap_or_else(|e| e.into_inner());
                 tel.side = side;
-                tel.sniffer_mode = usb.sniffer_mode;
+                tel.serial.sniffer_mode = usb.sniffer_mode;
                 self.sniffer_mode.store(usb.sniffer_mode, Ordering::Relaxed);
 
                 let prev_usb_status = tel.serial.status.clone();
@@ -718,7 +718,6 @@ impl StationManager {
             hardware_version: p1_info.hardware_version.clone(),
             firmware_version: p1_info.software_version.clone(),
             link_version: p1_info.link_version.clone(),
-            sniffer_mode: self.point1.sniffer_mode(),
             serial_connection: p1_tel.serial.clone(),
             is_dual,
             available_connectors,

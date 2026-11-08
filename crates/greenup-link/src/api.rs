@@ -1253,7 +1253,7 @@ mod tests {
         let station = Arc::new(StationManager::new(point1.clone(), None));
 
         assert!(point1.sniffer_mode());
-        assert!(station.snapshot().station.sniffer_mode);
+        assert!(station.snapshot().station.serial_connection.sniffer_mode);
 
         // In Sniffer mode, all TX command APIs must return 403 Forbidden
         let res_charge = set_charge_state(

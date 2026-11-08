@@ -506,6 +506,13 @@ async function fetchInfo() {
             applyTicCapabilities(window.stationHasTic);
         }
 
+        if (station.serial_connection && station.serial_connection.sniffer_mode !== undefined) {
+            window.isSnifferMode = !!station.serial_connection.sniffer_mode;
+            if (typeof updateSystemModesUi === 'function') {
+                updateSystemModesUi(window.isSnifferMode, window.isKioskMode);
+            }
+        }
+
         window.boardInfoComplete = !!(modelRef && swVer && station.serial_number);
 
     } catch (err) {
@@ -678,7 +685,7 @@ async function fetchTelemetry() {
             charge_paused: conn.status.paused,
             charge_complete: conn.status.charge_complete,
             tic_mode: conn.grid.tic_mode,
-            sniffer_mode: station ? !!station.sniffer_mode : false,
+            sniffer_mode: (station && station.serial_connection) ? !!station.serial_connection.sniffer_mode : false,
         };
         window.lastTelemetry = data;
 
@@ -724,8 +731,10 @@ async function fetchTelemetry() {
         updateLinky(conn.grid.tic_mode);
         updateVisuals(conn.status.raw_code, conn.status.charge_complete, conn.status.iec, conn.status.error_code, conn.status.paused, conn.control.charge_authorized);
 
-        if (station && typeof updateSystemModesUi === 'function') {
-            updateSystemModesUi(!!station.sniffer_mode, window.isKioskMode);
+        const isSniffer = (station && station.serial_connection) ? !!station.serial_connection.sniffer_mode : false;
+        window.isSnifferMode = isSniffer;
+        if (typeof updateSystemModesUi === 'function') {
+            updateSystemModesUi(isSniffer, window.isKioskMode);
         }
 
         if (typeof onTelemetryUpdateForSessions === 'function') {

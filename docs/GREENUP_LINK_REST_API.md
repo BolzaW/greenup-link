@@ -102,7 +102,6 @@ Three standard authentication methods are supported simultaneously against the s
       "hardware_version": "V02.01.01",
       "production_date": "42W22",
       "link_version": "0.5.0-dev",
-      "sniffer_mode": false,
       "connector_count": 1,
       "capabilities": {
         "phases": 1,
@@ -116,6 +115,7 @@ Three standard authentication methods are supported simultaneously against the s
       "serial": {
         "status": "usb_connected",
         "port": "/dev/ttyUSB0",
+        "sniffer_mode": false,
         "message": "USB serial link active - Station connected",
         "last_rx_secs_ago": 0
       }
@@ -170,10 +170,15 @@ Three standard authentication methods are supported simultaneously against the s
     "hardware_version": "V02.01.01",
     "production_date": "42W22",
     "link_version": "0.5.0-dev",
-    "sniffer_mode": false,
     "connector_count": 1,
     "capabilities": { ... },
-    "serial": { ... }
+    "serial": {
+      "status": "usb_connected",
+      "port": "/dev/ttyUSB0",
+      "sniffer_mode": false,
+      "message": "USB serial link active - Station connected",
+      "last_rx_secs_ago": 0
+    }
   }
   ```
 

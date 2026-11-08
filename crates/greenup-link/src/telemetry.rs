@@ -5,6 +5,8 @@ pub use greenup_driver::SerialStatus;
 pub struct SerialConnection {
     pub status: SerialStatus,
     pub port: String,
+    #[serde(default)]
+    pub sniffer_mode: bool,
     pub message: String,
     pub last_rx_secs_ago: Option<u64>,
 }
@@ -14,6 +16,7 @@ impl Default for SerialConnection {
         Self {
             status: SerialStatus::UsbDisconnected,
             port: String::from("/dev/ttyUSB0"),
+            sniffer_mode: false,
             message: String::from("USB cable not detected (/dev/ttyUSB0 not found)"),
             last_rx_secs_ago: None,
         }
@@ -39,8 +42,6 @@ pub struct ExternalVoltage {
 pub struct Telemetry {
     #[serde(default = "default_side")]
     pub side: u8,
-    #[serde(default)]
-    pub sniffer_mode: bool,
     pub serial: SerialConnection,
     pub voltage: f32,
     #[serde(default = "default_voltage_source")]
@@ -77,7 +78,6 @@ impl Default for Telemetry {
     fn default() -> Self {
         Self {
             side: 1,
-            sniffer_mode: false,
             serial: SerialConnection::default(),
             voltage: 230.0,
             voltage_source: default_voltage_source(),
@@ -286,7 +286,6 @@ pub struct StationData {
     pub hardware_version: String,
     pub firmware_version: String,
     pub link_version: String,
-    pub sniffer_mode: bool,
     pub serial_connection: SerialConnection,
     pub is_dual: bool,
     pub available_connectors: Vec<u8>,
@@ -336,8 +335,8 @@ impl Telemetry {
         let vehicle_connected = !matches!(raw_code.as_str(), "A" | "L" | "DISCONNECTED" | "Y" | "Z" | "") && iec != "A";
         let is_charging = (matches!(raw_code.as_str(), "D" | "E" | "G" | "H") || iec == "C") && !self.charge_paused;
 
-        let ocpp = if self.serial.status != SerialStatus::UsbConnected || self.sniffer_mode {
-            if self.sniffer_mode && vehicle_connected {
+        let ocpp = if self.serial.status != SerialStatus::UsbConnected || self.serial.sniffer_mode {
+            if self.serial.sniffer_mode && vehicle_connected {
                 if is_charging {
                     OcppChargePointStatus::Charging
                 } else {
