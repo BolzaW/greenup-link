@@ -8,6 +8,8 @@ pub mod station;
 pub mod telemetry;
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use greenup_driver::SerialStatus;
 use station::{AppState, StationManager};
 
 fn spawn_supervised_point(
@@ -32,16 +34,110 @@ fn spawn_supervised_point(
     app_state
 }
 
+/// Waits until ATmega initialization queries and Linky TIC detection finish (or fails/timeouts)
+/// before starting public network services (Web server, REST API, MQTT client).
+async fn wait_for_station_initialization(station: &Arc<StationManager>, timeout: Duration) {
+    let start = Instant::now();
+    let poll_interval = Duration::from_millis(100);
+
+    while start.elapsed() < timeout {
+        let status = station.usb_status();
+
+        // Check if USB has failed with an explicit error / disconnected state after trying
+        if status == SerialStatus::UsbDisconnected && start.elapsed() > Duration::from_secs(4) {
+            greenup_driver::logger::warn(
+                "SYS",
+                "⚠️ USB serial port inaccessible or disconnected. Proceeding with Web server and MQTT for diagnostics.",
+            );
+            return;
+        }
+
+        // Check if init queries are done
+        if station.is_init_completed() {
+            let snap = station.snapshot();
+            // Check if TIC detection is currently running
+            let tic_detecting = snap.connectors.iter().any(|c| c.grid.tic_mode == "detecting");
+            if !tic_detecting {
+                let p1 = &snap.station;
+                let model = if p1.model.is_empty() { "Unknown" } else { &p1.model };
+                let serial = if p1.serial_number.is_empty() { "None" } else { &p1.serial_number };
+                let tic_summary = snap.connectors.first().map(|c| {
+                    if let Some(baud) = c.grid.tic_baud_rate {
+                        format!("TIC: {} baud", baud)
+                    } else if c.grid.tic_mode == "none" {
+                        "TIC: absent".to_string()
+                    } else {
+                        format!("TIC: {}", c.grid.tic_mode)
+                    }
+                }).unwrap_or_else(|| "TIC: none".to_string());
+
+                greenup_driver::logger::log(
+                    "SYS",
+                    &format!(
+                        "✅ Station initialization complete (Model: {}, SN: {}, {})",
+                        model, serial, tic_summary
+                    ),
+                );
+                return;
+            }
+        }
+
+        tokio::time::sleep(poll_interval).await;
+    }
+
+    greenup_driver::logger::warn(
+        "SYS",
+        "⏳ Hardware initialization timeout (15s). Proceeding with Web server and MQTT.",
+    );
+}
+
+/// Waits for USB port detection in sniffer mode before starting Web and MQTT.
+async fn wait_for_sniffer_usb_connection(station: &Arc<StationManager>, timeout: Duration) {
+    let start = Instant::now();
+    let poll_interval = Duration::from_millis(100);
+
+    while start.elapsed() < timeout {
+        let status = station.usb_status();
+        if matches!(status, SerialStatus::UsbConnecting | SerialStatus::UsbConnected) {
+            greenup_driver::logger::log("SYS", "✅ USB serial port connected (Sniffer mode enabled).");
+            return;
+        }
+        if status == SerialStatus::UsbDisconnected && start.elapsed() > Duration::from_secs(3) {
+            greenup_driver::logger::warn(
+                "SYS",
+                "⚠️ USB serial port not detected in sniffer mode. Proceeding with Web server and MQTT for diagnostics.",
+            );
+            return;
+        }
+        tokio::time::sleep(poll_interval).await;
+    }
+}
+
 #[tokio::main]
 async fn main() {
+    let pkg_version = env!("CARGO_PKG_VERSION");
+
+    // Initialize logger and print application banner first
+    greenup_driver::logger::init();
+    greenup_driver::logger::log("SYS", "===================================================");
+    greenup_driver::logger::log(
+        "SYS",
+        &format!("               GREEN'UP LINK v{:<15}     ", pkg_version),
+    );
+    greenup_driver::logger::log("SYS", "===================================================");
+
     let app_config = config::AppConfig::load();
 
-    // Configure storage directories from greenup.toml before logger initialization
+    // Configure storage directories from greenup.toml
     greenup_driver::logger::set_custom_log_dir(Some(app_config.storage.log_dir.clone()));
     session::set_custom_sessions_dir(Some(std::path::PathBuf::from(
         &app_config.storage.sessions_dir,
     )));
-    greenup_driver::logger::init();
+
+    greenup_driver::logger::log(
+        "SYS",
+        &format!("📄 Configuration loaded from '{}'", app_config.config_path),
+    );
 
     // Reconcile any orphan session CSVs left from previous interrupted runs
     let recovered_sessions = session::reconcile_orphan_sessions();
@@ -52,14 +148,6 @@ async fn main() {
         );
     }
 
-    let pkg_version = env!("CARGO_PKG_VERSION");
-
-    greenup_driver::logger::log("SYS", "===================================================");
-    greenup_driver::logger::log(
-        "SYS",
-        &format!("               GREEN'UP LINK v{:<15}     ", pkg_version),
-    );
-    greenup_driver::logger::log("SYS", "===================================================");
     greenup_driver::logger::log(
         "SYS",
         &format!(
@@ -154,6 +242,21 @@ async fn main() {
             st
         }
     };
+
+    // Synchronous hardware initialization phase before opening Web and MQTT services
+    if app_config.station.sniffer_mode {
+        greenup_driver::logger::log(
+            "SYS",
+            "👂 Waiting for USB serial link connection (Sniffer mode)...",
+        );
+        wait_for_sniffer_usb_connection(&station, Duration::from_secs(5)).await;
+    } else {
+        greenup_driver::logger::log(
+            "SYS",
+            "⏳ Initializing station hardware (ATmega handshake, queries & Linky TIC)...",
+        );
+        wait_for_station_initialization(&station, Duration::from_secs(15)).await;
+    }
 
     // Start MQTT background client service if enabled in configuration
     if app_config.mqtt.enabled {

@@ -371,7 +371,7 @@ impl AppState {
         if should_auto_start_tic {
             match check_tic_eligibility(self) {
                 Ok(()) => {
-                    logger::log(
+                    logger::debug(
                         "SERIAL",
                         "🚀 Starting automatic TIC detection after init sequence (Hardware compatible & State:A)",
                     );
@@ -654,6 +654,16 @@ impl StationManager {
         } else {
             self.point1.clone()
         }
+    }
+
+    /// Returns whether the low-level hardware initialization sequence has completed on Point 1.
+    pub fn is_init_completed(&self) -> bool {
+        self.point1.driver.get_snapshot().usb.init_completed
+    }
+
+    /// Returns the current USB connection status of Point 1.
+    pub fn usb_status(&self) -> greenup_driver::SerialStatus {
+        self.point1.driver.get_snapshot().usb.status
     }
 
     /// Returns the raw low-level JSON snapshot (`AtmegaRawState` + `UsbLinkState`) for all active USB ports.

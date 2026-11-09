@@ -191,7 +191,7 @@ pub async fn start_tic_detection(driver: &SharedDriver) -> Result<(), TicStartEr
         Err(e) => return Err(e),
     }
 
-    logger::log("SERIAL", "🚀 Starting TIC detection (TICTM:1)");
+    logger::debug("SERIAL", "🚀 Starting TIC detection (TICTM:1)");
     if let Ok(mut tic) = driver.tic_detection.lock() {
         tic.is_active = true;
         tic.zero_count = 0;
@@ -760,7 +760,7 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
         }
         ProtocolEvent::Side(val) => {
             let side_num = AtmegaRawState::decode_side_number(val);
-            logger::log(
+            logger::debug(
                 "SERIAL",
                 &format!(
                     "ℹ️ Active socket side = {} (raw: {})",
@@ -807,13 +807,13 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
         }
         ProtocolEvent::FmMode(fm_val) => {
             if let Some(mode) = FunctioningMode::from_code(fm_val) {
-                logger::log("SERIAL", &format!("ℹ️ FM Mode detected = {:?}", mode));
+                logger::debug("SERIAL", &format!("ℹ️ FM Mode detected = {:?}", mode));
             } else {
-                logger::log("SERIAL", &format!("⚠️ Unknown FM Mode detected = {}", fm_val));
+                logger::debug("SERIAL", &format!("⚠️ Unknown FM Mode detected = {}", fm_val));
             }
         }
         ProtocolEvent::ExternalSignal(enabled) | ProtocolEvent::ExternalSignalForced(enabled) => {
-            logger::log(
+            logger::debug(
                 "SERIAL",
                 &format!(
                     "ℹ️ FM2 (External Signal) = {}",
@@ -826,7 +826,7 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
             );
         }
         ProtocolEvent::Derogation(enabled) => {
-            logger::log(
+            logger::debug(
                 "SERIAL",
                 &format!(
                     "ℹ️ Front button derogation = {}",
@@ -835,10 +835,10 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
             );
         }
         ProtocolEvent::SbfState(v) => {
-            logger::log("SERIAL", &format!("ℹ️ SBF (Front Stop Button) = {}", v));
+            logger::debug("SERIAL", &format!("ℹ️ SBF (Front Stop Button) = {}", v));
         }
         ProtocolEvent::SessionTicket(ticket) => {
-            logger::log(
+            logger::debug(
                 "SERIAL",
                 &format!("🎫 Legrand session ticket received: {}", ticket),
             );
@@ -881,7 +881,7 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
             }
 
             if should_stop_test {
-                logger::log("SERIAL", "End of automatic TIC detection, sending TICTM:0");
+                logger::debug("SERIAL", "End of automatic TIC detection, sending TICTM:0");
                 let _ = driver.serial_tx.try_send(Command::SetTicTestMode(false));
             }
             return;

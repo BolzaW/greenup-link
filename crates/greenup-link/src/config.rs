@@ -194,6 +194,7 @@ pub struct AppConfig {
     pub serial: SerialConfig,
     pub station: StationConfig,
     pub mqtt: MqttConfig,
+    pub config_path: String,
 }
 
 impl AppConfig {
@@ -214,10 +215,7 @@ impl AppConfig {
 
         let mut config = if path.exists() {
             match fs::read_to_string(path) {
-                Ok(content) => {
-                    logger::log("SYS", &format!("📄 Configuration loaded from '{}'", config_path));
-                    Self::parse_toml(&content)
-                }
+                Ok(content) => Self::parse_toml(&content),
                 Err(err) => {
                     logger::log(
                         "SYS",
@@ -238,6 +236,8 @@ impl AppConfig {
             }
             Self::default()
         };
+
+        config.config_path = config_path;
 
         // Environment variable override (API token only, for security/secrets injection)
         if let Ok(env_token) = env::var("GREENUP_API_TOKEN") {

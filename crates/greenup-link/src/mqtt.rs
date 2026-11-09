@@ -724,32 +724,6 @@ pub fn generate_ha_discovery_payloads(
     configs
 }
 
-/// Helper generating all Home Assistant discovery config topic paths for a given serial identifier,
-/// used to unregister / purge stale discovery topics from the broker.
-pub fn generate_ha_discovery_topics_to_clear(clean_serial: &str, connector_ids: &[u8]) -> Vec<String> {
-    let mut topics = Vec::with_capacity(32);
-    topics.push(format!("homeassistant/sensor/greenup_{}/station_total_power/config", clean_serial));
-    topics.push(format!("homeassistant/number/greenup_{}/station_voltage/config", clean_serial));
-    topics.push(format!("homeassistant/binary_sensor/greenup_{}/station_sniffer_mode/config", clean_serial));
-
-    for &id in connector_ids {
-        topics.push(format!("homeassistant/sensor/greenup_{}/point_{}_power/config", clean_serial, id));
-        topics.push(format!("homeassistant/sensor/greenup_{}/point_{}_total_energy/config", clean_serial, id));
-        topics.push(format!("homeassistant/sensor/greenup_{}/point_{}_current/config", clean_serial, id));
-        topics.push(format!("homeassistant/sensor/greenup_{}/point_{}_voltage/config", clean_serial, id));
-        topics.push(format!("homeassistant/sensor/greenup_{}/point_{}_state/config", clean_serial, id));
-        topics.push(format!("homeassistant/sensor/greenup_{}/point_{}_ocpp/config", clean_serial, id));
-        topics.push(format!("homeassistant/sensor/greenup_{}/point_{}_applied_limit/config", clean_serial, id));
-        topics.push(format!("homeassistant/binary_sensor/greenup_{}/point_{}_connected/config", clean_serial, id));
-        topics.push(format!("homeassistant/binary_sensor/greenup_{}/point_{}_charging/config", clean_serial, id));
-        topics.push(format!("homeassistant/binary_sensor/greenup_{}/point_{}_session_active/config", clean_serial, id));
-        topics.push(format!("homeassistant/switch/greenup_{}/point_{}_charge/config", clean_serial, id));
-        topics.push(format!("homeassistant/switch/greenup_{}/point_{}_pause/config", clean_serial, id));
-        topics.push(format!("homeassistant/number/greenup_{}/point_{}_setpoint/config", clean_serial, id));
-    }
-    topics
-}
-
 /// Executes an incoming MQTT command on the appropriate charge point or station.
 async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
     match command {
@@ -1105,22 +1079,6 @@ async fn run_mqtt_loop(
                 let clean_serial = sanitize_identifier(station_id_raw);
 
                 if last_ha_discovery_serial.as_deref() != Some(&clean_serial) {
-                    let conn_ids = [1, 2];
-
-                    // Purge legacy generic / fallback discovery topics retained on the broker
-                    for dummy in &["greenup_station", "station", "default_serial"] {
-                        for topic in generate_ha_discovery_topics_to_clear(dummy, &conn_ids) {
-                            let _ = client.publish(topic, QoS::AtLeastOnce, true, Vec::new()).await;
-                        }
-                    }
-
-                    // Also purge previous clean serial if it changed
-                    if let Some(ref old_serial) = last_ha_discovery_serial {
-                        for topic in generate_ha_discovery_topics_to_clear(old_serial, &conn_ids) {
-                            let _ = client.publish(topic, QoS::AtLeastOnce, true, Vec::new()).await;
-                        }
-                    }
-
                     logger::log(
                         "MQTT",
                         &format!(
