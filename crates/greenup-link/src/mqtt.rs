@@ -53,15 +53,16 @@ pub fn parse_broker_address(broker: &str) -> (String, u16) {
     }
 }
 
-/// Resolves MQTT credentials using configured username and `http.api_token`.
+/// Resolves MQTT credentials using configured username and password (with fallback to `http.api_token`).
 pub fn resolve_credentials(
     config_user: Option<&str>,
+    config_pass: Option<&str>,
     api_token: Option<&str>,
 ) -> Option<(String, String)> {
-    let token = api_token.map(str::trim).filter(|s| !s.is_empty());
+    let pass = config_pass.or(api_token).map(str::trim).filter(|s| !s.is_empty());
     let user = config_user.map(str::trim).filter(|s| !s.is_empty());
 
-    match (user, token) {
+    match (user, pass) {
         (Some(u), Some(p)) => Some((u.to_string(), p.to_string())),
         (None, Some(p)) => Some(("greenup-link".to_string(), p.to_string())),
         (Some(u), None) => Some((u.to_string(), String::new())),
@@ -929,7 +930,11 @@ async fn run_mqtt_loop(
 ) {
     let (host, port) = parse_broker_address(&config.broker);
     let base_topic = config.base_topic.trim_matches('/').to_string();
-    let credentials = resolve_credentials(config.username.as_deref(), api_token.as_deref());
+    let credentials = resolve_credentials(
+        config.username.as_deref(),
+        config.password.as_deref(),
+        api_token.as_deref(),
+    );
 
     let client_id = format!("greenup-link-{}", std::process::id());
     let mut mqttoptions = MqttOptions::new(&client_id, &host, port);
@@ -1106,19 +1111,23 @@ mod tests {
     #[test]
     fn test_resolve_credentials() {
         assert_eq!(
-            resolve_credentials(Some("admin"), Some("secret123")),
+            resolve_credentials(Some("admin"), Some("secret123"), None),
             Some(("admin".to_string(), "secret123".to_string()))
         );
         assert_eq!(
-            resolve_credentials(None, Some("secret123")),
+            resolve_credentials(Some("admin"), None, Some("fallback")),
+            Some(("admin".to_string(), "fallback".to_string()))
+        );
+        assert_eq!(
+            resolve_credentials(None, Some("secret123"), None),
             Some(("greenup-link".to_string(), "secret123".to_string()))
         );
         assert_eq!(
-            resolve_credentials(Some("admin"), None),
+            resolve_credentials(Some("admin"), None, None),
             Some(("admin".to_string(), String::new()))
         );
-        assert_eq!(resolve_credentials(None, None), None);
-        assert_eq!(resolve_credentials(Some(""), Some("")), None);
+        assert_eq!(resolve_credentials(None, None, None), None);
+        assert_eq!(resolve_credentials(Some(""), Some(""), Some("")), None);
     }
 
     #[test]

@@ -169,6 +169,7 @@ pub struct MqttConfig {
     pub enabled: bool,
     pub broker: String,
     pub username: Option<String>,
+    pub password: Option<String>,
     pub base_topic: String,
     pub ha_discovery: bool,
 }
@@ -179,6 +180,7 @@ impl Default for MqttConfig {
             enabled: false,
             broker: "127.0.0.1:1883".to_string(),
             username: None,
+            password: None,
             base_topic: "greenup".to_string(),
             ha_discovery: true,
         }
@@ -369,6 +371,14 @@ impl AppConfig {
                                 config.mqtt.username = None;
                             } else {
                                 config.mqtt.username = Some(trimmed.to_string());
+                            }
+                        }
+                        "password" => {
+                            let trimmed = val.trim();
+                            if trimmed.is_empty() {
+                                config.mqtt.password = None;
+                            } else {
+                                config.mqtt.password = Some(trimmed.to_string());
                             }
                         }
                         "base_topic" => {
