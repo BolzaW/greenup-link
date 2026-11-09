@@ -39,6 +39,11 @@ log_dir = "logs"
 # Default: "sessions" (or "/opt/greenup-link/sessions")
 sessions_dir = "sessions"
 
+# Logging verbosity level:
+# Options: "ERROR", "WARN", "INFO", "DEBUG", "TRACE"
+# Default: "INFO"
+log_level = "INFO"
+
 [serial]
 # Dual charge point mode:
 # - "auto"  : Automatically detects 1 or 2 charge points based on the station hardware reference (Default)

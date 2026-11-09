@@ -38,6 +38,11 @@ log_dir = "logs"
 # Default: "sessions" (or "/var/lib/greenup-link/sessions")
 sessions_dir = "sessions"
 
+# Logging verbosity level:
+# Options: "ERROR", "WARN", "INFO", "DEBUG", "TRACE"
+# Default: "INFO"
+log_level = "INFO"
+
 [serial]
 # Dual charge point mode:
 # - "auto"  : Automatically detects 1 or 2 charge points based on the station hardware reference (Default)
@@ -105,6 +110,7 @@ impl Default for HttpConfig {
 pub struct StorageConfig {
     pub log_dir: String,
     pub sessions_dir: String,
+    pub log_level: Option<String>,
 }
 
 impl Default for StorageConfig {
@@ -112,6 +118,7 @@ impl Default for StorageConfig {
         Self {
             log_dir: "logs".to_string(),
             sessions_dir: "sessions".to_string(),
+            log_level: None,
         }
     }
 }
@@ -296,7 +303,7 @@ impl AppConfig {
                         }
                         _ => {}
                     }
-                } else if current_section == "storage" {
+                } else if current_section == "storage" || current_section == "logging" {
                     match key.as_str() {
                         "log_dir" => {
                             if !val.is_empty() {
@@ -306,6 +313,12 @@ impl AppConfig {
                         "sessions_dir" => {
                             if !val.is_empty() {
                                 config.storage.sessions_dir = val;
+                            }
+                        }
+                        "log_level" | "level" => {
+                            let trimmed = val.trim();
+                            if !trimmed.is_empty() {
+                                config.storage.log_level = Some(trimmed.to_string());
                             }
                         }
                         _ => {}
@@ -569,5 +582,26 @@ mod tests {
         assert_eq!(cfg_auto.serial.dual_point, DualPointMode::Auto);
         assert_eq!(cfg_auto.serial.port, None);
         assert_eq!(cfg_auto.serial.port2, None);
+    }
+
+    #[test]
+    fn test_storage_log_level_parsing() {
+        let toml = r#"
+        [storage]
+        log_dir = "/var/log/greenup"
+        sessions_dir = "/var/lib/greenup/sessions"
+        log_level = "DEBUG"
+        "#;
+        let cfg = AppConfig::parse_toml(toml);
+        assert_eq!(cfg.storage.log_dir, "/var/log/greenup");
+        assert_eq!(cfg.storage.sessions_dir, "/var/lib/greenup/sessions");
+        assert_eq!(cfg.storage.log_level.as_deref(), Some("DEBUG"));
+
+        let toml_logging = r#"
+        [logging]
+        level = "warn"
+        "#;
+        let cfg2 = AppConfig::parse_toml(toml_logging);
+        assert_eq!(cfg2.storage.log_level.as_deref(), Some("warn"));
     }
 }

@@ -134,6 +134,20 @@ async fn main() {
         &app_config.storage.sessions_dir,
     )));
 
+    // Configure log level from greenup.toml (unless overridden by GREENUP_LOG_LEVEL / GREENUP_DEBUG)
+    if std::env::var("GREENUP_LOG_LEVEL").is_err() && std::env::var("GREENUP_DEBUG").is_err() {
+        if let Some(ref lvl_str) = app_config.storage.log_level {
+            if let Some(level) = greenup_driver::logger::LogLevel::from_str_loose(lvl_str) {
+                greenup_driver::logger::set_log_level(level);
+            } else {
+                greenup_driver::logger::warn(
+                    "SYS",
+                    &format!("⚠️ Unknown log_level '{}' in config, keeping default INFO", lvl_str),
+                );
+            }
+        }
+    }
+
     greenup_driver::logger::log(
         "SYS",
         &format!("📄 Configuration loaded from '{}'", app_config.config_path),
@@ -151,8 +165,10 @@ async fn main() {
     greenup_driver::logger::log(
         "SYS",
         &format!(
-            "📁 Storage paths: logs = {}, sessions = {}",
-            app_config.storage.log_dir, app_config.storage.sessions_dir
+            "📁 Storage paths: logs = {}, sessions = {} (log_level: {})",
+            app_config.storage.log_dir,
+            app_config.storage.sessions_dir,
+            greenup_driver::logger::get_log_level().as_str()
         ),
     );
     if app_config.http.api_token.is_some() {
