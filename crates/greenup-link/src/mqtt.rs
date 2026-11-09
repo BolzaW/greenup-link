@@ -33,7 +33,7 @@ pub enum MqttCommand {
     },
     SetCurrentLimit {
         side: u8,
-        amps: u32,
+        amps: f64,
     },
     SetVoltage {
         side: Option<u8>,
@@ -124,7 +124,7 @@ pub fn parse_command_topic(
         }
         ["connector", id_str, "control", "setpoint_amps", "set"] => {
             let side = id_str.parse::<u8>().ok()?;
-            let amps = payload.parse::<u32>().ok()?;
+            let amps = payload.trim().parse::<f64>().ok()?;
             Some(MqttCommand::SetCurrentLimit { side, amps })
         }
         ["station", "voltage", "set"] => {
@@ -819,19 +819,34 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
                 return;
             }
 
-            let validated_amps = match u8::try_from(amps).ok().and_then(|a| Command::set_current_limit(a).ok().map(|_| a)) {
+            let rounded = amps.round();
+            let validated_amps = if rounded.is_finite() && (0.0..=255.0).contains(&rounded) {
+                let a = rounded as u8;
+                Command::set_current_limit(a).ok().map(|_| a)
+            } else {
+                None
+            };
+
+            let validated_amps = match validated_amps {
                 Some(a) => a,
                 None => {
                     logger::warn(
                         "MQTT",
                         &format!(
-                            "⛔ Rejecting out of bounds current: {}A (allowed {}-{}A)",
+                            "⛔ Rejecting out of bounds current: {:.2}A (allowed {}-{}A)",
                             amps, MIN_CURRENT_AMPS, MAX_CURRENT_AMPS
                         ),
                     );
                     return;
                 }
             };
+
+            if (amps - validated_amps as f64).abs() > 0.01 {
+                logger::log(
+                    "MQTT",
+                    &format!("⚡ MQTT current limit {:.2}A rounded to {}A on Side {}", amps, validated_amps, side),
+                );
+            }
 
             point.sync_from_driver();
             let current_greenup_state = point
@@ -845,7 +860,7 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
                     "MQTT",
                     &format!(
                         "⚡ Current limit modification in State A on Side {} → {}A (synchronizing CCEl:{:02} and CC:{:02})",
-                        side, amps, validated_amps, validated_amps
+                        side, validated_amps, validated_amps, validated_amps
                     ),
                 );
                 let _ = point.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await;
@@ -855,7 +870,7 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
                     "MQTT",
                     &format!(
                         "⚡ Current limit modification on Side {} → {}A (sending CCEl:{:02})",
-                        side, amps, validated_amps
+                        side, validated_amps, validated_amps
                     ),
                 );
                 let _ = point.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await;
@@ -1131,9 +1146,12 @@ mod tests {
         let p2 = parse_command_topic(base, "greenup/connector/1/control/pause/set", "0");
         assert_eq!(p2, Some(MqttCommand::SetPause { side: 1, paused: false }));
 
-        // Setpoint current limit
+        // Setpoint current limit (integer and decimal)
         let s1 = parse_command_topic(base, "greenup/connector/1/control/setpoint_amps/set", "16");
-        assert_eq!(s1, Some(MqttCommand::SetCurrentLimit { side: 1, amps: 16 }));
+        assert_eq!(s1, Some(MqttCommand::SetCurrentLimit { side: 1, amps: 16.0 }));
+
+        let s2 = parse_command_topic(base, "greenup/connector/1/control/setpoint_amps/set", "16.7");
+        assert_eq!(s2, Some(MqttCommand::SetCurrentLimit { side: 1, amps: 16.7 }));
 
         // Station voltage
         let v1 = parse_command_topic(base, "greenup/station/voltage/set", "234.5");

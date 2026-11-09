@@ -449,7 +449,7 @@ fn check_mode_allows_commands(state: &SharedState) -> Result<(), (StatusCode, Js
 /// POST /api/current/:amps
 async fn set_current(
     State(station): State<SharedStation>,
-    Path(amps): Path<u32>,
+    Path(amps): Path<f64>,
     Query(query): Query<SideQuery>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
@@ -459,10 +459,18 @@ async fn set_current(
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
-    let validated_amps = match u8::try_from(amps).ok().and_then(|a| Command::set_current_limit(a).ok().map(|_| a)) {
+    let rounded = amps.round();
+    let validated_amps = if rounded.is_finite() && (0.0..=255.0).contains(&rounded) {
+        let a = rounded as u8;
+        Command::set_current_limit(a).ok().map(|_| a)
+    } else {
+        None
+    };
+
+    let validated_amps = match validated_amps {
         Some(a) => a,
         None => {
-            logger::log("API", &format!("⛔ Rejecting out of bounds current: {}A", amps));
+            logger::log("API", &format!("⛔ Rejecting out of bounds current: {:.2}A", amps));
             return (
                 StatusCode::BAD_REQUEST,
                 Json(json!({"error": format!(
@@ -472,6 +480,13 @@ async fn set_current(
             );
         }
     };
+
+    if (amps - validated_amps as f64).abs() > 0.01 {
+        logger::log(
+            "API",
+            &format!("⚡ Current limit setpoint {:.2}A rounded to {}A", amps, validated_amps),
+        );
+    }
 
     state.sync_from_driver();
     let current_greenup_state = state
@@ -485,7 +500,7 @@ async fn set_current(
             "API",
             &format!(
                 "⚡ Current limit modification in State A → {}A (synchronizing CCEl:{:02} and CC:{:02})",
-                amps, validated_amps, validated_amps
+                validated_amps, validated_amps, validated_amps
             ),
         );
         let _ = state.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await;
@@ -494,7 +509,7 @@ async fn set_current(
                 StatusCode::OK,
                 Json(json!({
                     "status": "success",
-                    "message": format!("Current limit set to {}A (CCEl and CC synchronized in State A)", amps)
+                    "message": format!("Current limit set to {}A (CCEl and CC synchronized in State A)", validated_amps)
                 })),
             )
         } else {
@@ -506,14 +521,14 @@ async fn set_current(
     } else {
         logger::log(
             "API",
-            &format!("⚡ Current limit modification → {}A (sending CCEl:{:02})", amps, validated_amps),
+            &format!("⚡ Current limit modification → {}A (sending CCEl:{:02})", validated_amps, validated_amps),
         );
         if state.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await.is_ok() {
             (
                 StatusCode::OK,
                 Json(json!({
                     "status": "success",
-                    "message": format!("Current limit set to {}A", amps)
+                    "message": format!("Current limit set to {}A", validated_amps)
                 })),
             )
         } else {
@@ -1299,7 +1314,7 @@ mod tests {
 
         let res_current = set_current(
             State(station.clone()),
-            axum::extract::Path(16),
+            axum::extract::Path(16.0),
             Query(SideQuery { side: None }),
         ).await.into_response();
         assert_eq!(res_current.status(), StatusCode::FORBIDDEN);
@@ -1402,7 +1417,7 @@ mod tests {
             let mut tel = point1.telemetry.lock().unwrap();
             tel.serial.status = SerialStatus::UsbDisconnected;
         }
-        let res = set_current(State(station.clone()), axum::extract::Path(16), Query(SideQuery { side: None })).await.into_response();
+        let res = set_current(State(station.clone()), axum::extract::Path(16.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res.status(), StatusCode::SERVICE_UNAVAILABLE);
 
         // Reconnect USB
@@ -1413,14 +1428,14 @@ mod tests {
         }
 
         // 2. Out of bounds current (< 7 or > 32) -> 400
-        let res_low = set_current(State(station.clone()), axum::extract::Path(6), Query(SideQuery { side: None })).await.into_response();
+        let res_low = set_current(State(station.clone()), axum::extract::Path(6.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_low.status(), StatusCode::BAD_REQUEST);
 
-        let res_high = set_current(State(station.clone()), axum::extract::Path(33), Query(SideQuery { side: None })).await.into_response();
+        let res_high = set_current(State(station.clone()), axum::extract::Path(33.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_high.status(), StatusCode::BAD_REQUEST);
 
         // 3. Valid current limit in State A -> 200 OK, sends SetCurrentLimit(24) AND SetDirectCurrentLimit(24)
-        let res = set_current(State(station.clone()), axum::extract::Path(24), Query(SideQuery { side: None })).await.into_response();
+        let res = set_current(State(station.clone()), axum::extract::Path(24.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(24));
         assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(24));
@@ -1430,10 +1445,30 @@ mod tests {
             let mut tel = point1.telemetry.lock().unwrap();
             tel.greenup_state = "C".to_string();
         }
-        let res = set_current(State(station.clone()), axum::extract::Path(16), Query(SideQuery { side: None })).await.into_response();
+        let res = set_current(State(station.clone()), axum::extract::Path(16.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(16));
         assert!(rx.try_recv().is_err());
+
+        // 5. Decimal inputs with round()
+        // 16.7 -> rounded to 17
+        let res_round_up = set_current(State(station.clone()), axum::extract::Path(16.7), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(res_round_up.status(), StatusCode::OK);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(17));
+
+        // 16.2 -> rounded to 16
+        let res_round_down = set_current(State(station.clone()), axum::extract::Path(16.2), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(res_round_down.status(), StatusCode::OK);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(16));
+
+        // Bounds testing with decimals: 6.6 -> rounds to 7 (valid)
+        let res_bound_ok = set_current(State(station.clone()), axum::extract::Path(6.6), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(res_bound_ok.status(), StatusCode::OK);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(7));
+
+        // 6.4 -> rounds to 6 (out of bounds -> 400)
+        let res_bound_nok = set_current(State(station.clone()), axum::extract::Path(6.4), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(res_bound_nok.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
