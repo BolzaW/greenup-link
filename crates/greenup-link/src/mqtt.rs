@@ -10,6 +10,8 @@
 //! - Strict sniffer mode protection (rejects all hardware TX commands when `sniffer_mode = true`).
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
@@ -416,10 +418,12 @@ pub fn generate_ha_discovery_payloads(
     let mut configs = Vec::with_capacity(32);
     let base = base_topic.trim_end_matches('/');
 
-    let serial_raw = if snapshot.station.serial_number.is_empty() {
-        "greenup_station"
-    } else {
+    let serial_raw = if !snapshot.station.serial_number.is_empty() {
         &snapshot.station.serial_number
+    } else if !snapshot.station.model.is_empty() {
+        &snapshot.station.model
+    } else {
+        "station"
     };
     let clean_serial = sanitize_identifier(serial_raw);
     let model = if snapshot.station.model.is_empty() {
@@ -993,151 +997,170 @@ async fn run_mqtt_loop(
         );
     }
 
-    let (client, mut eventloop) = AsyncClient::new(mqttoptions, 64);
+    let (client, mut eventloop) = AsyncClient::new(mqttoptions, 256);
+
+    let is_connected = Arc::new(AtomicBool::new(false));
+    let is_connected_el = is_connected.clone();
+    let client_el = client.clone();
+    let base_topic_el = base_topic.clone();
+    let availability_topic_el = availability_topic.clone();
+    let station_el = station.clone();
+    let host_el = host.clone();
+    let (reconnect_tx, mut reconnect_rx) = tokio::sync::mpsc::channel::<()>(4);
+
+    // Dedicated asynchronous task running the MQTT event loop (network I/O, incoming packets & keepalives).
+    // Decoupled from the telemetry publisher task so outbound publishes never deadlock internal channels.
+    tokio::spawn(async move {
+        loop {
+            match eventloop.poll().await {
+                Ok(Event::Incoming(Packet::ConnAck(_ack))) => {
+                    let was_connected = is_connected_el.swap(true, Ordering::SeqCst);
+                    if !was_connected {
+                        logger::log(
+                            "MQTT",
+                            &format!("✅ Connected to MQTT broker '{}:{}'", host_el, port),
+                        );
+                    }
+
+                    // Publish availability: online
+                    let _ = client_el
+                        .publish(&availability_topic_el, QoS::AtLeastOnce, true, "online")
+                        .await;
+
+                    // Subscribe to incoming command topics
+                    let cmd_patterns = [
+                        format!("{}/connector/+/control/charge/set", base_topic_el),
+                        format!("{}/connector/+/control/pause/set", base_topic_el),
+                        format!("{}/connector/+/control/setpoint_amps/set", base_topic_el),
+                        format!("{}/station/voltage/set", base_topic_el),
+                        format!("{}/connector/+/meter/voltage_v/set", base_topic_el),
+                    ];
+                    for pattern in &cmd_patterns {
+                        if let Err(e) = client_el.subscribe(pattern, QoS::AtLeastOnce).await {
+                            logger::warn("MQTT", &format!("Failed to subscribe to '{}': {}", pattern, e));
+                        }
+                    }
+
+                    let _ = reconnect_tx.try_send(());
+                }
+                Ok(Event::Incoming(Packet::Publish(publish))) => {
+                    let topic = &publish.topic;
+                    let payload_str = String::from_utf8_lossy(&publish.payload);
+                    logger::debug("MQTT", &format!("📩 Incoming message on '{}': {}", topic, payload_str.trim()));
+
+                    if let Some(cmd) = parse_command_topic(&base_topic_el, topic, &payload_str) {
+                        handle_mqtt_command(&station_el, cmd).await;
+                    }
+                }
+                Ok(Event::Incoming(Packet::Disconnect)) => {
+                    is_connected_el.store(false, Ordering::SeqCst);
+                    logger::warn("MQTT", "⚠️ Disconnected from MQTT broker");
+                }
+                Err(e) => {
+                    let was_connected = is_connected_el.swap(false, Ordering::SeqCst);
+                    if was_connected {
+                        logger::warn("MQTT", &format!("⚠️ MQTT connection error: {}. Reconnecting...", e));
+                    }
+                    sleep(Duration::from_secs(2)).await;
+                }
+                _ => {}
+            }
+        }
+    });
 
     let mut last_published_topics: HashMap<String, String> = HashMap::new();
     let mut last_periodic_refresh = Instant::now();
     let mut last_ha_discovery_serial: Option<String> = None;
-    let mut is_connected = false;
 
-    // Periodic telemetry publisher ticker
+    // Periodic telemetry and Home Assistant discovery evaluation ticker
     let mut poll_interval = tokio::time::interval(Duration::from_millis(500));
 
     loop {
-        tokio::select! {
-            // Event loop handling incoming packets and network I/O
-            event_res = eventloop.poll() => {
-                match event_res {
-                    Ok(Event::Incoming(Packet::ConnAck(_ack))) => {
-                        is_connected = true;
-                        logger::log(
-                            "MQTT",
-                            &format!("✅ Connected to MQTT broker '{}:{}'", host, port),
-                        );
+        poll_interval.tick().await;
 
-                        // Publish availability: online
-                        let _ = client
-                            .publish(&availability_topic, QoS::AtLeastOnce, true, "online")
-                            .await;
+        if reconnect_rx.try_recv().is_ok() {
+            last_published_topics.clear();
+            last_ha_discovery_serial = None;
+            last_periodic_refresh = Instant::now();
+        }
 
-                        // Subscribe to command topics
-                        let cmd_patterns = [
-                            format!("{}/connector/+/control/charge/set", base_topic),
-                            format!("{}/connector/+/control/pause/set", base_topic),
-                            format!("{}/connector/+/control/setpoint_amps/set", base_topic),
-                            format!("{}/station/voltage/set", base_topic),
-                            format!("{}/connector/+/meter/voltage_v/set", base_topic),
-                        ];
-                        for pattern in &cmd_patterns {
-                            if let Err(e) = client.subscribe(pattern, QoS::AtLeastOnce).await {
-                                logger::warn("MQTT", &format!("Failed to subscribe to '{}': {}", pattern, e));
-                            }
-                        }
+        if !is_connected.load(Ordering::SeqCst) {
+            continue;
+        }
 
-                        // Force full telemetry refresh on reconnect
-                        last_published_topics.clear();
-                        last_periodic_refresh = Instant::now();
-                    }
-                    Ok(Event::Incoming(Packet::Publish(publish))) => {
-                        let topic = &publish.topic;
-                        let payload_str = String::from_utf8_lossy(&publish.payload);
-                        logger::debug("MQTT", &format!("📩 Incoming message on '{}': {}", topic, payload_str.trim()));
+        let snapshot = station.snapshot();
 
-                        if let Some(cmd) = parse_command_topic(&base_topic, topic, &payload_str) {
-                            handle_mqtt_command(&station, cmd).await;
+        // 1. Home Assistant Auto-Discovery
+        if config.ha_discovery {
+            let station_id_raw = if !snapshot.station.serial_number.is_empty() {
+                snapshot.station.serial_number.as_str()
+            } else if !snapshot.station.model.is_empty() {
+                snapshot.station.model.as_str()
+            } else {
+                ""
+            };
+
+            // Only publish discovery once hardware metadata has been identified from ATmega
+            if !station_id_raw.is_empty() {
+                let clean_serial = sanitize_identifier(station_id_raw);
+
+                if last_ha_discovery_serial.as_deref() != Some(&clean_serial) {
+                    let conn_ids = [1, 2];
+
+                    // Purge legacy generic / fallback discovery topics retained on the broker
+                    for dummy in &["greenup_station", "station", "default_serial"] {
+                        for topic in generate_ha_discovery_topics_to_clear(dummy, &conn_ids) {
+                            let _ = client.publish(topic, QoS::AtLeastOnce, true, Vec::new()).await;
                         }
                     }
-                    Ok(Event::Incoming(Packet::Disconnect)) => {
-                        is_connected = false;
-                        logger::warn("MQTT", "⚠️ Disconnected from MQTT broker");
-                    }
-                    Err(e) => {
-                        if is_connected {
-                            is_connected = false;
-                            logger::warn("MQTT", &format!("⚠️ MQTT connection error: {}. Reconnecting...", e));
+
+                    // Also purge previous clean serial if it changed
+                    if let Some(ref old_serial) = last_ha_discovery_serial {
+                        for topic in generate_ha_discovery_topics_to_clear(old_serial, &conn_ids) {
+                            let _ = client.publish(topic, QoS::AtLeastOnce, true, Vec::new()).await;
                         }
-                        sleep(Duration::from_secs(2)).await;
                     }
-                    _ => {}
+
+                    logger::log(
+                        "MQTT",
+                        &format!(
+                            "📢 Publishing Home Assistant MQTT Discovery entities for station '{}'",
+                            clean_serial
+                        ),
+                    );
+                    let discovery_payloads = generate_ha_discovery_payloads(&base_topic, &snapshot);
+                    for (topic, payload) in discovery_payloads {
+                        if let Err(e) = client
+                            .publish(&topic, QoS::AtLeastOnce, true, payload.into_bytes())
+                            .await
+                        {
+                            logger::warn("MQTT", &format!("Failed to publish discovery topic '{}': {}", topic, e));
+                        }
+                    }
+                    last_ha_discovery_serial = Some(clean_serial);
                 }
             }
+        }
 
-            // Periodic telemetry evaluation (Report-by-Exception + 60s full refresh)
-            _ = poll_interval.tick() => {
-                if !is_connected {
-                    continue;
-                }
+        // 2. Periodic telemetry evaluation (Report-by-Exception + 60s full refresh)
+        let now = Instant::now();
+        let force_refresh = now.duration_since(last_periodic_refresh) >= Duration::from_secs(60);
+        if force_refresh {
+            last_periodic_refresh = now;
+        }
 
-                let snapshot = station.snapshot();
+        let topics = generate_telemetry_topics(&base_topic, &snapshot);
+        for (topic, value) in topics {
+            let should_publish = force_refresh || match last_published_topics.get(&topic) {
+                Some(prev) => prev != &value,
+                None => true,
+            };
 
-                // Publish HA discovery if enabled and new serial / reference discovered
-                if config.ha_discovery {
-                    // Do not publish discovery while station metadata is completely uninitialized at startup
-                    if snapshot.station.serial_number.is_empty() && snapshot.station.model.is_empty() {
-                        continue;
-                    }
-
-                    let current_serial = if snapshot.station.serial_number.is_empty() {
-                        snapshot.station.model.clone()
-                    } else {
-                        snapshot.station.serial_number.clone()
-                    };
-
-                    if last_ha_discovery_serial.as_ref() != Some(&current_serial) {
-                        // Purge any stale generic / fallback discovery topics retained on the broker
-                        let conn_ids = [1, 2];
-                        for dummy in &["greenup_station", "station", "default_serial"] {
-                            for topic in generate_ha_discovery_topics_to_clear(dummy, &conn_ids) {
-                                let _ = client.publish(topic, QoS::AtLeastOnce, true, Vec::new()).await;
-                            }
-                        }
-
-                        // Also purge previously published serial if it changed
-                        if let Some(ref old_serial) = last_ha_discovery_serial {
-                            let old_clean = sanitize_identifier(old_serial);
-                            for topic in generate_ha_discovery_topics_to_clear(&old_clean, &conn_ids) {
-                                let _ = client.publish(topic, QoS::AtLeastOnce, true, Vec::new()).await;
-                            }
-                        }
-
-                        logger::log(
-                            "MQTT",
-                            &format!(
-                                "📢 Publishing Home Assistant MQTT Discovery entities for station '{}'",
-                                current_serial
-                            ),
-                        );
-                        let discovery_payloads = generate_ha_discovery_payloads(&base_topic, &snapshot);
-                        for (topic, payload) in discovery_payloads {
-                            let _ = client
-                                .publish(topic, QoS::AtLeastOnce, true, payload.into_bytes())
-                                .await;
-                        }
-                        last_ha_discovery_serial = Some(current_serial);
-                    }
-                }
-
-                // Check Report-by-Exception and 60s periodic refresh
-                let now = Instant::now();
-                let force_refresh = now.duration_since(last_periodic_refresh) >= Duration::from_secs(60);
-                if force_refresh {
-                    last_periodic_refresh = now;
-                }
-
-                let topics = generate_telemetry_topics(&base_topic, &snapshot);
-                for (topic, value) in topics {
-                    let should_publish = force_refresh || match last_published_topics.get(&topic) {
-                        Some(prev) => prev != &value,
-                        None => true,
-                    };
-
-                    if should_publish {
-                        let _ = client
-                            .publish(&topic, QoS::AtLeastOnce, true, value.clone().into_bytes())
-                            .await;
-                        last_published_topics.insert(topic, value);
-                    }
-                }
+            if should_publish {
+                let _ = client
+                    .publish(&topic, QoS::AtLeastOnce, true, value.clone().into_bytes())
+                    .await;
+                last_published_topics.insert(topic, value);
             }
         }
     }
@@ -1386,5 +1409,73 @@ mod tests {
         assert!(number_cfg.0.starts_with("homeassistant/number/greenup_059001A123/"));
         assert!(number_cfg.1.contains("\"min\":7"));
         assert!(number_cfg.1.contains("\"max\":32"));
+    }
+
+    #[test]
+    fn test_generate_ha_discovery_payloads_fallback_to_model() {
+        let snap = StationSnapshot {
+            station: StationData {
+                vendor: "Legrand".to_string(),
+                model: "058001".to_string(),
+                serial_number: String::new(),
+                hardware_version: "V1.0".to_string(),
+                firmware_version: "1.17.77".to_string(),
+                link_version: "0.5.0".to_string(),
+                serial_connection: SerialConnection::default(),
+                is_dual: false,
+                available_connectors: vec![1],
+                production_date: None,
+                bluetooth_enabled: None,
+                mac_address: None,
+                capabilities: None,
+            },
+            connectors: vec![
+                ConnectorData {
+                    id: 1,
+                    status: ConnectorStatus {
+                        ocpp: OcppChargePointStatus::Available,
+                        iec: "A".to_string(),
+                        raw_code: "A".to_string(),
+                        vehicle_connected: false,
+                        charging: false,
+                        paused: false,
+                        charge_complete: false,
+                        error_code: String::new(),
+                        error_description: None,
+                    },
+                    control: ConnectorControl {
+                        setpoint_amps: 16,
+                        applied_limit_amps: 16,
+                        min_allowed_amps: 7,
+                        max_hardware_amps: 32,
+                        charge_authorized: true,
+                        pilot_voltage: None,
+                    },
+                    meter: ConnectorMeter {
+                        power_w: 0.0,
+                        energy_kwh: 0.0,
+                        energy_total_wh: 0.0,
+                        current_a: 0.0,
+                        voltage_v: 230.0,
+                        voltage_source: "default".to_string(),
+                        voltage_ttl_remaining_s: None,
+                        frequency_hz: 50.0,
+                    },
+                    grid: ConnectorGrid {
+                        tic_connected: false,
+                        tic_mode: "none".to_string(),
+                        tic_baud_rate: None,
+                    },
+                },
+            ],
+        };
+
+        let configs = generate_ha_discovery_payloads("greenup", &snap);
+        assert!(!configs.is_empty(), "Should generate HA discovery entities");
+
+        let power_cfg = configs.iter().find(|(topic, _)| topic.contains("point_1_power")).expect("Point 1 power config missing");
+        assert!(power_cfg.0.starts_with("homeassistant/sensor/greenup_058001/"));
+        assert!(power_cfg.1.contains("\"identifiers\":[\"greenup_058001\"]"));
+        assert!(power_cfg.1.contains("\"model\":\"058001\""));
     }
 }
