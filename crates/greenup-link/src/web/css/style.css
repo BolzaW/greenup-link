@@ -899,6 +899,58 @@
     transition: transform 0.05s ease-out;
 }
 
+.session-chart-header-row {
+    min-height: 28px;
+}
+
+.session-chart-header {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+#sessionChartDate,
+.session-chart-date {
+    font-size: 0.68rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 500;
+    color: #94a3b8;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-align: center;
+}
+
+#sessionChartStatus,
+.session-chart-status {
+    font-size: 0.60rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: #64748b;
+    white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+    .session-chart-header {
+        font-size: 0.58rem;
+        letter-spacing: 0.02em;
+    }
+    #sessionChartDate,
+    .session-chart-date {
+        font-size: 0.60rem;
+    }
+    #sessionChartStatus,
+    .session-chart-status {
+        font-size: 0.55rem;
+    }
+}
+
 
 /* --- Visualizer Breathing Pulse Animations --- */
 @keyframes pulseChargerBlue {

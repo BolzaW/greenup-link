@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Green'Up Link</title>
-    <link rel="icon" href="/favicon.ico?v=6">
-    <link rel="stylesheet" href="/css/style.css?v=6">
+    <link rel="icon" href="/favicon.ico?v=7">
+    <link rel="stylesheet" href="/css/style.css?v=7">
 </head>
 <body class="min-h-screen flex flex-col p-4 md:p-8 selection:bg-sky-500/30">
 
@@ -271,18 +271,18 @@
             <!-- Chart Container -->
             <div class="session-chart-wrap">
                 <!-- Header inside chart container -->
-                <div class="flex items-center justify-between px-3 pt-2 pb-2 mb-1 border-b border-slate-900/80">
-                    <span class="session-chart-header text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center">
+                <div class="session-chart-header-row flex items-center justify-between px-3 pt-2 pb-2 mb-1 border-b border-slate-900/80 gap-1.5 sm:gap-2">
+                    <span class="session-chart-header uppercase font-bold text-slate-400 tracking-wider flex items-center">
                         <span id="sessionChartDot" class="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block transition-colors"></span>
                         <span id="sessionChartTitle" data-i18n="sessions.chart_power_curve">Courbe de puissance</span>
                     </span>
-                    <span id="sessionChartDate" class="text-[11px] font-mono font-medium text-slate-400 tracking-wide"></span>
-                    <div class="flex items-center gap-2">
+                    <span id="sessionChartDate" class="session-chart-date font-mono font-medium text-slate-400 tracking-wide"></span>
+                    <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
                         <div class="session-chart-pill">
                             <button id="btnChartModeKw" type="button" class="chart-pill-btn active">kW</button>
                             <button id="btnChartModeAmps" type="button" class="chart-pill-btn">A</button>
                         </div>
-                        <span id="sessionChartStatus" class="text-[10px] font-mono text-slate-500"></span>
+                        <span id="sessionChartStatus" class="session-chart-status font-mono text-slate-500"></span>
                     </div>
                 </div>
 
