@@ -149,6 +149,7 @@ pub fn parse_command_topic(
 
 /// Helper parsing either raw numeric float string or JSON payload `{"voltage": 235.0, "ttl_seconds": 60}`.
 fn parse_voltage_payload(raw: &str) -> Option<(f32, Option<u64>)> {
+    let raw = raw.trim();
     if raw.starts_with('{') {
         #[derive(serde::Deserialize)]
         struct VoltageJson {
