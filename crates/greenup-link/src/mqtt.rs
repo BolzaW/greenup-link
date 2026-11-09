@@ -870,7 +870,7 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
             };
 
             if (amps - validated_amps as f64).abs() > 0.01 {
-                logger::log(
+                logger::debug(
                     "MQTT",
                     &format!("⚡ MQTT current limit {:.2}A rounded to {}A on Side {}", amps, validated_amps, side),
                 );
@@ -884,7 +884,7 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
                 .unwrap_or_else(|_| "Unknown".to_string());
 
             if current_greenup_state == "A" {
-                logger::log(
+                logger::debug(
                     "MQTT",
                     &format!(
                         "⚡ Current limit modification in State A on Side {} → {}A (synchronizing CCEl:{:02} and CC:{:02})",
@@ -894,7 +894,7 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
                 let _ = point.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await;
                 let _ = point.serial_tx.send(Command::SetDirectCurrentLimit(validated_amps)).await;
             } else {
-                logger::log(
+                logger::debug(
                     "MQTT",
                     &format!(
                         "⚡ Current limit modification on Side {} → {}A (sending CCEl:{:02})",
@@ -914,7 +914,7 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
             }
 
             let ttl = ttl_seconds.unwrap_or(60);
-            logger::log(
+            logger::debug(
                 "MQTT",
                 &format!("⚡ External grid voltage updated via MQTT → {:.1}V (TTL: {}s)", voltage, ttl),
             );

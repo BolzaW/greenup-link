@@ -482,7 +482,7 @@ async fn set_current(
     };
 
     if (amps - validated_amps as f64).abs() > 0.01 {
-        logger::log(
+        logger::debug(
             "API",
             &format!("⚡ Current limit setpoint {:.2}A rounded to {}A", amps, validated_amps),
         );
@@ -496,7 +496,7 @@ async fn set_current(
         .unwrap_or_else(|_| "Unknown".to_string());
 
     if current_greenup_state == "A" {
-        logger::log(
+        logger::debug(
             "API",
             &format!(
                 "⚡ Current limit modification in State A → {}A (synchronizing CCEl:{:02} and CC:{:02})",
@@ -519,7 +519,7 @@ async fn set_current(
             )
         }
     } else {
-        logger::log(
+        logger::debug(
             "API",
             &format!("⚡ Current limit modification → {}A (sending CCEl:{:02})", validated_amps, validated_amps),
         );
@@ -699,7 +699,7 @@ async fn set_voltage(
     }
 
     let ttl = payload.ttl_seconds.unwrap_or(60);
-    logger::log(
+    logger::debug(
         "API",
         &format!("⚡ External grid voltage updated → {:.1}V (TTL: {}s)", payload.voltage, ttl),
     );
