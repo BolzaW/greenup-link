@@ -149,7 +149,7 @@ impl AtmegaRawState {
     /// Returns `true` if any register or counter was updated.
     pub fn apply_event(&mut self, event: &ProtocolEvent) -> bool {
         match event {
-            ProtocolEvent::Ping | ProtocolEvent::Pong | ProtocolEvent::Unknown(_) => false,
+            ProtocolEvent::Ping | ProtocolEvent::Pong | ProtocolEvent::Start | ProtocolEvent::Unknown(_) => false,
 
             // 1. Identity & Boot Handshake
             ProtocolEvent::KitCom(v) => {

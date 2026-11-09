@@ -893,7 +893,7 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
 
     if !applied {
         match &event {
-            ProtocolEvent::Ping | ProtocolEvent::Pong | ProtocolEvent::TicTestInit => {}
+            ProtocolEvent::Ping | ProtocolEvent::Pong | ProtocolEvent::Start | ProtocolEvent::TicTestInit => {}
             ProtocolEvent::CommandNotUnderstood(cmd) => {
                 logger::log_with_level_side(
                     "SERIAL",
