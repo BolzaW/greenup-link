@@ -567,7 +567,7 @@ function updateUsbStatus(serial) {
         if (tabSystemBadge) tabSystemBadge.classList.add('hidden');
 
         if (sysUsbDetails) {
-            const rxInfo = serial.last_rx_secs_ago != null ? ` • Dernier échange : ${serial.last_rx_secs_ago}s` : '';
+            const rxInfo = serial.last_rx_secs_ago != null ? ` • ${serial.last_rx_secs_ago}s` : '';
             sysUsbDetails.innerText = `✓ ${t('usb.status_connected')}${rxInfo}`;
             sysUsbDetails.className = 'sys-usb-details sys-usb-ok';
         }
