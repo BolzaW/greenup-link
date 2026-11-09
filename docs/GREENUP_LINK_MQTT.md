@@ -170,7 +170,7 @@ Publishing to these topics allows external systems to pilot the charging station
 
 **Topic**: `<base>/connector/<id>/control/setpoint_amps/set`
 
-- **Payload**: integer string between `7` and `32` (e.g. `16`, `24`, `32`).
+- **Payload**: numeric string between `7` and `32` (e.g. `16`, `16.7`, `24`). Decimal numbers are automatically rounded to the nearest integer.
 - **Behavior**:
   - If the station is in `State:A` (Available / Free), greenup-link synchronizes both `CCEl:XX` and `CC:XX` to ensure the internal ATmega registers are synchronized before a car plugs in.
   - In all other states, only `CCEl:XX` is sent, allowing the ATmega to dynamically apply the lowest limit between CCEl, TIC, and circuit breakers.
