@@ -87,7 +87,9 @@ Green'Up Link abstracts the 24 proprietary Legrand states into clean, standardiz
 
 > [!IMPORTANT]
 > **Independent Software Reconstruction vs `OCPPS?`**:  
-> Green'Up Link deliberately **does not rely on the ATmega's internal `OCPPS?` command**. In `FM:1` (Direct Charge), the ATmega's built-in OCPP state engine is dormant or out of sync. Green'Up Link reconstructs normalized states directly from the low-level serial telemetry (`State:X`), physical ADC Control Pilot measurements (`CP?`), active software pause flags, and error codes.
+> The ATmega's `OCPPS?` query command does return an OCPP-equivalent status corresponding to the current Legrand state. However, Green'Up Link deliberately **does not rely on `OCPPS?`**:
+> 1. **Polled vs. Spontaneous:** Unlike `State:X`, which the ATmega broadcasts spontaneously upon every state transition, `OCPPS?` is never emitted autonomously. Relying on it would require continuously polling the serial bus after every telemetry event, adding unnecessary latency and bus contention.
+> 2. **High-Level Control & Evolution:** Querying `OCPPS?` would tightly couple Green'Up Link to Legrand's proprietary firmware mapping choices (whether justified or quirky). By reconstructing the OCPP state directly from spontaneous telemetry (`State:X`), error registers, and active software pause flags, Green'Up Link maintains full control and adaptability for future integrations.
 
 ### 3.1 Mapping Table (Implemented in `crates/greenup-link/src/telemetry.rs`)
 
