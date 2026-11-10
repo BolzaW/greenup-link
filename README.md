@@ -313,7 +313,11 @@ While the Green'Up Premium hardware is solid and reliable, its factory software 
 
 ## 🚀 Future Features
 
-Potential future roadmap ideas (with no guaranteed timeline):
+> [!NOTE]
+> None of the features listed below are promised, guaranteed, or bound to a fixed release schedule. Their development will depend on several factors, including available personal time, technical feasibility, and architectural coherence with the rest of the software.  
+> However, community feedback is always welcome: feel free to suggest new ideas or feature requests via GitHub Issues, which will be reviewed on a case-by-case basis!
+
+Potential ideas and exploration tracks for future releases:
 - **Native OCPP 1.6-J Support**: Direct JSON WebSocket interface to connect with central charging station management systems (CSMS like SteVe, MaEVe, CitrineOS) without external gateways.
 - **Automated Energy Reports & Cost Accounting**: Periodic charging summaries with cost calculation based on peak/off-peak Linky electricity tariffs, exportable in PDF/CSV format.
 - **Autonomous Dynamic Solar Charging**: Internal rule-based solar diversion engine directly consuming household smart meter or inverter data, as an alternative to external EMS tools like EVCC.

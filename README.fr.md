@@ -310,7 +310,11 @@ Le matériel de la borne Green'Up Premium est soigné et fiable, mais sa suite l
 
 ## 🚀 Fonctionnalités futures
 
-Pistes et idées pour la feuille de route future (sans calendrier contractuel) :
+> [!NOTE]
+> Aucune des fonctionnalités listées ci-dessous n'est garantie, promise ou liée à un calendrier précis. Leur éventuel développement dépendra de plusieurs critères, notamment du temps libre disponible, de la faisabilité technique et de la cohérence globale par rapport à l'architecture du logiciel.  
+> Pour autant, les retours de la communauté sont toujours les bienvenus : n'hésitez pas à proposer vos idées ou suggestions via les tickets GitHub, elles seront étudiées au cas par cas !
+
+Pistes et idées d'exploration pour les versions futures :
 - **Support natif d'OCPP 1.6-J** : Interface WebSocket JSON directe pour connecter la borne à un superviseur centralisé (CSMS type SteVe, MaEVe, CitrineOS) sans passerelle externe.
 - **Rapports d'énergie & Suivi financier automatisés** : Bilans périodiques de consommation et calcul des coûts de recharge basés sur la grille tarifaire Linky HP/HC, exportables en PDF/CSV.
 - **Gestionnaire solaire autonome intégré** : Moteur interne de délestage et surplus solaire branché directement sur les données d'un onduleur ou compteur Linky, pour ceux qui ne souhaitent pas déployer EVCC.
