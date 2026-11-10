@@ -27,22 +27,6 @@ Three standard authentication methods are supported simultaneously against the s
 
 ---
 
-## 🛡️ Security & Resource Limits
-
-1. **Request Body Size Limit (4 KB)**:
-   All incoming HTTP request bodies are globally capped at **4096 bytes (4 KB)** via Axum's `DefaultBodyLimit`. Any request exceeding this limit is immediately rejected with HTTP `413 Payload Too Large` to protect Raspberry Pi system resources.
-2. **Raw Command Sanitization**:
-   `POST /api/command` strictly validates input against `^[a-zA-Z0-9:?]{1,20}$`, blocking CRLF injection (`\r`, `\n`), escape sequences, and oversized frames on the ATmega serial bus.
-3. **Daily Log Size Warning**:
-   To safeguard Raspberry Pi microSD endurance, the logger monitors active daily log file growth. If a log file exceeds **10 MB** (and each subsequent 10 MB step, typically when `DEBUG` or `TRACE` is active), a `SYS` warning is emitted to alert the administrator. Logging continues without truncation or interruption so that complete diagnostic data is preserved.
-4. **Defensive Security Headers**:
-   All HTTP responses served by Green'Up Link include defensive security headers:
-   - `X-Frame-Options: DENY`: Prevents embedding the Web UI inside external `<iframe>` elements (clickjacking defense).
-   - `X-Content-Type-Options: nosniff`: Prevents MIME-type confusion / sniffing.
-   - `Referrer-Policy: no-referrer`: Prevents local station IP and URL paths from leaking in external requests.
-
----
-
 ## 📋 Endpoints Overview
 
 ### Canonical & Standard Endpoints (Recommended for EVCC, HA, OCPP)
@@ -57,11 +41,6 @@ Three standard authentication methods are supported simultaneously against the s
 | `GET` | `/api/status` | Real-time status for primary/queried side (`iec`, `ocpp`, `connected`, `charging`) |
 | `GET` | `/api/meter` | Real-time electrical metering for primary/queried side (`power_w`, `energy_kwh`, etc.) |
 
-### Authentication
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/auth/status` | Check if authentication is enabled and if the provided token is valid |
-
 ### Control & Actions
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -74,6 +53,13 @@ Three standard authentication methods are supported simultaneously against the s
 | `POST` | `/api/bluetooth` | Enable / disable Bluetooth |
 | `POST` | `/api/command` | Raw serial command (debug, strictly guarded) |
 
+### Charging Session Management
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/sessions` | List saved charging sessions and get real-time active session summary |
+| `GET` | `/api/sessions/:id/export` | Export session 1-second timeseries telemetry (`format=csv\|txt\|zip`) |
+| `DELETE` | `/api/sessions/:id` | Permanently delete a finished session from disk |
+
 ### Logs & Diagnostics
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -83,6 +69,12 @@ Three standard authentication methods are supported simultaneously against the s
 | `GET` | `/api/logs/level` | Get currently active log level |
 | `POST` | `/api/logs/level` | Update active log level dynamically at runtime |
 
+### System & Low-Level Diagnostics
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/driver/raw` | Raw serial cache snapshot (DIP switches, internal registers, TIC raw) |
+| `GET` | `/api/auth/status` | Check authentication requirement, token validity, and kiosk mode |
+
 ---
 
 ## 📡 Read Endpoints (GET)
@@ -90,6 +82,7 @@ Three standard authentication methods are supported simultaneously against the s
 ### 1. Get canonical station snapshot (OCPP 1.6-J & EVCC structured)
 - **URL**: `/api/state`
 - **Method**: `GET`
+- **Query Parameter**: `side` (optional, `1` or `2`)
 - **Description**: Returns the unified, clean hierarchical data model for the entire charging station, including station-level metadata and an array of individual connectors (`EVSEs`). Designed as the canonical backbone for OCPP 1.6-J, EVCC, and Home Assistant.
 - **Typical Response**:
   ```json
@@ -138,29 +131,36 @@ Three standard authentication methods are supported simultaneously against the s
           "min_allowed_amps": 7,
           "max_hardware_amps": 32,
           "charge_authorized": true,
-          "pilot_voltage": 6
+          "paused_by_user": false,
+          "mode": "RemoteControl"
         },
         "meter": {
           "power_w": 3680.0,
           "energy_kwh": 14.52,
+          "energy_wh": 14520.0,
           "current_a": 16.0,
           "voltage_v": 230.0,
           "frequency_hz": 50.0,
+          "phases_active": 1,
           "voltage_source": "internal"
         },
         "grid": {
-          "tic_mode": "9600",
-          "tic_active": true
+          "tic_available": true,
+          "tic_mode": "standard",
+          "tic_current_amps": 16.0,
+          "off_peak_contact": false
         }
       }
     ]
   }
   ```
 
+---
+
 ### 2. Get station identity & capabilities
 - **URL**: `/api/station`
 - **Method**: `GET`
-- **Description**: Returns only the station-level metadata (vendor, model, serial, firmware, hardware capabilities, serial connection status). Formatted directly to populate an OCPP `BootNotification` payload.
+- **Description**: Returns static identity information, capabilities, and serial port health. Ideal for discovery or OCPP `BootNotification` payloads.
 - **Typical Response**:
   ```json
   {
@@ -172,7 +172,15 @@ Three standard authentication methods are supported simultaneously against the s
     "production_date": "21W20",
     "link_version": "0.5.0-dev",
     "connector_count": 1,
-    "capabilities": { ... },
+    "capabilities": {
+      "phases": 1,
+      "max_power_kw": 7.4,
+      "max_current_amps": 32,
+      "has_schuko": false,
+      "charging_points": 1,
+      "is_known": true,
+      "has_tic": true
+    },
     "serial": {
       "status": "usb_connected",
       "port": "/dev/ttyUSB0",
@@ -183,47 +191,70 @@ Three standard authentication methods are supported simultaneously against the s
   }
   ```
 
+---
+
 ### 3. Get connector list & specific connector data
 - **URLs**:
-  - `GET /api/connectors`: List all connectors of the station (`Vec<ConnectorData>`).
-  - `GET /api/connectors/:id`: Get full data for connector `:id` (`1` or `2`).
-  - `GET /api/connectors/:id/status`: Get only `status` for connector `:id`.
-  - `GET /api/connectors/:id/meter`: Get only electrical `meter` for connector `:id`.
-- **Typical Response (`GET /api/connectors/1/status`)**:
+  - `/api/connectors` (all connectors)
+  - `/api/connectors/:id` (specific connector: `1` or `2`)
+- **Method**: `GET`
+- **Description**: Returns dynamic state, control parameters, metering, and grid telemetry for each socket.
+- **Typical Response (`GET /api/connectors/1`)**:
   ```json
   {
-    "iec": "C",
-    "ocpp": "Charging",
-    "legrand_raw": "C",
-    "connected": true,
-    "charging": true,
-    "error_code": "0000",
-    "error_description": "No error"
-  }
-  ```
-- **Typical Response (`GET /api/connectors/1/meter`)**:
-  ```json
-  {
-    "power_w": 3680.0,
-    "energy_kwh": 14.52,
-    "current_a": 16.0,
-    "voltage_v": 230.0,
-    "frequency_hz": 50.0,
-    "voltage_source": "internal"
+    "connector_id": 1,
+    "status": {
+      "iec": "C",
+      "ocpp": "Charging",
+      "legrand_raw": "C",
+      "connected": true,
+      "charging": true,
+      "error_code": "0000",
+      "error_description": "No error"
+    },
+    "control": {
+      "setpoint_amps": 16,
+      "applied_limit_amps": 16,
+      "min_allowed_amps": 7,
+      "max_hardware_amps": 32,
+      "charge_authorized": true,
+      "paused_by_user": false,
+      "mode": "RemoteControl"
+    },
+    "meter": {
+      "power_w": 3680.0,
+      "energy_kwh": 14.52,
+      "energy_wh": 14520.0,
+      "current_a": 16.0,
+      "voltage_v": 230.0,
+      "frequency_hz": 50.0,
+      "phases_active": 1,
+      "voltage_source": "internal"
+    },
+    "grid": {
+      "tic_available": true,
+      "tic_mode": "standard",
+      "tic_current_amps": 16.0,
+      "off_peak_contact": false
+    }
   }
   ```
 
+---
+
 ### 4. Fast Status & Metering Endpoints (Optimized for EVCC & Home Assistant)
 - **URLs**:
-  - `GET /api/status[?side=1|2]`
-  - `GET /api/meter[?side=1|2]`
-- **Description**: Direct, lightweight endpoints targeting the primary socket (or queried `?side=`). Perfect for simple HTTP polls in EVCC or Home Assistant REST sensors without parsing a giant JSON blob.
+  - `/api/status` (flat status for primary socket or `?side=1|2`)
+  - `/api/meter` (flat metering for primary socket or `?side=1|2`)
+  - `/api/connectors/:id/status` (flat status for specific connector)
+  - `/api/connectors/:id/meter` (flat metering for specific connector)
+- **Method**: `GET`
+- **Description**: Ultra-compact, high-speed JSON endpoints designed specifically for EVCC and Home Assistant polling loops (minimal JSON serialization overhead).
 - **`GET /api/status` Response**:
   ```json
   {
     "iec": "C",
     "ocpp": "Charging",
-    "legrand_raw": "C",
     "connected": true,
     "charging": true,
     "error_code": "0000",
@@ -244,6 +275,72 @@ Three standard authentication methods are supported simultaneously against the s
 
 ---
 
+### 5. Raw Driver Cache Snapshot
+- **URL**: `/api/driver/raw`
+- **Method**: `GET`
+- **Query Parameter**: `side` (optional, `1` or `2`)
+- **Description**: Returns the low-level cached snapshot directly extracted from raw serial frames exchanged with the ATmega2560 board. Useful for deep hardware diagnostics, inspecting DIP switch positions, or checking internal raw register values.
+- **Typical Response (Single Charge Point)**:
+  ```json
+  {
+    "reference": "058001",
+    "serial_number": "012345",
+    "software_version": "V01.17.78",
+    "hardware_version": "V02.01.01",
+    "week_year_production": "21W20",
+    "side": 1,
+    "side_raw": "49",
+    "state": "A",
+    "cc": 16,
+    "cci": 0.0,
+    "dip1": "0",
+    "dip2": "0",
+    "dip3": "0",
+    "dip4": "0",
+    "t2c": "1",
+    "t2f": "0",
+    "fm": "2",
+    "fm2": "1",
+    "d": "0",
+    "dec": "0",
+    "sb": "1",
+    "dom": "0",
+    "fcs": "0",
+    "bt": "0",
+    "initialized": true,
+    "tic_mode": "STANDARD",
+    "urms1": "233",
+    "irms1": "0",
+    "pref": "0"
+  }
+  ```
+  *(On dual-socket stations without `?side`, returns `{ "dual_mode": true, "point1": {...}, "point2": {...} }`).*
+
+---
+
+### 6. Check Authentication Status
+- **URL**: `/api/auth/status`
+- **Method**: `GET`
+- **Description**: Public endpoint allowing client applications and the Web UI to check whether authentication is active, whether the provided token (in header or query string) is valid, and if Kiosk Mode is enabled.
+- **Typical Response (Authentication Required & Valid Token)**:
+  ```json
+  {
+    "auth_required": true,
+    "authenticated": true,
+    "kiosk_mode": false
+  }
+  ```
+- **Typical Response (Authentication Disabled / Open Access)**:
+  ```json
+  {
+    "auth_required": false,
+    "authenticated": true,
+    "kiosk_mode": false
+  }
+  ```
+
+---
+
 ## 🛠️ Action Endpoints (POST)
 
 > [!IMPORTANT]
@@ -256,9 +353,10 @@ Three standard authentication methods are supported simultaneously against the s
 > }
 > ```
 
-### 3. Control charge state
+### 7. Control charge state
 - **URL**: `/api/charge`
 - **Method**: `POST`
+- **Query Parameter**: `side` (optional, `1` or `2`)
 - **Body (JSON)**:
   ```json
   { "action": "enable" }
@@ -276,9 +374,12 @@ Three standard authentication methods are supported simultaneously against the s
   { "status": "success" }
   ```
 
-### 4. Modify current limit
+---
+
+### 8. Modify current limit
 - **URL**: `/api/current/:amps`
 - **Method**: `POST`
+- **Query Parameter**: `side` (optional, `1` or `2`)
 - **URL Parameter**: `:amps` (numeric, integer or decimal between **7** and **32**; decimal numbers such as `16.7` are automatically rounded to the nearest integer, e.g. `17`).
 - **Description**: Sets the current limit target. When the station is in `State:A` (vehicle unplugged), Green'Up Link sends both `CCEl:XX` and `CC:XX` to keep the ATmega limits synchronized while idle. In all other operating states (`B`, `C`, etc.), only `CCEl:XX` is sent, allowing the ATmega to dynamically consolidate internal hardware limits (`CC = min(DIP, CCCa, CCEl, CCTIC)`).
 - **Security**: The API rejects any value outside `[7, 32]` with a `400` error. While the ATmega board can technically accept values above 32A, they have not been tested in real conditions to avoid hardware risks. Using `CCEl` (Eliot limit) instead of directly forcing `CC` in active states is a deliberate safety choice: it allows the ATmega to keep its internal safeguards active, computing the final safe limit (`CC`) based on other hardware factors. Finally, note that below 6A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8A.
@@ -287,9 +388,29 @@ Three standard authentication methods are supported simultaneously against the s
   { "status": "success", "message": "Current limit set to 16A" }
   ```
 
-### 5. Relaunch initialization sequence
+---
+
+### 9. Inject external grid voltage
+- **URL**: `/api/voltage`
+- **Method**: `POST`
+- **Query Parameter**: `side` (optional, `1` or `2`)
+- **Body (JSON)**:
+  ```json
+  { "voltage": 234.5 }
+  ```
+- **Description**: Injects a measured grid voltage from an external smart meter (Shelly, Enedis Linky, Home Assistant, etc.). When injected, Green'Up Link uses this exact voltage to compute active power ($P = U \times I$) instead of the default nominal 230V. External voltage automatically expires after 30 seconds if not refreshed.
+- **Validation**: Accepts voltage values between `180.0` and `280.0` V. Allowed even in Sniffer mode (`sniffer_mode = true`).
+- **Typical Response**:
+  ```json
+  { "status": "success", "message": "External voltage updated" }
+  ```
+
+---
+
+### 10. Relaunch initialization sequence
 - **URL**: `/api/init`
 - **Method**: `POST`
+- **Query Parameter**: `side` (optional, `1` or `2`)
 - **Description**: Replays the startup sequence: `RaspberryPiModeOK`, then querying information (`SoftwareVersion?`, `HardwareVersion?`, `SerialNumber?`, `Reference?`, `WeekYearProduction?`) and states (`State?`, `FM?`, `CC?`, `CCEl?`, `CP?`, `T2C?`, `SB?`, `E?`, `BT?`). The response is immediate, the sequence runs in the background.
 - **Note**: TIC detection is **never** started automatically. It must be requested explicitly via `/api/tic/refresh`.
 - **Typical Response**:
@@ -297,20 +418,26 @@ Three standard authentication methods are supported simultaneously against the s
   { "status": "success", "message": "Initialization sequence started" }
   ```
 
-### 6. Restart power board
+---
+
+### 11. Restart power board
 - **URL**: `/api/reset`
 - **Method**: `POST`
+- **Query Parameter**: `side` (optional, `1` or `2`)
 - **Description**: Sends the `Reset` command to the ATmega board to force a hardware restart. Useful to unblock the station when it remains stuck in `State:A` while `T2C:1` and `CP:9` (vehicle plugged in): state `B` never arrives without a reset.
 - **Typical Response**:
   ```json
   { "status": "success", "message": "ATmega board restart requested" }
   ```
 
-### 7. Start TIC (Linky) detection
+---
+
+### 12. Start TIC (Linky) detection
 - **URL**: `/api/tic/refresh`
 - **Method**: `POST`
-- **Description**: Starts the customer tele-information (TIC) speed detection. The server sends `TICTM:1`, parses the return (e.g. `TICTestB:9600`), updates `tic_mode`, then disables test mode with `TICTM:0`.
-- **Security**: Detection is only allowed if the station is idle (`greenup_state == "A"`). In any other state, **nothing is sent to the station** and the API responds `400`:
+- **Query Parameter**: `side` (optional, `1` or `2`)
+- **Description**: Starts customer tele-information (TIC) speed detection. The server sends `TICTM:1`, parses the return (e.g. `TICTestB:9600`), updates `tic_mode`, then disables test mode with `TICTM:0`.
+- **Security**: Detection is only allowed if the station is idle (`State:A`). In any other state, **nothing is sent to the station** and the API responds `400`:
   ```json
   { "error": "TIC detection can only be done when the station is free (State:A). Current state: M" }
   ```
@@ -319,9 +446,12 @@ Three standard authentication methods are supported simultaneously against the s
   { "status": "success", "message": "TIC detection started" }
   ```
 
-### 8. Enable / Disable Bluetooth
+---
+
+### 13. Enable / Disable Bluetooth
 - **URL**: `/api/bluetooth`
 - **Method**: `POST`
+- **Query Parameter**: `side` (optional, `1` or `2`)
 - **Body (JSON)**:
   ```json
   { "enabled": true }
@@ -332,11 +462,14 @@ Three standard authentication methods are supported simultaneously against the s
   { "status": "success", "message": "Bluetooth disabled successfully" }
   ```
 
-### 9. Send raw command (Debug/Advanced)
+---
+
+### 14. Send raw command (Debug/Advanced)
 - **URL**: `/api/command`
 - **Method**: `POST`
+- **Query Parameter**: `side` (optional, `1` or `2`)
 - **Body (Plain text)**: the command to send (e.g., `State?`)
-- **Description**: Directly transmits the string on the serial port. Reserved for testing and debugging. See [`LEGRAND_SERIAL_PROTOCOL.md`](LEGRAND_SERIAL_PROTOCOL.md) for the list of known commands.
+- **Description**: Directly transmits the string on the serial port. Reserved for testing and debugging. See [`LEGRAND_SERIAL_PROTOCOL.md`](LEGRAND_SERIAL_PROTOCOL.md) for the list of known commands. Carriage return (`\r\n`) line endings are managed automatically by the API and do not need to be added manually.
 - **Validation & Security**:
   - Whitelist: only characters matching `[a-zA-Z0-9:?]` are accepted (strictly eliminates CRLF `\r`, `\n`, control characters, and injection attempts).
   - Length: maximum 20 characters (`1..=20`).
@@ -353,25 +486,92 @@ Three standard authentication methods are supported simultaneously against the s
   { "status": "success", "message": "Command sent" }
   ```
 
-### 10. Inject external grid voltage
-- **URL**: `/api/voltage`
-- **Method**: `POST`
-- **Body (JSON)**:
-  ```json
-  { "voltage": 234.5 }
-  ```
-- **Description**: Injects a measured grid voltage from an external smart meter (Shelly, Enedis Linky, Home Assistant, etc.). When injected, Green'Up Link uses this exact voltage to compute active power ($P = U \times I$) instead of the default nominal 230V. External voltage automatically expires after 30 seconds if not refreshed.
-- **Validation**: Accepts voltage values between `180.0` and `280.0` V. Allowed even in Sniffer mode (`sniffer_mode = true`).
+---
+
+## 💾 Charging Session Management Endpoints
+
+Green'Up Link includes a high-resolution session recorder that logs 1-second timeseries telemetry (voltage, current, power, energy, state) to disk for every charging session.
+
+### 15. List recorded charging sessions & active session
+- **URL**: `/api/sessions`
+- **Method**: `GET`
+- **Query Parameter**: `side` (optional, `1` or `2`, defaults to `1`)
+- **Description**: Returns all saved charging sessions stored on disk (sorted chronologically, newest first), along with a live summary of the currently active charging session (if a vehicle is actively charging).
 - **Typical Response**:
   ```json
-  { "status": "success", "message": "External voltage updated" }
+  {
+    "active_session": {
+      "session_id": "20261110_143000",
+      "side": 1,
+      "start_time": "2026-11-10T14:30:00Z",
+      "elapsed_seconds": 1250,
+      "energy_wh": 3420.5,
+      "max_power_w": 7360.0,
+      "avg_power_w": 7150.2,
+      "max_current_a": 32.0,
+      "avg_current_a": 31.1,
+      "status": "charging"
+    },
+    "sessions": [
+      {
+        "id": "20261109_183015",
+        "side": 1,
+        "start_time": "2026-11-09T18:30:15Z",
+        "end_time": "2026-11-09T22:15:30Z",
+        "duration_seconds": 13515,
+        "energy_wh": 26400.0,
+        "max_power_w": 7360.0,
+        "avg_power_w": 7035.0,
+        "max_current_a": 32.0,
+        "avg_current_a": 30.6,
+        "samples_count": 13515,
+        "csv_file": "20261109_183015.csv",
+        "txt_file": "20261109_183015.txt"
+      }
+    ]
+  }
+  ```
+
+---
+
+### 16. Export session data
+- **URL**: `/api/sessions/:id/export`
+- **Method**: `GET`
+- **URL Parameter**: `:id` (e.g. `20261109_183015`)
+- **Query Parameter**: `format` (optional: `csv`, `txt`, or `zip`, defaults to `csv`)
+- **Description**: Downloads detailed session telemetry recorded on disk:
+  - `csv` (`text/csv`): Full high-resolution 1-second timeseries samples:
+    ```text
+    timestamp,elapsed_s,voltage_v,current_a,power_w,energy_wh,state
+    2026-11-09T18:30:15Z,0,234.2,0.0,0.0,0.0,B
+    2026-11-09T18:30:16Z,1,233.8,15.8,3694.0,1.0,C
+    ...
+    ```
+  - `txt` (`text/plain`): Legacy ticket summary format compatible with Legrand KitCom tickets.
+  - `zip` (`application/zip`): Compressed archive containing both `.csv` and `.txt` files.
+- **Header**: Returns `Content-Disposition: attachment; filename="<id>.<ext>"`.
+
+---
+
+### 17. Delete a recorded session
+- **URL**: `/api/sessions/:id`
+- **Method**: `DELETE`
+- **URL Parameter**: `:id` (e.g. `20261109_183015`)
+- **Description**: Permanently deletes the session's `.csv` and `.txt` files from disk.
+- **Safety Guard**: Any attempt to delete the currently active session (`:id = active`) is rejected with HTTP `409 Conflict`.
+- **Typical Response**:
+  ```json
+  {
+    "message": "Session deleted successfully",
+    "id": "20261109_183015"
+  }
   ```
 
 ---
 
 ## 📋 Log Management Endpoints
 
-### 12. Get recent in-memory logs
+### 18. Get recent in-memory logs
 - **URL**: `/api/logs`
 - **Method**: `GET`
 - **Description**: Returns the ring buffer of the most recent 500 log entries recorded by the server since startup. Used by the Web UI console to populate the history on page load.
@@ -391,20 +591,26 @@ Three standard authentication methods are supported simultaneously against the s
   ]
   ```
 
-### 13. Stream real-time logs (SSE)
+---
+
+### 19. Stream real-time logs (SSE)
 - **URL**: `/api/logs/stream`
 - **Method**: `GET`
 - **Content-Type**: `text/event-stream`
-- **Description**: Server-Sent Events (SSE) stream broadcasting all newly generated log entries in real-time. Automatic keep-alive pings are transmitted to keep persistent connections alive.
+- **Description**: Server-Sent Events (SSE) stream broadcasting all newly generated log entries in real-time. Automatic keep-alive pings are transmitted to keep persistent connections alive. *(Authentication can be provided via `?token=<your_api_token>` query parameter in addition to standard headers)*.
 
-### 14. Download daily log file
+---
+
+### 20. Download daily log file
 - **URL**: `/api/logs/export`
 - **Method**: `GET`
 - **Content-Type**: `text/plain; charset=utf-8`
 - **Content-Disposition**: `attachment; filename="greenup_YYYY-MM-DD.log"`
-- **Description**: Downloads the raw text content of the active daily log file on the server.
+- **Description**: Downloads the raw text content of the active daily log file on the server. *(Accepts `?token=<your_api_token>` query parameter)*.
 
-### 15. Get active log level
+---
+
+### 21. Get active log level
 - **URL**: `/api/logs/level`
 - **Method**: `GET`
 - **Description**: Returns the currently active logging threshold filter (applied equally to stdout console and disk files).
@@ -415,7 +621,9 @@ Three standard authentication methods are supported simultaneously against the s
   }
   ```
 
-### 16. Update active log level dynamically
+---
+
+### 22. Update active log level dynamically
 - **URL**: `/api/logs/level`
 - **Method**: `POST`
 - **Body (JSON)**:
