@@ -97,10 +97,10 @@ Three standard authentication methods are supported simultaneously against the s
     "station": {
       "charge_point_vendor": "Legrand",
       "charge_point_model": "Green'Up Premium (058001)",
-      "charge_point_serial_number": "015184",
+      "charge_point_serial_number": "012345",
       "firmware_version": "V01.18.10",
       "hardware_version": "V02.01.01",
-      "production_date": "42W22",
+      "production_date": "21W20",
       "link_version": "0.5.0-dev",
       "connector_count": 1,
       "capabilities": {
@@ -166,10 +166,10 @@ Three standard authentication methods are supported simultaneously against the s
   {
     "charge_point_vendor": "Legrand",
     "charge_point_model": "Green'Up Premium (058001)",
-    "charge_point_serial_number": "015184",
+    "charge_point_serial_number": "012345",
     "firmware_version": "V01.18.10",
     "hardware_version": "V02.01.01",
-    "production_date": "42W22",
+    "production_date": "21W20",
     "link_version": "0.5.0-dev",
     "connector_count": 1,
     "capabilities": { ... },
