@@ -4,6 +4,11 @@ This document details the operation of the proprietary state machine in the Legr
 
 The states returned by the `State:` serial command are not simple IEC 61851 electrical states, but a behavioral finite-state machine (FSM).
 
+> [!IMPORTANT]
+> **Hardware Autonomy & Electrical Safety:**  
+> Whatever happens to Green'Up Link (host system crash, Raspberry Pi reboot, USB cable disconnection, process restart, etc.), **the Legrand ATmega power board remains 100% autonomous and in full control of its internal state machine and physical electrical protections** (hardware RCD/differential protection, contactor safety interlocks, overcurrent monitoring, temperature safety, and TIC load-shedding).  
+> The only consequence of losing Green'Up Link is the temporary loss of remote supervision and control; an ongoing charging session will simply run its course safely using the last current setpoint and authorization state received by the ATmega.
+
 ---
 
 ## 1. Full List of Proprietary States (`State:X`)
@@ -33,7 +38,7 @@ The semantics of these states were established through reverse-engineering of th
 | **T** | **Fault** (Control Pilot short-circuit) | Faulted |
 | **U** | **Power loss** | Faulted |
 | **V** | **Fatal power loss** (emitted with `E:0012` before shutdown) | Faulted |
-| **W** | Transient stopping state emitted during shutdown sequence | Preparing / Suspended |
+| **W** | Transient stopping state emitted during shutdown sequence | Preparing |
 | **X** | ATmega microcontroller reboot in progress | Faulted |
 | **Y** | Deep **sleep mode** (command `Slp:1`) | Unavailable |
 | **Z** | Factory initialization / production mode | Unavailable |
@@ -104,7 +109,7 @@ Green'Up Link abstracts the 24 proprietary Legrand states into clean, standardiz
 | **`N`** | **`B`** | `SuspendedEVSE` | `true` | `false` | Suspended by station (Type 2 socket). |
 | **`O`** | **`B`** | `SuspendedEVSE` | `true` | `false` | Suspended by station (Domestic socket). |
 | **`P`** | **`B`** | `SuspendedEVSE` | `true` | `false` | Local stop sequence in progress. |
-| **`W`** | **`B`** | `Preparing`* | `true` | `false` | Transient stopping state (*or `SuspendedEV` if session completed). |
+| **`W`** | **`B`** | `Preparing` | `true` | `false` | Transient stopping state emitted during stop sequence. |
 | **`R`** | **`E`** | `Faulted` | `true` | `false` | Recoverable fault (socket lock, overload, contactor). |
 | **`S`** | **`E`** | `Faulted` | `true` | `false` | Contactor or Control Pilot fault. |
 | **`T`** | **`E`** | `Faulted` | `true` | `false` | Control Pilot short-circuit. |
@@ -123,10 +128,16 @@ Green'Up Link abstracts the 24 proprietary Legrand states into clean, standardiz
 > [!WARNING]
 > **State Machine Lockout via Socket Invalidation:**  
 > When a socket is disabled via `T2CNOK` (Type 2 socket) or `2PCNOK` (Domestic Schuko socket), the ATmega **completely freezes the state machine for that socket in `State:A`**.  
-> In this disabled state (`T2C:0` or `2PC:0`), the ATmega ignores all physical plug insertions, cable latching, and button presses. To recover visibility on the physical connection, Green'Up Link directly queries the analog ADC voltage on the Control Pilot pin using `CP?`:
+> In this disabled state (`T2C:0` or `2PC:0`), the ATmega stops reacting to physical cable insertions, latching solenoids, and button presses.
+> 
+> A theoretical workaround to track cable presence while `T2C` is disabled would be to poll the raw analog Control Pilot ADC voltage using `CP?`:
 > - `CP:12` (12V) $\rightarrow$ No vehicle connected (`IEC A`)
 > - `CP:9` (9V) $\rightarrow$ Vehicle connected, ready (`IEC B`)
 > - `CP:6` (6V) $\rightarrow$ Vehicle requesting charge (`IEC C`)
+> 
+> However, **this workaround only applies to the Type 2 socket** (domestic Schuko sockets have no Control Pilot, relying only on physical micro-switches that the ATmega completely ignores when `2PCNOK` is active). Furthermore, active polling of `CP?` is not implemented in Green'Up Link.  
+> 
+> **Green'Up Link design choice:** Hardware sockets are kept authorized (`T2COK` / `2PCOK`) so that the ATmega's native plug-detection engine remains active, and charge authorization is managed cleanly via the `FM2` and `D` software signals (see Section 5.1).
 
 ---
 
@@ -201,23 +212,46 @@ The primary charge gatekeeper in Green'Up Link uses a combination of the Front B
 ### 5.2 Soft Pause & Resume: The `SB` Button Mechanism (`pause` / `resume`)
 
 For transient pauses during an ongoing charging session (e.g. temporary solar dips or EVCC pause cycles), Green'Up Link simulates the station's physical Start/Stop push button:
-- **`action: "pause"`**: Sends `SBNOK` (simulates pressing the Stop button). The station safely ramps down current, enters `State:W`, and stabilizes in **`State:M`** (`SB:1`).
-- **`action: "resume"`**: Sends `SBOK` (simulates pressing the Start button). The station returns to `SB:0` and resumes charging (`State:C` $\rightarrow$ `State:D`/`State:E`).
+- **`action: "pause"`**: Sends `SBNOK` (simulates pressing the Stop button). Sets `SB` to `0`. The station safely ramps down current, passes through transient `State:W`, and stabilizes in **`State:M`** (`SB:0`).
+- **`action: "resume"`**: Sends `SBOK` (simulates pressing the Start button). Sets `SB` to `1`. The station returns to `SB:1` and resumes charging (`State:C` $\rightarrow$ `State:D`/`State:E`).
 
 > [!WARNING]
 > **Non-Blocking Behavior of `SB` upon Cable Replug:**  
 > Unlike `FM2:1`, the `SBNOK` pause state is **not persistent across physical connection events**.  
-> If the station is paused via `SBNOK` (`SB:1` in `State:M`), and the user **unplugs and replugs the charging cable into the vehicle**, the ATmega automatically clears the stop state and resets `SB` back to `0`!  
+> If the station is paused via `SBNOK` (`SB:0` in `State:M`), and the user **unplugs and replugs the charging cable into the vehicle**, the ATmega automatically resets `SB` back to `1` and clears the pause!  
 > For this reason, `pause`/`resume` should be reserved for temporary in-session pauses, while `enable`/`disable` is the authoritative session lock.
 
 ---
 
-### 5.3 Current Setpoint Formatting & The Sub-6A Firmware Crash
+### 5.3 Current Setpoints: Protocol Formatting, Safety Clamping & `CCEl` vs `CC`
 
-When writing current limits via `POST /api/current/:amps`:
-1. **Two-Digit Formatting**: The ATmega serial parser strictly expects a 2-digit integer (e.g. `CC:09`, `CCEl:16`). Sending a single digit (like `CC:9`) causes the ATmega parser to misinterpret the command and apply `0A` (`CC:00`).
-2. **Sub-6A Hardware Crash**: The IEC 61851 specification defines 6A as the minimum pilot current. If a setpoint below 6A is received by the ATmega (such as `CC:05` or `CC:00` due to a single-digit formatting bug), the station fails to regulate cleanly, panics after 8 seconds with error **`E:0010`**, and **forces a full hardware reboot (`State:X`)**!
-3. **Software Guard**: Green'Up Link enforces a strict lower limit of **7A** on all current setpoint endpoints to prevent reaching this unstable zone.
+When modulating charging current limits via `POST /api/current/:amps` or MQTT:
+
+#### 1. Mandatory Two-Digit Formatting (`{:02}`)
+The ATmega serial parser strictly expects a 2-digit integer for all current setpoints (e.g. `CC:09`, `CCEl:16`).  
+Sending a single digit (such as `CC:9`) causes the ATmega parser to misread the parameter, which evaluates internally to `0A` (`CC:00`), inducing immediate regulation failures.
+
+#### 2. The 6A Boundary & The 7A Operational Safety Floor
+The IEC 61851-1 specification defines 6A as the normative minimum pilot current (10% PWM duty cycle).
+- **Sub-6A Firmware Crash (`< 6A`):** If a setpoint strictly below 6A is received by the ATmega (such as `CC:05`, `CCEl:05`, or `CC:00`), the station fails to regulate cleanly, panics after approximately 8 seconds with error **`E:0010`**, and **forces a full hardware reboot (`State:X`)**!
+- **Real-World Calibration at 6A:** While `CC:06` or `CCEl:06` is accepted by the firmware without crashing, field measurements demonstrate that the actual physical current delivered by the station at a 6A setpoint is very close to 7A. This slight calibration offset brings the station dangerously close to its internal overcurrent safety threshold.
+- **Safety Clamp at 7A:** To prevent tripping overcurrent protections and ensure rock-solid stability, Green'Up Link intentionally clamps all dynamic current setpoints to a strict minimum of **7A**.
+
+#### 3. Why Green'Up Link Modulates `CCEl` Rather Than Direct `CC`
+The Legrand ATmega power board implements multiple concurrent current limiting registers:
+- `CC`: The effective active current limit currently applied to the Control Pilot PWM.
+- `CCEl`: The external "Eliot" supervisory limit (writable over serial).
+- `CCTIC`: The autonomous grid load-shedding limit dynamically calculated from the TIC interface.
+- `CCCa`: The physical cable rating detected via the Proximity Pilot (PP) resistor (e.g. 13A, 20A, 32A).
+- Hardware Jumpers / DIP switches: The physical installation maximum (e.g. 16A or 32A).
+
+The ATmega determines the effective pilot current dynamically by computing the **minimum** across all active constraints:
+$$\text{Effective Limit} = \min(\text{Hardware Dipswitch}, \text{Cable PP (CCCa)}, \text{CCEl}, \text{CCTIC})$$
+
+**Why using `CCEl` is safer:**
+- In nominal operation, setting `CCEl` regulates the charging speed just like `CC`.
+- However, modulating `CCEl` preserves all underlying hardware and safety limits: if an undersized cable is plugged in, or if the physical TIC triggers emergency load-shedding (`CCTIC`), the ATmega automatically caps the charge to that lower value. Writing `CCEl` lets the ATmega exercise its full safety checks.
+- **State A Synchronization:** When the station is idle in `State:A` (no vehicle plugged in), Green'Up Link synchronizes both `CCEl` and `CC` so that the station's baseline default matches the requested limit before a vehicle is attached. Once a vehicle is connected and a session is active, Green'Up Link exclusively modulates `CCEl`.
 
 ---
 
