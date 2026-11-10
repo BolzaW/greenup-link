@@ -25,7 +25,8 @@ It communicates with the charging station's power board via an internal USB cabl
 - Complete **charging session history & visualization**: automatic high-fidelity recording (adaptive sampling saved as CSV and TXT summary), power curve chart visualizer, and single-click export (CSV, TXT, ZIP) directly from the Web GUI or REST API.
 - Complete **log management** with daily rolling files (`greenup_YYYY-MM-DD.log`), 7-day automatic retention, and hot-reloadable log levels (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
 - **Experimental dual charge point support** with automatic USB discovery, dynamic serial workers, and independent loadpoint controls (*theoretical, untested on real hardware* — see [Hardware Compatibility Matrix](docs/COMPATIBLE_HARDWARE.md)).
-- Full compatibility with **EVCC** for single or multi-loadpoint solar smart charging (see the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md)).
+- Native **MQTT client** with **Home Assistant MQTT Auto-Discovery**: instant plug-and-play integration with sensors, switches, current sliders, and Energy Dashboard without any manual YAML configuration (see [Home Assistant Integration Guide](docs/HOME_ASSISTANT_INTEGRATION.md) and [MQTT Guide](docs/GREENUP_LINK_MQTT.md)).
+- Full compatibility with **EVCC** via MQTT or HTTP REST for solar smart charging and dynamic load balancing (see [EVCC Integration Guide](docs/EVCC_INTEGRATION.md)).
 
 *(Experimental / PoC)*: A standalone `greenup-everest` module is included as an experimental proof of concept to interface with the open-source EVerest framework via MQTT (not the core focus of this project; see also [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
 
@@ -291,8 +292,8 @@ However, **remote control via the Web UI and API** (three-phase telemetry monito
 <details>
 <summary><strong>6. How do I integrate Green'Up Link into Home Assistant or EVCC?</strong></summary>
 
-- **EVCC:** Follow the dedicated [EVCC Integration Guide](docs/EVCC_INTEGRATION.md) for dynamic solar diversion charging.
-- **Home Assistant:** You can integrate immediately using the [REST API](docs/GREENUP_LINK_REST_API.md) (REST sensor and command switches). Native MQTT with Home Assistant Auto-Discovery is also on the roadmap.
+- **Home Assistant:** Follow the dedicated [Home Assistant Integration Guide](docs/HOME_ASSISTANT_INTEGRATION.md) for native MQTT Auto-Discovery with zero YAML setup (or use the [REST API](docs/GREENUP_LINK_REST_API.md)).
+- **EVCC:** Follow the dedicated [EVCC Integration Guide](docs/EVCC_INTEGRATION.md) for dynamic solar diversion charging via MQTT or HTTP REST.
 </details>
 
 <details>

@@ -25,7 +25,8 @@ Il communique avec la carte de puissance de la borne via un câble USB interne e
 - Un **historique des sessions de charge** avec enregistrement automatique haute fidélité (échantillonnage adaptatif au format CSV et résumé TXT), visualiseur graphique de courbe de puissance et export direct en un clic (CSV, TXT, ZIP) depuis l'interface Web ou l'API REST.
 - Une **gestion complète des logs** avec fichiers journaliers tournants (`greenup_YYYY-MM-DD.log`), rétention automatique de 7 jours et modification à chaud des niveaux (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
 - Le **support expérimental des bornes à double point de charge** avec auto-détection dynamique du second port USB et contrôle indépendant des deux côtés (*théorique, non testé sur matériel réel* — voir la [Matrice de compatibilité matériel](docs/COMPATIBLE_HARDWARE.md)).
-- Une compatibilité totale avec **EVCC** pour la charge solaire dynamique monosite ou multisite (voir le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md)).
+- Un client **MQTT natif** avec **Auto-Discovery Home Assistant** : intégration plug-and-play immédiate des capteurs, interrupteurs, curseurs de courant et Dashboard Énergie sans aucune configuration YAML manuelle (voir le [Guide d'intégration Home Assistant](docs/HOME_ASSISTANT_INTEGRATION.md) et le [Guide MQTT](docs/GREENUP_LINK_MQTT.md)).
+- Une compatibilité totale avec **EVCC** via MQTT ou API REST pour la charge solaire dynamique monosite ou multisite (voir le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md)).
 
 *(Expérimental / Démonstrateur)* : Un module `greenup-everest` autonome est également proposé à titre de démonstrateur expérimental pour interfacer la borne avec le framework open-source EVerest via MQTT (il ne constitue pas le cœur du projet ; voir également le projet [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
 
@@ -288,8 +289,8 @@ En revanche, c'est le **pilotage à distance via l'interface Web et l'API** (lec
 <details>
 <summary><strong>6. Comment intégrer Green'Up Link dans Home Assistant ou EVCC ?</strong></summary>
 
-- **EVCC :** Suivez le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md) pour la charge dynamique sur surplus solaire.
-- **Home Assistant :** Vous pouvez intégrer la borne dès aujourd'hui via l'[API REST](docs/GREENUP_LINK_REST_API.md) (capteurs REST et switchs de commande). Une intégration native MQTT avec découverte automatique (Auto-Discovery) Home Assistant est également prévue sur la feuille de route.
+- **Home Assistant :** Consultez le [Guide d'intégration Home Assistant](docs/HOME_ASSISTANT_INTEGRATION.md) pour profiter de l'Auto-Discovery MQTT natif sans aucune configuration YAML (ou utilisez l'[API REST](docs/GREENUP_LINK_REST_API.md)).
+- **EVCC :** Consultez le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md) pour la charge solaire dynamique via MQTT ou HTTP REST.
 </details>
 
 <details>

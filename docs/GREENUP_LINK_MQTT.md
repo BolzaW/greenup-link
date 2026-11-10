@@ -229,66 +229,18 @@ The device is automatically grouped under **Settings > Devices & Services > MQTT
 
 ---
 
-## 6. EVCC MQTT Integration Example
+## 6. EVCC Integration
 
-In EVCC (`/etc/evcc.yaml`), you can configure your Legrand Green'up charger using pure MQTT without calling local HTTP scripts:
+EVCC can control and monitor Legrand Green'up charging stations natively through Green'up Link using either MQTT (recommended for sub-second reactive load balancing) or the HTTP REST API.
 
-```yaml
-chargers:
-  - name: greenup_mqtt
-    type: custom
-
-    # 1. IEC Operating State (A, B, C, E, F)
-    status:
-      source: mqtt
-      topic: greenup/connector/1/status/state
-
-    # 2. Real-time Power (Watts)
-    power:
-      source: mqtt
-      topic: greenup/connector/1/meter/active_power_w
-
-    # 3. Total Energy (kWh)
-    energy:
-      source: mqtt
-      topic: greenup/connector/1/meter/energy_total_kwh
-
-    # 4. Charger Enable State
-    enabled:
-      source: mqtt
-      topic: greenup/connector/1/control/charge
-      jq: . == "ON"
-
-    # 5. Enable / Disable Command
-    enable:
-      source: mqtt
-      topic: greenup/connector/1/control/charge/set
-      payload: ${enable:ON:OFF}
-
-    # 6. Dynamic Current Regulation (Amperes)
-    maxcurrent:
-      source: mqtt
-      topic: greenup/connector/1/control/setpoint_amps/set
-```
+For complete EVCC configuration guides, YAML examples, dual charge point setups, and off-peak rate scheduling:
+👉 **[EVCC Integration Guide](EVCC_INTEGRATION.md#4-mqtt-based-integration-recommended)**
 
 ---
 
-## 7. Home Assistant Automation Example: External Grid Voltage Injection
+## 7. Home Assistant Integration
 
-If you have a Linky TIC sensor or a Shelly EM measuring your home's mains voltage, you can automatically inject it into Green'up Link every minute:
+Green'up Link automatically exposes all station sensors, switches, numbers, and binary sensors to Home Assistant using native MQTT Auto-Discovery.
 
-```yaml
-alias: "Greenup - Synchronize Grid Voltage"
-description: "Injects real-time grid voltage into Legrand Green'up for accurate power calculation"
-trigger:
-  - platform: time_pattern
-    seconds: "/30" # Every 30 seconds
-condition:
-  - condition: template
-    value_template: "{{ states('sensor.linky_voltage') not in ['unavailable', 'unknown'] }}"
-action:
-  - action: mqtt.publish
-    data:
-      topic: "greenup/station/voltage/set"
-      payload: "{{ states('sensor.linky_voltage') | float(230.0) | round(1) }}"
-```
+For the comprehensive Home Assistant documentation — including UI-based entity inspection, Energy Dashboard setup, and step-by-step UI automation guides for real-time grid voltage synchronization:
+👉 **[Home Assistant Integration Guide](HOME_ASSISTANT_INTEGRATION.md)**

@@ -229,7 +229,7 @@ loadpoints:
     maxcurrent: 32
 ```
 
-### 3.3 Off-Peak / Peak Tariffs Configuration (Optional)
+### 3.4 Off-Peak / Peak Tariffs Configuration (Optional)
 
 If your electricity contract includes Off-Peak / Peak hours (Heures Creuses / Heures Pleines), you can define a time-of-use grid tariff under `tariffs`.
 
@@ -255,53 +255,9 @@ tariffs:
 2. In the charger settings, set the **Price Limit** (Smart Grid threshold) to your Off-Peak rate (e.g. `0.18 €`).
 3. During the day, the charger will only charge if solar surplus is available. At 22:00, the grid rate drops below your threshold, triggering automatic night charging until 06:00.
 
-### 3.4 MQTT-based Configuration
+### 3.5 Full Minimal Example (HTTP REST)
 
-When MQTT is enabled in Green'up Link (`[mqtt]` in `greenup.toml`), you can pilot your charger using native MQTT without running local HTTP requests:
-
-```yaml
-chargers:
-  - name: greenup_mqtt
-    type: custom
-
-    # 1. IEC Operating State (A, B, C, E, F)
-    status:
-      source: mqtt
-      topic: greenup/connector/1/status/state
-
-    # 2. Real-time Power (Watts)
-    power:
-      source: mqtt
-      topic: greenup/connector/1/meter/active_power_w
-
-    # 3. Total Energy (kWh)
-    energy:
-      source: mqtt
-      topic: greenup/connector/1/meter/energy_total_kwh
-
-    # 4. Charger Enable State
-    enabled:
-      source: mqtt
-      topic: greenup/connector/1/control/charge
-      jq: . == "ON"
-
-    # 5. Enable / Disable Command
-    enable:
-      source: mqtt
-      topic: greenup/connector/1/control/charge/set
-      payload: ${enable:ON:OFF}
-
-    # 6. Dynamic Current Regulation (Amperes)
-    maxcurrent:
-      source: mqtt
-      topic: greenup/connector/1/control/setpoint_amps/set
-```
-
-For full MQTT topic reference and Home Assistant discovery, see [GREENUP_LINK_MQTT.md](GREENUP_LINK_MQTT.md).
-
-### 3.5 Full Minimal Example (Single Charger)
-
-To make EVCC work, you must link the charger to a `loadpoint` and a `site`. Here is a complete minimal `/etc/evcc.yaml`:
+To make EVCC work with HTTP REST, link the charger to a `loadpoint` and a `site`. Here is a complete minimal `/etc/evcc.yaml`:
 
 ```yaml
 network:
@@ -367,7 +323,194 @@ site:
 
 ---
 
-## 4. Starting the Service
+## 4. MQTT-based Integration (Recommended)
+
+When MQTT is enabled in Green'up Link (`[mqtt]` in `greenup.toml`), you can pilot your charger using native MQTT without running local HTTP requests.
+
+### Advantages of MQTT over HTTP REST
+- **Instantaneous Reactivity**: Telemetry metrics are published immediately via Report-by-Exception upon state change.
+- **Zero Polling Overhead**: EVCC subscribes to retained topics rather than bombarding the HTTP server every few seconds.
+- **Unified Ecosystem**: Aligns seamlessly with your Home Assistant broker, local Mosquitto setup, or smart-home automations.
+
+For complete details on configuring the Green'up Link MQTT client, topic lists, and credentials, see the [MQTT Integration Guide](GREENUP_LINK_MQTT.md).
+
+### 4.1 Broker Configuration in `evcc.yaml`
+
+If EVCC is not yet connected to your MQTT broker, define the top-level `mqtt:` section in `/etc/evcc.yaml`:
+
+```yaml
+mqtt:
+  broker: 192.168.1.100:1883
+  # username: "evcc"
+  # password: "my_broker_password"
+```
+
+### 4.2 Single Charge Point Configuration (MQTT)
+
+Define the charger using EVCC's `custom` type with MQTT sources:
+
+```yaml
+chargers:
+  - name: greenup_mqtt
+    type: custom
+
+    # 1. IEC Operating State (A, B, C, E, F)
+    status:
+      source: mqtt
+      topic: greenup/connector/1/status/state
+
+    # 2. Real-time Active Power (Watts)
+    power:
+      source: mqtt
+      topic: greenup/connector/1/meter/active_power_w
+
+    # 3. Cumulative Total Energy (kWh)
+    energy:
+      source: mqtt
+      topic: greenup/connector/1/meter/energy_total_kwh
+
+    # 4. Charger Enable State
+    enabled:
+      source: mqtt
+      topic: greenup/connector/1/control/charge
+      jq: . == "ON"
+
+    # 5. Enable / Disable Command
+    enable:
+      source: mqtt
+      topic: greenup/connector/1/control/charge/set
+      payload: ${enable:ON:OFF}
+
+    # 6. Dynamic Current Regulation (Amperes)
+    maxcurrent:
+      source: mqtt
+      topic: greenup/connector/1/control/setpoint_amps/set
+```
+
+### 4.3 Dual Charge Point Configuration (MQTT)
+
+For dual-socket stations, define two separate chargers targeting connector `1` (Right) and `2` (Left):
+
+```yaml
+chargers:
+  # Charge Point 1 (Right Socket)
+  - name: greenup_point1_mqtt
+    type: custom
+    status:
+      source: mqtt
+      topic: greenup/connector/1/status/state
+    power:
+      source: mqtt
+      topic: greenup/connector/1/meter/active_power_w
+    energy:
+      source: mqtt
+      topic: greenup/connector/1/meter/energy_total_kwh
+    enabled:
+      source: mqtt
+      topic: greenup/connector/1/control/charge
+      jq: . == "ON"
+    enable:
+      source: mqtt
+      topic: greenup/connector/1/control/charge/set
+      payload: ${enable:ON:OFF}
+    maxcurrent:
+      source: mqtt
+      topic: greenup/connector/1/control/setpoint_amps/set
+
+  # Charge Point 2 (Left Socket)
+  - name: greenup_point2_mqtt
+    type: custom
+    status:
+      source: mqtt
+      topic: greenup/connector/2/status/state
+    power:
+      source: mqtt
+      topic: greenup/connector/2/meter/active_power_w
+    energy:
+      source: mqtt
+      topic: greenup/connector/2/meter/energy_total_kwh
+    enabled:
+      source: mqtt
+      topic: greenup/connector/2/control/charge
+      jq: . == "ON"
+    enable:
+      source: mqtt
+      topic: greenup/connector/2/control/charge/set
+      payload: ${enable:ON:OFF}
+    maxcurrent:
+      source: mqtt
+      topic: greenup/connector/2/control/setpoint_amps/set
+
+loadpoints:
+  - title: Garage Point 1 (Right)
+    charger: greenup_point1_mqtt
+    mode: pv
+    mincurrent: 7   # Legrand Green'up hardware minimum (7A)
+    maxcurrent: 32
+
+  - title: Garage Point 2 (Left)
+    charger: greenup_point2_mqtt
+    mode: pv
+    mincurrent: 7   # Legrand Green'up hardware minimum (7A)
+    maxcurrent: 32
+```
+
+### 4.4 Full Minimal Example (`/etc/evcc.yaml` with MQTT)
+
+```yaml
+network:
+  schema: http
+  port: 7070
+
+mqtt:
+  broker: 192.168.1.100:1883
+
+meters:
+  - name: my_grid
+    type: template
+    template: dummy
+    usage: grid
+
+chargers:
+  - name: greenup_mqtt
+    type: custom
+    status:
+      source: mqtt
+      topic: greenup/connector/1/status/state
+    power:
+      source: mqtt
+      topic: greenup/connector/1/meter/active_power_w
+    energy:
+      source: mqtt
+      topic: greenup/connector/1/meter/energy_total_kwh
+    enabled:
+      source: mqtt
+      topic: greenup/connector/1/control/charge
+      jq: . == "ON"
+    enable:
+      source: mqtt
+      topic: greenup/connector/1/control/charge/set
+      payload: ${enable:ON:OFF}
+    maxcurrent:
+      source: mqtt
+      topic: greenup/connector/1/control/setpoint_amps/set
+
+loadpoints:
+  - title: Garage
+    charger: greenup_mqtt
+    mode: pv
+    mincurrent: 7
+    maxcurrent: 32
+
+site:
+  title: My Home
+  meters:
+    grid: my_grid
+```
+
+---
+
+## 5. Starting the Service
 
 Once your `/etc/evcc.yaml` is ready, test the configuration to ensure there are no syntax errors:
 
