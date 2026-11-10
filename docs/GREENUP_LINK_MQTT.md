@@ -227,6 +227,10 @@ The device is automatically grouped under **Settings > Devices & Services > MQTT
    - `Grid Voltage Injection` Number (100V – 300V, step 0.5V)
    - `Station Sniffer Mode` Binary Sensor
 
+> 📖 **Full Home Assistant Setup Guide:**  
+> For step-by-step instructions on verifying the discovered device in the UI, configuring the Energy Dashboard, and setting up automated grid voltage injection:  
+> 👉 **[Home Assistant Integration Guide](HOME_ASSISTANT_INTEGRATION.md)**
+
 ---
 
 ## 6. EVCC Integration

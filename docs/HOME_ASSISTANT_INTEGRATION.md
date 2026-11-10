@@ -4,6 +4,10 @@ Green'up Link features built-in, native **Home Assistant MQTT Auto-Discovery**. 
 
 Zero custom components, zero HACS repositories, and zero manual YAML sensor definitions are needed!
 
+> [!TIP]
+> **REST API vs MQTT Auto-Discovery:**  
+> While Home Assistant can also be configured using manual `rest` or `command_line` YAML sensors calling the Green'up Link [REST API](GREENUP_LINK_REST_API.md), **MQTT Auto-Discovery is the strongly recommended approach**. It provides instant plug-and-play setup, zero YAML configuration to maintain, sub-second reactive push updates (Report-by-Exception), and automatically exposes all sliders, switches, and Energy Dashboard metrics.
+
 ---
 
 ## 1. Prerequisites & Green'up Link Configuration
