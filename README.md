@@ -34,24 +34,24 @@ It communicates with the charging station's power board via an internal USB cabl
 > **Mobile Apps & Bluetooth Interface:**
 > Green'Up Link does **not** replace the official Legrand mobile applications (**EV Charge Light** or the newer generation **EV Charge** introduced in early 2026), which communicate directly with the wallbox over Bluetooth. If you use one of these mobile apps and are unsure whether your station is equipped with the Communication Kit, you most likely do not have it: the IP Communication Kit (reference 059056) is an optional accessory sold separately.
 > 
-> Background reverse-engineering of the native Bluetooth protocol is actively underway, but this work is not yet mature enough for public use.
+> A thorough reverse-engineering of the native Bluetooth protocol has been conducted (see the [Bluetooth Protocol Documentation](docs/LEGRAND_BLE_PROTOCOL.md)). However, this protocol is currently not utilized by Green'Up Link because the internal USB serial bus is significantly more versatile and reliable for permanent home-automation supervision. This documentation is provided for reference and may serve other community projects.
 
 ## 🤔 Why this project?
 
-Legrand Green'Up Premium charging stations feature outstanding hardware engineering: the industrial build quality, electrical safety protections, power electronics reliability, and mechanical design are truly top-notch. It is a fantastic piece of hardware that I enjoy using daily.
+Legrand Green'Up Premium charging stations feature solid and reliable hardware engineering: the industrial build quality, protective casing, electrical safety protections, and overall hardware reliability appear sound and robust for daily home charging. It is good hardware that performs well.
 
 However, there is a striking contrast with the factory software. The official software stack bundled with the communication kit ("KitCom") comes from an earlier era: it feels heavy, sluggish, and difficult to interface with modern home automation systems. Furthermore, it relies on an aging software environment (Raspbian 9 "Stretch", Apache Tomcat 9, and an unmaintained Java runtime accumulating numerous known vulnerabilities).
 
-Green'Up Link was created to give this great hardware the modern, lightweight, secure, and open software companion it deserves: a single Rust binary that is lightning-fast, resource-efficient, and grants full local ownership over your station.
+Green'Up Link was created to give this good hardware the modern, lightweight, secure, and open software companion it deserves: a single Rust binary that is lightning-fast, resource-efficient, and grants full local ownership over your station.
 
 ## ⚠️ Current Limitations
 
 This project is actively in development:
 - **Scope of the software**: Green'Up Link only replaces the communication kit (software layer running on the Raspberry Pi). The charging station retains all of its native intelligence, electrical protections, and autonomous operation via its internal ATmega2560 power board.
-- **Tested hardware**: I can only test and validate on my own hardware: reference **058001** (single Type 2 socket, 7.4 kW single-phase, without domestic socket).
-- **Dual charge point stations**: The full software architecture (dual serial workers, dynamic discovery, Side? routing, separate sessions) is implemented based on the reverse-engineered Legrand Java specifications. As the author does not own a dual-point wallbox, this feature has not been physically validated on real hardware and remains **theoretical** (call for testers!).
-- **Type 2 compatibility**: All Green'up Premium stations should nominally work with their Type 2 socket.
-- **Domestic socket (Schuko) & Three-phase**: Not supported at this stage due to a lack of knowledge, captured serial communication logs, and test hardware to investigate these configurations.
+- **Tested hardware**: Validated on the author's physical station: reference **058001** (single Type 2 socket, 7.4 kW single-phase, without domestic socket).
+- **Type 2 compatibility**: All Green'up Premium stations should work nominally on their Type 2 socket.
+- **Dual charge point stations**: Fully implemented in software (dual serial workers, dynamic USB discovery, independent sessions), but remains **experimental and physically untested on real hardware** (call for testers and bug reports!).
+- **Domestic socket (Schuko) & Three-phase**: Theoretically implemented in Green'Up Link based on reverse-engineered firmware logic, but remains **experimental and physically untested on real hardware** due to lack of test equipment. User feedback and bug reports are very welcome!
 - **Direct charging only**: No support for schedules / onboard time programming (use Home Assistant or EVCC to schedule charges instead).
 - **Does NOT manage**: RFID badge reader, Modbus communication, or OCPP protocol.
 
@@ -95,6 +95,10 @@ For full environment setup details, see the [Compilation Environment Guide](docs
 ---
 
 ## ⚙️ Installation on the charging station (Raspberry Pi)
+
+> [!TIP]
+> **Recommended OS Setup for Long-Term Use:**  
+> While running Green'Up Link directly on the official Legrand OS image is fully supported and encouraged for testing or quick evaluation (without touching the original SD card), **installing Green'Up Link on a clean, modern, and up-to-date Raspberry Pi OS 64-bit Lite image (on a fresh microSD card) is strongly recommended for long-term production use**. This provides an actively maintained Linux kernel, modern security patches, and optimal 64-bit performance.
 
 > **WARNING:** Always backup your official Legrand SD card image before making any changes so that you can revert if needed.
 >
@@ -209,9 +213,11 @@ The automated installer performs all required setup steps:
 
 ### 6. Usage
 - **Web GUI**: Open `http://<station_ip>:8080` in your browser. Includes interactive telemetry, charging controls (7A–32A), Linky TIC status, and real-time live console with SSE log streaming.
-- **REST API**: Refer to the complete [REST API Documentation](docs/GREENUP_LINK_REST_API.md) to integrate with Home Assistant, Jeedom, Node-RED, etc.
+- **Home Assistant Integration**: Follow the dedicated [Home Assistant Integration Guide](docs/HOME_ASSISTANT_INTEGRATION.md) for instant MQTT Auto-Discovery without manual YAML.
+- **MQTT Integration**: Refer to the [Green'Up Link MQTT Guide](docs/GREENUP_LINK_MQTT.md) for published topics, command topics, and JSON payload schemas.
+- **REST API**: Refer to the complete [REST API Documentation](docs/GREENUP_LINK_REST_API.md) to integrate with Home Assistant, Jeedom, Node-RED, or custom scripts.
+- **EVCC Integration**: Refer to the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md) for smart solar diversion charging via MQTT or HTTP REST.
 - **Interactive CLI**: Use `scripts/cli-greenup-link.ps1` from PowerShell on Windows to test endpoints or send raw serial commands.
-- **EVCC Integration**: Refer to the [EVCC Integration Guide](docs/EVCC_INTEGRATION.md) for smart solar diversion charging.
 
 ### 7. Rollback & Uninstallation (Restoring Legrand software)
 
@@ -258,7 +264,7 @@ See our step-by-step [DIY Communication Kit Guide](docs/KIT_COMMUNICATION_DIY.md
 <details>
 <summary><strong>2. Does Green'Up Link replace the Legrand mobile apps (EV Charge / EV Charge Light)?</strong></summary>
 
-**No.** Legrand's mobile apps communicate directly with the charging station's power board over Bluetooth Low Energy (BLE). Green'Up Link replaces the IP network kit (Ethernet/Wi-Fi). If you currently control your station solely with the mobile app and do not have an IP kit, you will need a communication board (official or DIY) to run Green'Up Link. Background reverse-engineering of the native Bluetooth protocol is currently in progress.
+**No.** Legrand's mobile apps communicate directly with the charging station's power board over Bluetooth Low Energy (BLE). Green'Up Link replaces the IP network kit (Ethernet/Wi-Fi). If you currently control your station solely with the mobile app and do not have an IP kit, you will need a communication board (official or DIY) to run Green'Up Link. A full reverse-engineering of the native Bluetooth protocol has been conducted (see [Bluetooth Protocol Documentation](docs/LEGRAND_BLE_PROTOCOL.md)), but Green'Up Link focuses on the internal USB serial bus for continuous, reliable, and latency-free local supervision.
 </details>
 
 <details>
@@ -284,9 +290,9 @@ It restores the original Legrand startup scripts, un-neutralizes emergency scrip
 <details>
 <summary><strong>5. Is my three-phase or domestic Schuko socket station supported?</strong></summary>
 
-**The charging station operates nominally in local autonomous mode.** Even on a three-phase station or one equipped with an auxiliary domestic Schuko socket, the station continues to handle charging normally in local standalone mode (governed autonomously by the native ATmega2560 power board without remote management).
-
-However, **remote control via the Web UI and API** (three-phase telemetry monitoring, specific commands or switching for the domestic socket) is not yet supported due to a lack of serial capture logs and test hardware. If you own one of these models, please consider helping test and capture logs (see [Call for Testers](#-call-for-testers--contributions)).
+**Yes, support is theoretically implemented in Green'Up Link, but it remains experimental and untested on physical hardware.**  
+The charging station always operates nominally in local autonomous mode (governed by the native ATmega2560 power board). Green'Up Link now includes logic to manage the domestic Schuko socket and three-phase telemetry based on reverse-engineered firmware specifications, but the author does not own these models to physically validate them.  
+If you own a three-phase or Schuko-equipped model, please test and report any issues or serial logs to help us stabilize support (see [Call for Testers](#-call-for-testers--contributions)).
 </details>
 
 <details>
@@ -299,18 +305,18 @@ However, **remote control via the Web UI and API** (three-phase telemetry monito
 <details>
 <summary><strong>7. Why replace the official Legrand software?</strong></summary>
 
-While the Green'Up Premium hardware is exceptionally well-engineered, its factory software stack shows its age: built on Debian 9 Stretch, Apache Tomcat 9, and legacy Java, it lacks responsiveness, is no longer maintained, and remains closed to modern home automation ecosystems. Green'Up Link provides a lightweight, secure, and ultra-responsive alternative written in Rust with zero external dependencies to unlock the full potential of your charging station.
+While the Green'Up Premium hardware is solid and reliable, its factory software stack shows its age: built on Debian 9 Stretch, Apache Tomcat 9, and legacy Java, it lacks responsiveness, is no longer maintained, and remains closed to modern home automation ecosystems. Green'Up Link provides a lightweight, secure, and ultra-responsive alternative written in Rust with zero external dependencies to unlock the full potential of your charging station.
 </details>
 
 ---
 
 ## 🚀 Future Features
 
-The roadmap includes (with no guaranteed timeline):
-- **Native MQTT integration** with **Home Assistant Auto-Discovery** (automatic entity creation for sensors, switches, and charging current control).
-- Custom ATmega firmware with enhanced telemetry and features.
-- Support for the OCPP communication protocol.
-- Extending compatibility to other station models in the range (domestic Schuko socket, three-phase equipment).
+Potential future roadmap ideas (with no guaranteed timeline):
+- **Native OCPP 1.6-J Support**: Direct JSON WebSocket interface to connect with central charging station management systems (CSMS like SteVe, MaEVe, CitrineOS) without external gateways.
+- **Automated Energy Reports & Cost Accounting**: Periodic charging summaries with cost calculation based on peak/off-peak Linky electricity tariffs, exportable in PDF/CSV format.
+- **Autonomous Dynamic Solar Charging**: Internal rule-based solar diversion engine directly consuming household smart meter or inverter data, as an alternative to external EMS tools like EVCC.
+- **Exploratory Power Board Research**: Ongoing research on ATmega2560 firmware capabilities and advanced telemetry.
 
 ---
 
