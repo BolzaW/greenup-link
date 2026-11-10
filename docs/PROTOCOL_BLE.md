@@ -4,7 +4,7 @@
 > **Green'up Link Architecture & Scope:**  
 > Green'up Link connects directly to the charging station's physical UART interface (`USART1`, via internal USB) rather than using Bluetooth Low Energy. The physical serial bus is faster, supports unsolicited asynchronous push events (real-time telemetry and state changes), and provides full bidirectional supervision without wireless range or pairing constraints.  
 > This document describes the functional supervision, telemetry, and control subset of the binary BLE protocol for informational purposes and community projects targeting wireless monitoring.  
-> *(Low-level hardware recovery, STK500v2 OTA bootloader flashing, and factory calibration routines are documented separately in the `greenup-tools` repository).*
+> *(Low-level hardware routines, bootloader entry, and factory calibration procedures are intentionally not documented to prevent accidental hardware tampering or bricking).*
 
 ---
 
@@ -58,7 +58,7 @@ Every binary frame follows a structured multi-byte envelope:
 | Field | Length | Value | Description |
 | :--- | :---: | :---: | :--- |
 | **SOH** | 1 byte | `0x01` | **Start of Header**: All valid frames must begin with `0x01`. Frames with any other starting byte trigger the diagnostic echo mechanism. |
-| **Type** | 1 byte | Enum | **Service Type / Function Code**: <br>• `0x03`: Special & System Management functions (Ping / Handshake) <br>• `0x04`: Runtime Telemetry, Status & Control registers (`CodesRegistre`) <br>• `0x05`: Factory Calibration & Production (documented in `greenup-tools`) |
+| **Type** | 1 byte | Enum | **Service Type / Function Code**: <br>• `0x03`: Special & System Management functions (Ping / Handshake) <br>• `0x04`: Runtime Telemetry, Status & Control registers (`CodesRegistre`) <br>• `0x05`: Low-level system & factory calibration (undocumented, see Section 6) |
 | **Opcode** | 1 byte | Enum | **Register / Subcommand Identifier**: Specifies the target register or function. |
 | **Payload** | $0..N$ bytes | Variable | Optional arguments (in requests / writes) or register values (in responses). Empty for simple read queries. |
 | **EOP** | 1 byte | `0xFF` | **End of Packet**: Delimiter placed immediately before the CRC bytes. |
@@ -116,7 +116,7 @@ Service Type `0x03` handles link keepalive and protocol handshakes:
 | `0x01` | `Ping` | *(None)* | `0xFF` (ACK) | **Keepalive Probe / Handshake**: Confirms link responsiveness and active session. Returns `0xFF` on success. |
 
 > [!NOTE]
-> Additional subcommands under Service `0x03` handling bootloader arming and OTA flashing signatures are intentionally omitted here to prevent accidental reboot into the bootloader, and are documented in the `greenup-tools` reference.
+> Additional subcommands under Service `0x03` handling bootloader arming and OTA flashing signatures are intentionally omitted from this document for safety.
 
 ---
 
@@ -169,7 +169,18 @@ When `Type == 0x04`, the client communicates with the station's primary register
 
 ---
 
-## 6. Verified Wire Packet Traces
+## 6. Low-Level System & Maintenance Commands (`Type 0x05`)
+
+Service Type `0x05` (along with certain low-level subcommands under Type `0x03` and Opcode `0x23` under Type `0x04`) is reserved internally by the charging station for:
+- Factory calibration (ADC shunt offsets and gain calibration).
+- Production-mode arming and EEPROM manufacturing data initialization (hardware serial number, production date, commercial catalogue reference).
+- Direct bootloader entry and low-level MCU firmware flashing routines.
+
+To prevent accidental misconfiguration, loss of factory calibration, or bricking of the ATmega microcontroller, **these low-level commands are not documented here**. Standard third-party supervision and charging management applications should exclusively use Service Types `0x03` (Ping keepalive) and `0x04` (Runtime telemetry and control registers).
+
+---
+
+## 7. Verified Wire Packet Traces
 
 The following transactions illustrate validated requests and responses with exact CRC-16 checksums:
 
@@ -277,7 +288,7 @@ The following transactions illustrate validated requests and responses with exac
 
 ---
 
-## 7. Summary Comparison: Serial (`USART1`) vs Bluetooth (`USART0`)
+## 8. Summary Comparison: Serial (`USART1`) vs Bluetooth (`USART0`)
 
 | Feature | Physical Serial (`USART1`) | Bluetooth Low Energy (`USART0`) |
 | :--- | :--- | :--- |
