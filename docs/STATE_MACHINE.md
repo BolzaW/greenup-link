@@ -112,8 +112,8 @@ Green'Up Link abstracts the 24 proprietary Legrand states into clean, standardiz
 | **`X`** | **`E`** | `Faulted` | `true` | `false` | Microcontroller rebooting. |
 | **`U`** | **`F`** | `Faulted` | `true` | `false` | Mains power loss. |
 | **`V`** | **`F`** | `Faulted` | `true` | `false` | Fatal power loss before shutdown. |
-| **`Y`** | **`Y`** | `Unavailable`* | `false` | `false` | Sleep mode (`Slp:1`). |
-| **`Z`** | **`Z`** | `Unavailable`* | `false` | `false` | Production / Factory initialization mode. |
+| **`Y`** | **`A`** | `Unavailable` | `false` | `false` | Sleep mode (`Slp:1`). |
+| **`Z`** | **`A`** | `Unavailable` | `false` | `false` | Production / Factory initialization mode. |
 
 ### 3.2 Hardware Socket Invalidation (`T2CNOK` / `2PCNOK`)
 
