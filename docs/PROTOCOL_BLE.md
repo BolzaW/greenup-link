@@ -1,9 +1,10 @@
-# Legrand Bluetooth Low Energy (BLE) Protocol — Complete Reference
+# Legrand Bluetooth Low Energy (BLE) Protocol
 
 > [!NOTE]
 > **Green'up Link Architecture & Scope:**  
-> Green'up Link connects directly to the charging station's physical UART interface (`USART1`, via an internal USB cable) rather than using Bluetooth Low Energy. The physical serial bus is faster, supports unsolicited asynchronous push events (real-time telemetry and state changes), and provides full bidirectional supervision without wireless range or pairing constraints.  
-> This document describes the binary BLE protocol for informational purposes, protocol completeness, and to serve as a comprehensive reference for third-party or community projects targeting the wireless interface.
+> Green'up Link connects directly to the charging station's physical UART interface (`USART1`, via internal USB) rather than using Bluetooth Low Energy. The physical serial bus is faster, supports unsolicited asynchronous push events (real-time telemetry and state changes), and provides full bidirectional supervision without wireless range or pairing constraints.  
+> This document describes the functional supervision, telemetry, and control subset of the binary BLE protocol for informational purposes and community projects targeting wireless monitoring.  
+> *(Low-level hardware recovery, STK500v2 OTA bootloader flashing, and factory calibration routines are documented separately in the `greenup-tools` repository).*
 
 ---
 
@@ -57,9 +58,9 @@ Every binary frame follows a structured multi-byte envelope:
 | Field | Length | Value | Description |
 | :--- | :---: | :---: | :--- |
 | **SOH** | 1 byte | `0x01` | **Start of Header**: All valid frames must begin with `0x01`. Frames with any other starting byte trigger the diagnostic echo mechanism. |
-| **Type** | 1 byte | Enum | **Service Type / Function Code**: <br>• `0x03`: Special & System Management functions (Ping, Reset, Decommissioning) <br>• `0x04`: Read Telemetry & Status registers <br>• `0x05`: Write / Configure station parameters |
-| **Opcode** | 1 byte | Enum | **Command Identifier**: Specifies the exact register or function to execute. |
-| **Payload** | $0..N$ bytes | Variable | Optional arguments (in requests) or register values (in responses). May be empty. |
+| **Type** | 1 byte | Enum | **Service Type / Function Code**: <br>• `0x03`: Special & System Management functions (Ping / Handshake) <br>• `0x04`: Runtime Telemetry, Status & Control registers (`CodesRegistre`) <br>• `0x05`: Factory Calibration & Production (documented in `greenup-tools`) |
+| **Opcode** | 1 byte | Enum | **Register / Subcommand Identifier**: Specifies the target register or function. |
+| **Payload** | $0..N$ bytes | Variable | Optional arguments (in requests / writes) or register values (in responses). Empty for simple read queries. |
 | **EOP** | 1 byte | `0xFF` | **End of Packet**: Delimiter placed immediately before the CRC bytes. |
 | **CRC-16** | 2 bytes | 16-bit | **Checksum**: 16-bit Modbus CRC computed over all preceding bytes (`Byte 0` to `Byte L-2`, including `0xFF`). Transmitted in **Big-Endian** (`CRC_HI` then `CRC_LO`). |
 
@@ -70,7 +71,7 @@ Every binary frame follows a structured multi-byte envelope:
 - **Polynomial:** `0xA001` (reversed `0x8005`, $x^{16} + x^{15} + x^2 + 1$)
 - **Initial Value:** `0xFFFF`
 - **Bit Order:** Reflected (LSB first)
-- **Serialization:** Big-Endian byte order
+- **Serialization:** Big-Endian byte order (`CRC_HI`, `CRC_LO`)
 
 #### Reference Python Implementation
 ```python
@@ -98,7 +99,7 @@ def build_ble_frame(service_type: int, opcode: int, payload: bytes = b"") -> byt
 
 ### 3.3 Diagnostic Echo Mechanism
 
-If the station receives incoming bytes that **do not start with `0x01`** (such as modem AT feedback or arbitrary ASCII strings like `PING\r\n`), it automatically echoes them back byte-for-byte.
+If the station receives incoming bytes that **do not start with `0x01`** (such as modem AT feedback or unsolicited strings like `+UUBTLC` emitted by u-blox NINA upon connection), it automatically echoes them back byte-for-byte.
 
 Robust BLE clients should:
 1. Drain/flush the GATT receive queue for 200–300 ms after establishing the BLE connection before sending the first packet.
@@ -106,91 +107,77 @@ Robust BLE clients should:
 
 ---
 
-## 4. Special & System Functions (`Type 0x03`)
+## 4. Special & Handshake Functions (`Type 0x03`)
 
-Special functions handle connection keepalive, software reboot, and smartphone pairing lifecycle:
+Service Type `0x03` handles link keepalive and protocol handshakes:
 
 | Opcode | Name | Request Payload | Response Payload | Description |
 | :---: | :--- | :---: | :---: | :--- |
-| `0x01` | `Ping` | *(None)* | `0xFF` (ACK) | **Keepalive Probe**: Confirms link responsiveness. Returns `0xFF` on success. |
-| `0x02` | `Reset` | *(None)* | `0xFF` (ACK) | **Software Reboot**: Reboots the station microcontroller and re-runs boot autotests. |
-| `0x03` | `Decommissioning` | *(None)* | `0xFF` (ACK) | **Unpair / Factory Reset**: Clears stored smartphone pairing keys and resets user settings. |
+| `0x01` | `Ping` | *(None)* | `0xFF` (ACK) | **Keepalive Probe / Handshake**: Confirms link responsiveness and active session. Returns `0xFF` on success. |
+
+> [!NOTE]
+> Additional subcommands under Service `0x03` handling bootloader arming and OTA flashing signatures are intentionally omitted here to prevent accidental reboot into the bootloader, and are documented in the `greenup-tools` reference.
 
 ---
 
-## 5. Telemetry & Read Registers (`Type 0x04`)
+## 5. Runtime Telemetry & Control Registers (`Type 0x04`)
 
-When `Type == 0x04`, the client queries station metadata, electrical measurements, and operational states:
+When `Type == 0x04`, the client communicates with the station's primary register map (`CodesRegistre`):
+- **Read Query:** Transmit frame with empty payload: `[0x01, 0x04, Opcode, 0xFF, CRC_HI, CRC_LO]`. The station replies with the register value in the payload.
+- **Write / Setpoint:** Transmit frame with argument payload: `[0x01, 0x04, Opcode, Value..., 0xFF, CRC_HI, CRC_LO]`.
 
 ### 5.1 Station Identity & Hardware Metadata
 
-| Opcode | Name | Data Type | Description & Format |
+| Opcode | Register Name | Data Type | Description & Format |
 | :---: | :--- | :---: | :--- |
-| `0x01` | `SerialNumber` | `uint32` (BE) | **Serial Number**: 4-byte big-endian integer (e.g. `0x003039` = 12345 representing `"012345"`). |
-| `0x02` | `Reference` | `uint16` (BE) | **Catalogue Reference**: 16-bit integer corresponding to the Legrand model (e.g. `58001` = 7.4 kW Single-phase with 6mA DC protection). |
-| `0x03` | `Traceability` | `byte[8]` | **Manufacturing Batch**: Factory production and traceability identifiers. |
-| `0x04` | `FirmwareVersion` | `byte[3]` | **Power Board Firmware**: 3 bytes `[Major, Minor, Build]` (e.g. `[1, 19, 2]` represents `V01.19.02`). |
-| `0x05` | `HardwareVersion` | `byte[3]` | **Hardware Revision**: 3 bytes representing the electronic board revision (e.g. `[2, 1, 1]` represents `V02.01.01`). |
-| `0x06` | `KitComPresence` | `uint8` | **KitCom Presence Flag**: Reserved legacy stub (returns `0x00`). |
-| `0x09` | `StationName` | `string` | **User Friendly Name**: ASCII/UTF-8 string (up to 10 characters, e.g. `"Legrand"`). |
-| `0x0A` | `RealTimeClock` | `byte[7]` | **Internal RTC**: `[Year, Month, Day, DayOfWeek, Hour, Minute, Second]`. |
-| `0x0F` | `ConnectorSide` | `uint8` | **Socket Side**: `0` = Left connector, `1` = Right connector (on dual-socket wallboxes). |
-| `0x30` | `MacAddress` | `byte[6]` | **Bluetooth MAC Address**: 6-byte hardware address of the u-blox transceiver. |
+| `0x01` | `NumeroSerie` | `uint32` (BE) | **Serial Number**: Big-endian integer (e.g. `0x003039` = 12345 representing `"012345"`). |
+| `0x02` | `ReferenceBorne` | `uint16` (BE) | **Catalogue Reference**: 16-bit integer corresponding to the Legrand model (e.g. `58001` = 7.4 kW Single-phase with 6mA DC protection). |
+| `0x03` | `NumeroTracabilite` | `byte[8]` | **Manufacturing Traceability**: Factory production and batch identifiers. |
+| `0x04` | `VersionFirmware` | `byte[3]` | **Power Board Firmware**: 3 bytes `[Major, Minor, Build]` (e.g. `[1, 19, 2]` represents `V01.19.02`). |
+| `0x05` | `VersionHardware` | `byte[3]` | **Hardware Revision**: 3 bytes representing the electronic board revision (e.g. `[2, 1, 1]` represents `V02.01.01`). |
+| `0x06` | `PresenceKitCom` | `uint8` | **KitCom Presence Flag**: Reserved legacy stub (returns `0x00` in firmware). |
+| `0x09` | `NomBorne` | `string` | **User Friendly Name**: ASCII/UTF-8 string (up to 10 characters, e.g. `"Legrand"`). |
+| `0x0A` | `Horloge` | `byte[7]` | **Internal RTC**: `[Year, Month, Day, DayOfWeek, Hour, Minute, Second]`. |
+| `0x0F` | `ChargingPointSide`| `uint8` | **Socket Side**: `0` = Left connector, `1` = Right connector (on dual-socket wallboxes). |
+| `0x30` | `MacAdresse` | `byte[6]` | **Bluetooth MAC Address**: 6-byte hardware address of the u-blox transceiver. |
+| `0x32` | `HardwareId` | `byte[]` | **Hardware GUID / Chip ID**: Unique factory silicon hardware ID. |
 
 ---
 
 ### 5.2 Operating States & Fault Diagnostics
 
-| Opcode | Name | Data Type | Description & Values |
+| Opcode | Register Name | Data Type | Description & Values |
 | :---: | :--- | :---: | :--- |
-| `0x11` | `ChargeStatus` | `uint8` | **High-Level Charging Status**: <br>• `0`: `Unplugged` (Standby, no vehicle connected) <br>• `1`: `WaitingStart` (Cable plugged, waiting for start trigger) <br>• `2`: `WaitingExternal` (Waiting for supervisor authorization or schedule window) <br>• `3`: `WaitingVehicle` (Ready, waiting for vehicle demand) <br>• `4`: `Charging` (Contactor closed, active power delivered) <br>• `5`: `ChargeComplete` (Vehicle battery full, current idle) <br>• `6`: `Disabled` (Station locked / disabled) <br>• `16`: `ResettableFault` (Temporary mains voltage or frequency error) <br>• `17`: `PermanentFault` (Hardware fault / contactor interlock error) |
-| `0x12` | `ErrorCode` | `uint8` | **Hardware Diagnostic Code**: <br>• `0`: No error <br>• `1`: Socket locking fault <br>• `2`: Socket unlocking fault <br>• `3`: Control Pilot short-circuit <br>• `7` / `8`: Power contactor actuation fault <br>• `9`: Missing vehicle diode <br>• `10`: Type 2 overcurrent <br>• `11`: Domestic Schuko overcurrent <br>• `12`: Mains power outage |
-| `0x14` | `LastSessionReport` | `struct` | **Last Session Summary**: Session duration, peak-hours energy (Wh), off-peak energy (Wh), and total energy delivered. |
-| `0x15` | `StationState` | `uint8` | **Operational State**: `0` = Standby / Inactive, `1` = Active / Ready. |
+| `0x11` | `EtatCharge` | `uint8` | **High-Level Charging Status**: <br>• `0`: `NonConnecte` (Standby, no vehicle connected) <br>• `1`: `BrancheEnAttente_StartStop` (Cable plugged, waiting for start trigger) <br>• `2`: `BrancheEnAttente_Externe` (Waiting for supervisor authorization or schedule window) <br>• `3`: `BrancheEnAttente_VE` (Ready, waiting for vehicle demand) <br>• `4`: `EnCharge` (Contactor closed, active power delivered) <br>• `5`: `ChargeTerminee` (Vehicle battery full, current idle) <br>• `6`: `Off` (Station locked / disabled) <br>• `16`: `ErreurResetable` (Temporary mains voltage or frequency error) <br>• `17`: `ErreurNonResetable` (Hardware fault / contactor interlock error) |
+| `0x12` | `ErreurCodification`| `uint8` | **Hardware Diagnostic Code**: <br>• `0`: No error <br>• `1`: Socket locking fault <br>• `2`: Socket unlocking fault <br>• `3`: Control Pilot short-circuit <br>• `4`: Control Pilot short on station side <br>• `5`/`6`: Domestic contactor fault <br>• `7`/`8`: EV contactor fault <br>• `9`: Missing vehicle diode <br>• `10`: Type 2 overcurrent <br>• `11`: Domestic Schuko overcurrent <br>• `12`: Mains power outage |
+| `0x14` | `InfoDernierCharge` | `struct` | **Last Session Summary**: Peak-hours duration & energy (Wh), off-peak duration & energy (Wh), total energy delivered, and avoided CO2. |
+| `0x15` | `EtatBorne` | `uint8` | **Operational State**: `0` = Inactive / Standby, `1` = Active / Ready. |
 
 ---
 
-### 5.3 Current Limits, Modes & Control
+### 5.3 Charging Control, Setpoints & Scheduling
 
-| Opcode | Name | Data Type | Description & Values |
+| Opcode | Register Name | Data Type | Description & Values |
 | :---: | :--- | :---: | :--- |
-| `0x16` | `AvailableCurrents` | `byte[]` | **Supported Current Ratings**: List of available current ratings supported by the station configuration (e.g. `[16, 20, 25, 32]`). |
-| `0x17` | `ChargeMode` | `uint8` | **Configured Charging Mode**: <br>• `0`: `Immediate` (Charging starts immediately upon connection) <br>• `2`: `Scheduled` (Charging restricted to active calendar windows) <br>• `16`: `AutoOffPeak` (Synchronized with external dry-contact off-peak signal) <br>• `17`: `AutoLinky` (Dynamically modulated via Enedis Linky TIC tele-information) |
-| `0x18` | `WeeklySchedule` | `struct` | **Weekly Schedule Profiles**: Programmed charging windows (days of week, start hour/minute, end hour/minute, current rating). |
-| `0x19` | `ChargeAuthorization` | `bool` | **Charge Authorization State**: `0` = Inactive / Disabled, `1` = Authorized. |
-| `0x20` | `Derogation` | `bool` | **Immediate Override**: `1` if a temporary override bypasses schedule boundaries for the current session; `0` otherwise. |
-| `0x27` | `ActiveSessionCurrent` | `uint16` (BE) | **Real-Time Current**: Measured current flowing into the vehicle during active charging (in tenths of an Ampere). |
+| `0x16` | `CourantCharge` | `byte[]` / `uint8` | **Charging Current Limitation**: Supported current ratings array when read; sets target charging limit when written (e.g. `0x10` for 16A, `0x20` for 32A). |
+| `0x17` | `ModeCharge` | `uint8` | **Charging Mode Configuration**: <br>• `0`: `Permanent` (Charging starts immediately upon connection) <br>• `2`: `Planned` (Charging restricted to active calendar windows) <br>• `16`: `Auto_HP_HC` (Synchronized with external dry-contact off-peak signal) <br>• `17`: `Auto_Linky` (Dynamically modulated via Enedis Linky TIC tele-information) |
+| `0x18` | `ValeurPlanning` | `struct` | **Weekly Schedule Profiles**: Programmed charging windows (days of week, start hour/minute, end hour/minute, current rating). |
+| `0x19` | `Charge` | `bool` | **Remote Start / Stop Command**: `1` = Authorize/start charge, `0` = Stop charge. |
+| `0x20` | `DerogationCharge` | `bool` | **Temporary Charging Override**: `1` = Temporarily bypass schedule for immediate charge, `0` = Follow normal schedule. |
+| `0x27` | `CourantSessionDeCharge`| `uint16` | **Active Session Current**: Real-time current delivered to the EV during active charge (in tenths of an Ampere). |
+| `0x29` | `DecalageModePermanent`| `struct` | **Permanent Mode Offset**: Time offset parameters for scheduled permanent charging. |
 
 ---
 
-## 6. Write & Configuration Commands (`Type 0x05`)
+## 6. Verified Wire Packet Traces
 
-When `Type == 0x05`, the client writes configuration setpoints and control commands to the station:
-
-| Opcode | Target Function | Payload | Description |
-| :---: | :--- | :---: | :--- |
-| `0x16` | `SetCurrentLimit` | `uint8` (Amperes) | Sets the charging current limit (e.g. `0x10` for 16A, `0x20` for 32A). |
-| `0x17` | `SetChargeMode` | `uint8` (Mode Code) | Configures charging mode (`0` = Immediate, `2` = Scheduled, `16` = Off-Peak, `17` = Linky TIC). |
-| `0x18` | `SetWeeklySchedule` | `struct` | Writes weekly timer profiles for scheduled charging. |
-| `0x19` | `SetChargeAuthorization`| `uint8` (`0` or `1`) | Remotely authorizes (`1`) or inhibits (`0`) charging. |
-| `0x20` | `SetDerogation` | `uint8` (`0` or `1`) | Activates (`1`) or clears (`0`) temporary schedule override. |
-
----
-
-## 7. Example Packet Exchanges
-
-All examples below show exact wire transactions with validated CRC-16 checksums using generic test vectors:
+The following transactions illustrate validated requests and responses with exact CRC-16 checksums:
 
 ### 1. Keepalive Ping (`Type 0x03`, `Opcode 0x01`)
 - **Request (Client $\rightarrow$ Station):**
   ```hex
   01 03 01 FF 08 B0
   ```
-  - `0x01`: SOH
-  - `0x03`: Special Function
-  - `0x01`: Ping Sub-command
-  - `0xFF`: EOP
-  - `0x08 0xB0`: CRC-16 Modbus (Big-Endian)
 - **Response (Station $\rightarrow$ Client):**
   ```hex
   01 03 01 FF FF F4 49
@@ -204,9 +191,9 @@ All examples below show exact wire transactions with validated CRC-16 checksums 
   ```hex
   01 04 01 FF C9 01
   ```
-- **Response (Example Serial `012345` / `0x003039`):**
+- **Response (Serial `012345` / `0x003039`):**
   ```hex
-  01 04 01 00 30 39 FF 6B 8A
+  01 04 01 00 30 39 FF 65 9B
   ```
   - Payload: `0x003039` (Big-Endian) = `12345`
 
@@ -230,11 +217,11 @@ All examples below show exact wire transactions with validated CRC-16 checksums 
   ```hex
   01 04 04 FF 99 02
   ```
-- **Response (`V01.19.02`):**
+- **Response (`V01.17.78`):**
   ```hex
-  01 04 04 01 13 02 FF 29 8B
+  01 04 04 01 11 4E FF 9D DF
   ```
-  - Payload: `[0x01, 0x13, 0x02]` = `[1, 19, 2]` $\rightarrow$ `V01.19.02`
+  - Payload: `[0x01, 0x11, 0x4E]` = `[1, 17, 78]` $\rightarrow$ `V01.17.78`
 
 ---
 
@@ -260,11 +247,24 @@ All examples below show exact wire transactions with validated CRC-16 checksums 
   ```hex
   01 04 11 00 FF B5 08
   ```
-  - Payload: `0x00` = `Unplugged`
+  - Payload: `0x00` = `NonConnecte` (Unplugged)
 
 ---
 
-### 7. Read Allowed Current Steps (`Type 0x04`, `Opcode 0x16`)
+### 7. Read Operating State (`Type 0x04`, `Opcode 0x15`)
+- **Request:**
+  ```hex
+  01 04 15 FF C9 0E
+  ```
+- **Response (Active / Ready):**
+  ```hex
+  01 04 15 01 FF E4 48
+  ```
+  - Payload: `0x01` = `Actif`
+
+---
+
+### 8. Read Allowed Current Steps (`Type 0x04`, `Opcode 0x16`)
 - **Request:**
   ```hex
   01 04 16 FF 39 0E
@@ -277,7 +277,7 @@ All examples below show exact wire transactions with validated CRC-16 checksums 
 
 ---
 
-## 8. Summary Comparison: Serial (`USART1`) vs Bluetooth (`USART0`)
+## 7. Summary Comparison: Serial (`USART1`) vs Bluetooth (`USART0`)
 
 | Feature | Physical Serial (`USART1`) | Bluetooth Low Energy (`USART0`) |
 | :--- | :--- | :--- |
