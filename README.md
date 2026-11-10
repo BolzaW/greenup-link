@@ -21,7 +21,7 @@
 
 It communicates with the charging station's power board via an internal USB cable and exposes:
 - A clean, responsive **local Web GUI** with live visualizer, charging controls (7A–32A), Linky TIC status, and an integrated real-time debug console (SSE log streaming).
-- A comprehensive and documented **REST API**, perfect for home automation integration (Home Assistant, Jeedom, Node-RED, etc.).
+- A comprehensive and documented **REST API** (see the [REST API Documentation](docs/GREENUP_LINK_REST_API.md)), perfect for home automation integration (Home Assistant, Jeedom, Node-RED, etc.).
 - Complete **charging session history & visualization**: automatic high-fidelity recording (adaptive sampling saved as CSV and TXT summary), power curve chart visualizer, and single-click export (CSV, TXT, ZIP) directly from the Web GUI or REST API.
 - Complete **log management** with daily rolling files (`greenup_YYYY-MM-DD.log`), 7-day automatic retention, and hot-reloadable log levels (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
 - **Experimental dual charge point support** with automatic USB discovery, dynamic serial workers, and independent loadpoint controls (*theoretical, untested on real hardware* — see [Hardware Compatibility Matrix](docs/COMPATIBLE_HARDWARE.md)).
@@ -65,6 +65,7 @@ This project is actively in development:
   - `FirmwareBoardA-V01;18;10.hex` (Tested and validated)
   - `FirmwareBoardA-V01;17;27.hex` (Tested and validated)
   - `FirmwareBoardA-V01;18;04.hex` (Theoretically compatible)
+  - `FirmwareBoardA-V01;19;02.hex` (Theoretically compatible)
 
 > [!NOTE]
 > **Regarding Legrand system images:** It is possible that newer Legrand factory image revisions exist whose exact specifications are not currently known. Legrand does not provide OS migration mechanisms between major image releases — only the application software stack and a few Debian packages are updated via Legrand's update mechanism. As a result, certain Legrand image versions might have glibc or kernel differences incompatible with the current prebuilt legacy binary. If you encounter such an image, please open an issue with your system details (`uname -a`, `ldd --version`), and a dedicated compilation toolchain can be created.

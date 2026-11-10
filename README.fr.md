@@ -21,7 +21,7 @@
 
 Il communique avec la carte de puissance de la borne via un câble USB interne et expose :
 - Une **interface Web locale** épurée et réactive avec visualiseur animé, contrôle de charge (7A à 32A), statut Linky TIC et console live intégrée (flux de logs temps réel SSE).
-- Une **API REST** complète et documentée, idéale pour l'intégration domotique (Home Assistant, Jeedom, Node-RED, etc.).
+- Une **API REST** complète et documentée (voir la [Documentation de l'API REST](docs/GREENUP_LINK_REST_API.md)), idéale pour l'intégration domotique (Home Assistant, Jeedom, Node-RED, etc.).
 - Un **historique des sessions de charge** avec enregistrement automatique haute fidélité (échantillonnage adaptatif au format CSV et résumé TXT), visualiseur graphique de courbe de puissance et export direct en un clic (CSV, TXT, ZIP) depuis l'interface Web ou l'API REST.
 - Une **gestion complète des logs** avec fichiers journaliers tournants (`greenup_YYYY-MM-DD.log`), rétention automatique de 7 jours et modification à chaud des niveaux (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
 - Le **support expérimental des bornes à double point de charge** avec auto-détection dynamique du second port USB et contrôle indépendant des deux côtés (*théorique, non testé sur matériel réel* — voir la [Matrice de compatibilité matériel](docs/COMPATIBLE_HARDWARE.md)).
@@ -65,6 +65,7 @@ Le projet est en évolution continue :
   - `FirmwareBoardA-V01;18;10.hex` (Testé et validé)
   - `FirmwareBoardA-V01;17;27.hex` (Testé et validé)
   - `FirmwareBoardA-V01;18;04.hex` (Théoriquement compatible)
+  - `FirmwareBoardA-V01;19;02.hex` (Théoriquement compatible)
 
 > [!NOTE]
 > **À propos des images système Legrand :** Il est possible qu'il existe d'autres versions d'images d'usine Legrand plus récentes dont les spécifications exactes ne sont pas connues. Legrand ne prévoyant aucun mécanisme de migration d'OS (seule la suite applicative et quelques paquets Debian sont mis à jour via le mécanisme de mise à jour Legrand), certaines versions d'images pourraient présenter des incompatibilités avec le binaire fourni. Le cas échéant, ouvrez un ticket avec les informations de votre système (`uname -a`, `ldd --version`) : une nouvelle chaîne de compilation adaptée pourra être mise en place.
