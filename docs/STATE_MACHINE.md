@@ -90,7 +90,6 @@ Green'Up Link abstracts the 24 proprietary Legrand states into clean, standardiz
 | :---: | :---: | :---: | :---: | :---: | :--- |
 | **`A`** | **`A`** | `Available` | `false` | `false` | Station idle, no vehicle connected. |
 | **`L`** | **`A`** | `Available` | `false` | `false` | Vehicle unplugged (transient transition to `A`). |
-| **`DISCONNECTED`** | **`A`** | `Available` | `false` | `false` | Fallback when serial link reports disconnected state. |
 | **`B`** | **`B`** | `Preparing` | `true` | `false` | Type 2 cable plugged, awaiting authorization / timer window. |
 | **`F`** | **`B`** | `Preparing` | `true` | `false` | Domestic Schuko socket occupied, awaiting authorization. |
 | **`C`** | **`B`** | `SuspendedEV` | `true` | `false` | Station ready to deliver power, but vehicle is not drawing current. |
@@ -114,6 +113,10 @@ Green'Up Link abstracts the 24 proprietary Legrand states into clean, standardiz
 | **`V`** | **`F`** | `Faulted` | `true` | `false` | Fatal power loss before shutdown. |
 | **`Y`** | **`A`** | `Unavailable` | `false` | `false` | Sleep mode (`Slp:1`). |
 | **`Z`** | **`A`** | `Unavailable` | `false` | `false` | Production / Factory initialization mode. |
+
+> [!NOTE]
+> **Driver Internal Sentinel (`DISCONNECTED`):**  
+> `DISCONNECTED` is not a frame emitted by the ATmega power board. It is an internal software sentinel injected by the Green'Up Link serial driver at server startup (before the first frame is read) or when the physical USB cable is unplugged. In this condition, Green'Up Link maps the connection to **IEC State `E`** (Error / Communication lost) and **OCPP Status `Unavailable`**, immediately terminates any active session with the reason `"Driver shutdown / Serial disconnected"`, and zeroes out power/current metering.
 
 ### 3.2 Hardware Socket Invalidation (`T2CNOK` / `2PCNOK`)
 
