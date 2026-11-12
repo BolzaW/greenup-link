@@ -78,11 +78,13 @@
   "controls": {
     "charge_params": "Paramètres de charge",
     "current_limit": "Consigne de Courant",
+    "applied_limit_tooltip": "Consigne réellement appliquée par la borne (CC)",
+    "setpoint_limit_tooltip": "Consigne demandée par le superviseur (CCEl)",
     "enable": "ACTIVER",
     "disable": "DÉSACTIVER",
     "pause": "PAUSE",
     "resume": "REPRENDRE",
-    "local_mode_notice": "Mode écoute seule : la borne fonctionne en autonomie. Les commandes de charge sont verrouillées."
+    "local_mode_notice": "Mode Sniffer (écoute seule) : la borne fonctionne en autonomie. Les commandes sont verrouillées."
   },
   "tic": {
     "standard": "TIC Standard\n(9600 bauds)",
@@ -218,7 +220,7 @@
     "token_status_auth": "Authentifié",
     "token_status_unauth": "Non authentifié",
     "token_status_missing": "Token manquant",
-    "token_status_kiosk": "Mode consultation",
+    "token_status_kiosk": "Mode Kiosk",
     "token_status_no_auth": "Accès libre (pas d'auth)",
     "token_saved_valid": "Clé API enregistrée & validée",
     "token_saved_local": "Clé enregistrée localement",
@@ -228,20 +230,10 @@
     "tic_unsupported_badge": "Non supporté",
     "ble_status_on": "Bluetooth actif sur la borne",
     "ble_status_off": "Bluetooth désactivé sur la borne",
-    "supervision_title": "Pilotage de la borne",
-    "supervision_desc": "Bascule entre le contrôle actif et l'écoute passive (sniffer) du bus série",
-    "mode_remote": "Pilotage actif (Nominal)",
-    "mode_remote_short": "Pilotage actif",
-    "mode_remote_desc": "Mode normal : Green'Up Link pilote la borne et envoie les commandes à l'ATmega (autorisations, consigne de courant, TIC).",
-    "mode_local": "Écoute passive (Autonome)",
-    "mode_local_short": "Écoute seule",
-    "mode_local_desc": "Mode écoute seule (passif) : la borne fonctionne en autonomie, Green'Up Link n'envoie aucune commande à l'ATmega.",
-    "mode_badge_active": "Actif",
-    "mode_state_a_required": "La bascule de mode nécessite que la borne soit à l'état A (Libre / Déconnectée).",
-    "mode_switch_confirm_local": "Attention : la désactivation du pilotage envoie un Reset à l'ATmega pour libérer la borne, puis cesse tout envoi de commande. Voulez-vous continuer ?",
-    "mode_switch_confirm_remote": "Voulez-vous réactiver le pilotage actif (mode normal) et initialiser la communication avec l'ATmega ?",
-    "mode_switching": "Changement de mode en cours...",
-    "mode_switch_success": "Mode de pilotage mis à jour avec succès"
+    "sniffer_mode_label": "Mode Sniffer",
+    "kiosk_mode_label": "Mode Kiosk",
+    "mode_enabled": "Activé",
+    "mode_disabled": "Désactivé"
   },
   "dual": {
     "selector_title": "Point de charge actif",

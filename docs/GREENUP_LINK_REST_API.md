@@ -5,7 +5,8 @@ This API allows interfacing the Green'Up Link software with any standard home au
 ## 🔒 Authentication (Optional)
 
 By default, `api_token` is empty (`""`) in `greenup.toml` (open access on trusted local networks).
-If you configure a non-empty `api_token` in `/opt/greenup-link/greenup.toml` (or via the `GREENUP_API_TOKEN` environment variable), all `/api/*` endpoints require authentication.
+If you configure a non-empty `api_token` in `/opt/greenup-link/greenup.toml` (or via the `GREENUP_API_TOKEN` environment variable), all `/api/*` endpoints require authentication by default (`kiosk_mode = false`).
+If `kiosk_mode = true` is configured under `[http]`, the Web IHM and read-only `GET` endpoints are accessible without a token, while all write/action endpoints (`POST`, `DELETE`) and `/api/logs/export` remain protected by `api_token`.
 
 Three standard authentication methods are supported simultaneously against the same `api_token`:
 
@@ -64,8 +65,6 @@ Three standard authentication methods are supported simultaneously against the s
 ### Control & Actions
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `GET` | `/api/mode` | Get current supervision mode (`"remote"` or `"local"`) |
-| `POST` | `/api/mode` | Switch supervision mode dynamically (`{"mode": "local"|"remote"}`) |
 | `POST` | `/api/charge` | Control charge state (`enable`, `disable`, `pause`, `resume`) |
 | `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`, 7A to 32A) |
 | `POST` | `/api/voltage` | Inject external grid voltage (`{"voltage": 230.0}`) |
@@ -103,7 +102,6 @@ Three standard authentication methods are supported simultaneously against the s
       "hardware_version": "V02.01.01",
       "production_date": "42W22",
       "link_version": "0.5.0-dev",
-      "supervision_mode": "remote",
       "connector_count": 1,
       "capabilities": {
         "phases": 1,
@@ -117,6 +115,7 @@ Three standard authentication methods are supported simultaneously against the s
       "serial": {
         "status": "usb_connected",
         "port": "/dev/ttyUSB0",
+        "sniffer_mode": false,
         "message": "USB serial link active - Station connected",
         "last_rx_secs_ago": 0
       }
@@ -134,10 +133,11 @@ Three standard authentication methods are supported simultaneously against the s
           "error_description": "No error"
         },
         "control": {
+          "setpoint_amps": 16,
+          "applied_limit_amps": 16,
+          "min_allowed_amps": 7,
+          "max_hardware_amps": 32,
           "charge_authorized": true,
-          "charge_paused": false,
-          "limit_amps": 16,
-          "eliot_limit_amps": 16,
           "pilot_voltage": 6
         },
         "meter": {
@@ -171,10 +171,15 @@ Three standard authentication methods are supported simultaneously against the s
     "hardware_version": "V02.01.01",
     "production_date": "42W22",
     "link_version": "0.5.0-dev",
-    "supervision_mode": "remote",
     "connector_count": 1,
     "capabilities": { ... },
-    "serial": { ... }
+    "serial": {
+      "status": "usb_connected",
+      "port": "/dev/ttyUSB0",
+      "sniffer_mode": false,
+      "message": "USB serial link active - Station connected",
+      "last_rx_secs_ago": 0
+    }
   }
   ```
 
@@ -237,17 +242,6 @@ Three standard authentication methods are supported simultaneously against the s
   }
   ```
 
-### 5. Get supervision mode
-- **URL**: `/api/mode`
-- **Method**: `GET`
-- **Description**: Returns the current runtime supervision mode (`"remote"` or `"local"`).
-- **Typical Response**:
-  ```json
-  {
-    "mode": "remote"
-  }
-  ```
-
 ---
 
 ## 🛠️ Action Endpoints (POST)
@@ -286,8 +280,8 @@ Three standard authentication methods are supported simultaneously against the s
 - **URL**: `/api/current/:amps`
 - **Method**: `POST`
 - **URL Parameter**: `:amps` (integer between **7** and **32**).
-- **Description**: Sets the current limit target (sends `CCEl:XX`, always 2-digit formatted).
-- **Security**: The API rejects any value outside `[7, 32]` with a `400` error. While the ATmega board can technically accept values above 32A, they have not been tested in real conditions to avoid hardware risks. Using `CCEl` (Eliot limit) instead of directly forcing `CC` is a deliberate choice: it allows the ATmega to keep its internal safeguards active, computing the final safe limit (`CC`) based on other hardware factors. Finally, note that below 6A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8A.
+- **Description**: Sets the current limit target. When the station is in `State:A` (vehicle unplugged), Green'Up Link sends both `CCEl:XX` and `CC:XX` to keep the ATmega limits synchronized while idle. In all other operating states (`B`, `C`, etc.), only `CCEl:XX` is sent, allowing the ATmega to dynamically consolidate internal hardware limits (`CC = min(DIP, CCCa, CCEl, CCTIC)`).
+- **Security**: The API rejects any value outside `[7, 32]` with a `400` error. While the ATmega board can technically accept values above 32A, they have not been tested in real conditions to avoid hardware risks. Using `CCEl` (Eliot limit) instead of directly forcing `CC` in active states is a deliberate safety choice: it allows the ATmega to keep its internal safeguards active, computing the final safe limit (`CC`) based on other hardware factors. Finally, note that below 6A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8A.
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Current limit set to 16A" }
@@ -346,7 +340,7 @@ Three standard authentication methods are supported simultaneously against the s
 - **Validation & Security**:
   - Whitelist: only characters matching `[a-zA-Z0-9:?]` are accepted (strictly eliminates CRLF `\r`, `\n`, control characters, and injection attempts).
   - Length: maximum 20 characters (`1..=20`).
-  - Blocked in Local supervision mode (`403 Forbidden`).
+  - Blocked in Sniffer mode (`sniffer_mode = true` → `403 Forbidden`).
   - If invalid, returns HTTP `400 Bad Request`:
     ```json
     {
@@ -367,25 +361,10 @@ Three standard authentication methods are supported simultaneously against the s
   { "voltage": 234.5 }
   ```
 - **Description**: Injects a measured grid voltage from an external smart meter (Shelly, Enedis Linky, Home Assistant, etc.). When injected, Green'Up Link uses this exact voltage to compute active power ($P = U \times I$) instead of the default nominal 230V. External voltage automatically expires after 30 seconds if not refreshed.
-- **Validation**: Accepts voltage values between `180.0` and `280.0` V. Allowed even in Local supervision mode.
+- **Validation**: Accepts voltage values between `180.0` and `280.0` V. Allowed even in Sniffer mode (`sniffer_mode = true`).
 - **Typical Response**:
   ```json
   { "status": "success", "message": "External voltage updated" }
-  ```
-
-### 11. Switch supervision mode (Local / Remote)
-- **URL**: `/api/mode`
-- **Method**: `POST`
-- **Body (JSON)**:
-  ```json
-  { "mode": "local" }
-  ```
-  *(Supported modes: `"local"`, `"remote"`)*
-- **Description**: Switches the station between **Remote** mode (active bidirectional control by Green'Up Link) and **Local** mode (pure passive spy/sniffer without sending any frame or `RaspberryPiModeOK` to the ATmega).
-- **Safety Safeguard**: Hot-switching to Local mode is **only allowed when the station is idle (`State:A`)** and first sends a `Reset` to ensure the ATmega returns to autonomous operation without expecting Green'Up Link. In any charging state (`B`, `C`, etc.), switching to Local mode is rejected with `400 Bad Request`.
-- **Typical Response**:
-  ```json
-  { "status": "success", "mode": "local", "message": "Switched to local mode. Serial commands are now silenced." }
   ```
 
 ---

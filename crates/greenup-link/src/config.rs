@@ -23,12 +23,11 @@ bind = "0.0.0.0:8080"
 #     * Basic Auth   : Authorization: Basic <base64(user:api_token)>  (curl -u :token)
 api_token = ""
 
-# Web GUI authentication mode:
-# - true  : (Default) Full authentication required to view and interact with the Web GUI.
-# - false : Open consultation mode ("Kiosk"). Allows browsing dashboard, logs, sessions,
-#           and station metrics without login. Control actions (charge, current, commands,
-#           settings) remain strictly protected by api_token.
-auth_ihm = true
+# Kiosk mode (open consultation):
+# - false : (Default) Standard mode. Full authentication required on the Web GUI and all REST APIs (when api_token is set).
+# - true  : Kiosk mode. Read-only GET APIs and Web GUI consultation are accessible without authentication.
+#           Write/control actions (charge, current, commands, settings) remain protected by api_token.
+kiosk_mode = false
 
 [storage]
 # Directory where daily log files are stored.
@@ -60,17 +59,17 @@ baud_rate = 115200
 watchdog_timeout_secs = 60
 
 [station]
-# Supervision mode at startup:
-# - "remote" : Active supervision (default) - manages charging and communicates with ATmega
-# - "local"  : Passive monitor mode - listens to serial telemetry only, zero transmissions to ATmega
-mode = "remote"
+# Sniffer mode (passive UART listener):
+# - false : (Default) Active supervision — manages charging and communicates with the ATmega board.
+# - true  : Sniffer mode — passive RX-only monitoring, zero TX commands are ever sent to the ATmega.
+sniffer_mode = false
 "#;
 
 #[derive(Debug, Clone)]
 pub struct HttpConfig {
     pub bind: String,
     pub api_token: Option<String>,
-    pub auth_ihm: bool,
+    pub kiosk_mode: bool,
 }
 
 impl Default for HttpConfig {
@@ -78,7 +77,7 @@ impl Default for HttpConfig {
         Self {
             bind: "0.0.0.0:8080".to_string(),
             api_token: None,
-            auth_ihm: true,
+            kiosk_mode: false,
         }
     }
 }
@@ -143,17 +142,9 @@ impl Default for SerialConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StationConfig {
-    pub mode: crate::telemetry::SupervisionMode,
-}
-
-impl Default for StationConfig {
-    fn default() -> Self {
-        Self {
-            mode: crate::telemetry::SupervisionMode::Remote,
-        }
-    }
+    pub sniffer_mode: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -255,10 +246,10 @@ impl AppConfig {
                                 config.http.api_token = Some(trimmed.to_string());
                             }
                         }
-                        "auth_ihm" => {
+                        "kiosk_mode" => {
                             match val.trim().to_lowercase().as_str() {
-                                "false" | "0" | "no" => config.http.auth_ihm = false,
-                                "true" | "1" | "yes" => config.http.auth_ihm = true,
+                                "true" | "1" | "yes" => config.http.kiosk_mode = true,
+                                "false" | "0" | "no" => config.http.kiosk_mode = false,
                                 _ => {}
                             }
                         }
@@ -316,9 +307,11 @@ impl AppConfig {
                         _ => {}
                     }
                 } else if current_section == "station" {
-                    if key.as_str() == "mode" {
-                        if let Some(m) = crate::telemetry::SupervisionMode::from_str(&val) {
-                            config.station.mode = m;
+                    if key.as_str() == "sniffer_mode" {
+                        match val.trim().to_lowercase().as_str() {
+                            "true" | "1" | "yes" => config.station.sniffer_mode = true,
+                            "false" | "0" | "no" => config.station.sniffer_mode = false,
+                            _ => {}
                         }
                     }
                 }
@@ -376,7 +369,8 @@ mod tests {
         let cfg = AppConfig::parse_toml(DEFAULT_CONFIG_TEMPLATE);
         assert_eq!(cfg.http.bind, "0.0.0.0:8080");
         assert_eq!(cfg.http.api_token, None);
-        assert!(cfg.http.auth_ihm, "Default auth_ihm should be true");
+        assert!(!cfg.http.kiosk_mode, "Default kiosk_mode should be false");
+        assert!(!cfg.station.sniffer_mode, "Default sniffer_mode should be false");
         assert_eq!(cfg.storage.log_dir, "logs");
         assert_eq!(cfg.storage.sessions_dir, "sessions");
     }
@@ -394,29 +388,37 @@ mod tests {
     }
 
     #[test]
-    fn test_auth_ihm_parsing() {
-        let toml_false = r#"
-        [http]
-        api_token = "secret123"
-        auth_ihm = false
-        "#;
-        let cfg1 = AppConfig::parse_toml(toml_false);
-        assert_eq!(cfg1.http.api_token.as_deref(), Some("secret123"));
-        assert!(!cfg1.http.auth_ihm);
-
+    fn test_kiosk_and_sniffer_mode_parsing() {
         let toml_true = r#"
         [http]
-        auth_ihm = "true"
-        "#;
-        let cfg2 = AppConfig::parse_toml(toml_true);
-        assert!(cfg2.http.auth_ihm);
+        api_token = "secret123"
+        kiosk_mode = true
 
-        let toml_zero = r#"
-        [http]
-        auth_ihm = "0"
+        [station]
+        sniffer_mode = true
         "#;
-        let cfg3 = AppConfig::parse_toml(toml_zero);
-        assert!(!cfg3.http.auth_ihm);
+        let cfg1 = AppConfig::parse_toml(toml_true);
+        assert_eq!(cfg1.http.api_token.as_deref(), Some("secret123"));
+        assert!(cfg1.http.kiosk_mode);
+        assert!(cfg1.station.sniffer_mode);
+
+        let toml_false = r#"
+        [http]
+        kiosk_mode = "false"
+
+        [station]
+        sniffer_mode = "0"
+        "#;
+        let cfg2 = AppConfig::parse_toml(toml_false);
+        assert!(!cfg2.http.kiosk_mode);
+        assert!(!cfg2.station.sniffer_mode);
+
+        let toml_one = r#"
+        [http]
+        kiosk_mode = "1"
+        "#;
+        let cfg3 = AppConfig::parse_toml(toml_one);
+        assert!(cfg3.http.kiosk_mode);
     }
 
     #[test]

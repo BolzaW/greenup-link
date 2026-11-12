@@ -397,6 +397,11 @@ pub fn init() {
 
 /// Writes an entry with an optional charge point side (1 or 2).
 pub fn log_with_level_side(category: &str, side: Option<u8>, level: LogLevel, message: &str) {
+    let configured_level = get_log_level();
+    if level > configured_level {
+        return;
+    }
+
     let now = Local::now();
     let time_str = now.format("%H:%M:%S%.3f").to_string();
     let full_timestamp = now.format("%Y-%m-%d %H:%M:%S%.3f");
@@ -408,18 +413,13 @@ pub fn log_with_level_side(category: &str, side: Option<u8>, level: LogLevel, me
     };
     let entry_text = format!("[{}] [{}] [{}]{} {}", full_timestamp, level.as_str(), category, side_tag, message);
 
-    let configured_level = get_log_level();
-    let should_output = level <= configured_level;
-
     // Console output
-    if should_output {
-        println!("{}", entry_text);
-    }
+    println!("{}", entry_text);
 
     // Daily file output
     let mut warning_to_emit: Option<(u64, f64)> = None;
 
-    if should_output {
+    {
         let _file_guard = LOG_FILE_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let path = get_or_rotate_daily_file();
         if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) {
@@ -620,5 +620,23 @@ mod tests {
         assert_eq!(logs.last().unwrap().message, "Message number 600");
 
         let _ = fs::remove_file(test_file);
+    }
+
+    #[test]
+    fn test_in_memory_logs_filtered_by_log_level() {
+        set_log_level(LogLevel::Info);
+        {
+            let mut guard = RECENT_LOGS.lock().unwrap_or_else(|e| e.into_inner());
+            guard.clear();
+        }
+
+        trace("TRACE_CAT", "Test filtered trace log message");
+        debug("DEBUG_CAT", "Test filtered debug log message");
+        info("INFO_CAT", "Test visible info log message");
+
+        let logs = get_recent_logs();
+        assert!(!logs.iter().any(|l| l.message == "Test filtered trace log message"));
+        assert!(!logs.iter().any(|l| l.message == "Test filtered debug log message"));
+        assert!(logs.iter().any(|l| l.message == "Test visible info log message"));
     }
 }

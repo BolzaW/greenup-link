@@ -102,6 +102,8 @@ pub enum ProtocolEvent {
     FmMode(String),
     /// `FM2:0` / `FM2:1` – Auxiliary dry contact / external signal state.
     ExternalSignal(bool),
+    /// `FM2F:0` / `FM2F:1` – Spontaneous or post-command notification that `FM2` is forced to `0` or `1`.
+    ExternalSignalForced(bool),
     /// `CAU:0` / `CAU:1` – Emergency stop interlock state.
     EmergencyStop(bool),
 
@@ -398,6 +400,11 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
             return ProtocolEvent::ExternalSignal(b);
         }
     }
+    if let Some(val) = trimmed.strip_prefix("FM2F:") {
+        if let Some(b) = parse_bool_01(val) {
+            return ProtocolEvent::ExternalSignalForced(b);
+        }
+    }
     if let Some(val) = trimmed.strip_prefix("FM:") {
         return ProtocolEvent::FmMode(val.trim().to_string());
     }
@@ -673,6 +680,14 @@ mod tests {
         assert_eq!(
             parse_line("Cph:Tri"),
             ProtocolEvent::ChargePhases("Tri".into())
+        );
+        assert_eq!(
+            parse_line("FM2F:1"),
+            ProtocolEvent::ExternalSignalForced(true)
+        );
+        assert_eq!(
+            parse_line("FM2F:0"),
+            ProtocolEvent::ExternalSignalForced(false)
         );
         assert_eq!(
             parse_line("\\WT:00h01:CT:01h20:EVplug:12000:\\"),

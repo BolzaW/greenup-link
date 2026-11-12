@@ -123,7 +123,7 @@ Commands to inspect and configure deferred charging, operating modes, and schedu
 | `FM?` | `FM:<val>` | **Functioning Mode Query**: Returns the primary operational profile mask (1=Direct, 2=Auto-hours/TIC, 4=Planning, 5=Modbus, 6=OCPP). |
 | `FM:<val>` | `FM:<val>` | Sets the primary operational mode. |
 | `FM2?` | `FM2:<0/1>` | Auxiliary Contact Query: Returns simulated dry contact input state. |
-| `FM2:<0/1>` | `FM2:<0/1>` | Simulates external contact state (`1` = Peak hours / charge blocked, `0` = Off-peak hours / charge authorized). |
+| `FM2:<0/1>` | `FM2:<0/1>` / `FM2F:<0/1>` | Simulates external contact state (`1` = Peak hours / charge blocked, `0` = Off-peak hours / charge authorized). In certain modes, the ATmega responds with or emits `FM2F:<0/1>` to signal that `FM2` has been forced to that value. |
 | `CAU?` | `CAU:<0/1>` | Emergency Stop Setpoint Query: Checks state of the emergency stop interlock (SRAM `0x02F1`, `0x02F2`). |
 | `CAUOK` / `CAUNOK` | `CAU:1` / `CAU:0` | Toggles emergency stop safety lockout state. |
 
@@ -260,7 +260,8 @@ The ATmega2560 continuously broadcasts asynchronous notifications on `TX1` regar
 | `State:<A..Z>` | State Transition | Emitted immediately whenever the charging state machine transitions (e.g., `State:B`, `State:C`). |
 | `CCI:<amps>` | During Active Charge | Broadcast periodically while charging to report actual RMS current drawn across the active phases. |
 | `E:<0000..0015>` | Error Event / Boot | Emitted upon boot (`E:0000`) and whenever a hardware fault occurs or clears. |
-| `SBF:1` / `SBF:0` | Physical Plug Event | `SBF:1` is emitted when a vehicle connects; `SBF:0` is emitted when the cable is unplugged. |
+| `SBF:1` / `SBF:0` | Physical Plug / Button Forced Event | Signals that `SB` (Start/Stop state) has been forced to `1` (e.g., when a vehicle connects) or `0` (e.g., when the cable is unplugged or in `State:A`). |
+| `FM2F:1` / `FM2F:0` | Forced External Signal Event | Emitted spontaneously or following a `FM2:<0/1>` command in certain operating modes to signal that `FM2` has been forced to `1` (blocked) or `0` (authorized). |
 | `R:ok*` / `R:nok*` | Contactor Actuation | Confirms physical auxiliary feedback when the 32A power contactors close or open. |
 | `CPh:Mono` / `CPh:Tri` | Charge Startup | Reports detected electrical installation topology (single-phase vs three-phase). |
 | `\WT:...:CT:...:\` | Charge Session End | **Session Ticket**: Summarizes Waiting Time (`WT`), Charging Time (`CT`), receptacle used (`EVplug` or `DOMplug`), and accumulated energy during peak/off-peak hours. |

@@ -68,13 +68,52 @@ function updateControlButtons(charge_authorized, charge_paused) {
     }
 }
 
-function updateControlsForMode(isLocal) {
-    const notice = typeof t === 'function' ? t('controls.local_mode_notice') : "Commandes verrouillées : la borne est en mode autonome (écoute seule)";
+function updateAppliedLimitBadge(appliedAmps, setpointAmps) {
+    const box = document.getElementById('boxAppliedValue');
+    const lbl = document.getElementById('lblAppliedLimit');
+    if (!box || !lbl) return;
+
+    if (!window.isUsbConnected || appliedAmps == null) {
+        lbl.innerText = '--';
+        box.className = 'bg-slate-800/40 px-2.5 py-1 rounded border border-slate-700/50 transition-all duration-300';
+        lbl.className = 'font-bold text-slate-500 font-mono text-sm transition-colors';
+        return;
+    }
+
+    const applied = Number(appliedAmps);
+    const setpoint = Number(setpointAmps);
+    lbl.innerText = `${applied} A`;
+
+    const tooltipBase = (typeof t === 'function' ? t('controls.applied_limit_tooltip') : 'Consigne réellement appliquée par la borne (CC)') || 'Consigne réellement appliquée par la borne (CC)';
+    box.title = `${tooltipBase} : ${applied} A`;
+
+    if (applied === setpoint) {
+        // Identique -> Vert (Emerald)
+        box.className = 'bg-emerald-500/15 px-2.5 py-1 rounded border border-emerald-500/30 transition-all duration-300 cursor-help';
+        lbl.className = 'font-bold text-emerald-400 font-mono text-sm transition-colors';
+    } else if (applied < setpoint) {
+        // Plus basse -> Orange (Amber)
+        box.className = 'bg-amber-500/15 px-2.5 py-1 rounded border border-amber-500/30 transition-all duration-300 cursor-help';
+        lbl.className = 'font-bold text-amber-400 font-mono text-sm transition-colors';
+    } else {
+        // Plus haute -> Rouge (Rose)
+        box.className = 'bg-rose-500/15 px-2.5 py-1 rounded border border-rose-500/30 transition-all duration-300 cursor-help';
+        lbl.className = 'font-bold text-rose-400 font-mono text-sm transition-colors';
+    }
+}
+window.updateAppliedLimitBadge = updateAppliedLimitBadge;
+
+function updateControlsForMode(isSniffer) {
+    const notice = typeof t === 'function' ? t('controls.local_mode_notice') : "Commandes verrouillées : mode Sniffer actif (écoute seule)";
     const sliderBox = document.getElementById('sliderBox');
     const boxSliderValue = document.getElementById('boxSliderValue');
     const lblSlider = document.getElementById('lblSlider');
+    const btnInit = document.getElementById('btnSerialInit');
+    const btnReset = document.getElementById('btnSerialReset');
+    const btToggle = document.getElementById('btToggle');
+    const btnTic = document.getElementById('btnRefreshTicConfig');
 
-    if (isLocal) {
+    if (isSniffer) {
         if (slider) slider.disabled = true;
         if (sliderBox) sliderBox.classList.add('slider-disabled');
         if (boxSliderValue) boxSliderValue.classList.add('slider-disabled');
@@ -90,6 +129,10 @@ function updateControlsForMode(isLocal) {
         if (controlsPanel) {
             controlsPanel.classList.add('mode-passive');
         }
+        if (btnInit) btnInit.disabled = true;
+        if (btnReset) btnReset.disabled = true;
+        if (btToggle) btToggle.disabled = true;
+        if (btnTic) btnTic.disabled = true;
     } else {
         if (slider && window.isUsbConnected) slider.disabled = false;
         if (sliderBox) sliderBox.classList.remove('slider-disabled');
@@ -107,16 +150,20 @@ function updateControlsForMode(isLocal) {
             controlsPanel.classList.remove('mode-passive');
             controlsPanel.classList.remove('opacity-75');
         }
+        if (btnInit) btnInit.disabled = false;
+        if (btnReset) btnReset.disabled = false;
+        if (btToggle) btToggle.disabled = false;
+        if (btnTic && window.stationHasTic !== false) btnTic.disabled = false;
     }
 }
 
 btnEnableDisable.addEventListener('click', () => {
-    if (window.currentSupervisionMode === 'local') return;
+    if (window.isSnifferMode) return;
     sendPostAction('/api/charge', { action: window.lastChargeAuthorized ? 'disable' : 'enable' });
 });
 
 btnPauseResume.addEventListener('click', () => {
-    if (window.currentSupervisionMode === 'local') return;
+    if (window.isSnifferMode) return;
     sendPostAction('/api/charge', { action: window.lastChargePaused ? 'resume' : 'pause' });
 });
 
@@ -127,8 +174,11 @@ slider.addEventListener('touchend', () => isDraggingSlider = false);
 
 slider.addEventListener('input', (e) => {
     lblSlider.innerText = e.target.value + " A";
+    if (window.lastAppliedLimitAmps != null) {
+        updateAppliedLimitBadge(window.lastAppliedLimitAmps, Number(e.target.value));
+    }
 });
 slider.addEventListener('change', (e) => {
-    if (window.currentSupervisionMode === 'local') return;
+    if (window.isSnifferMode) return;
     sendPostAction('/api/current/' + e.target.value);
 });

@@ -574,6 +574,9 @@ impl Command {
             Command::SetStartButton(true) => {
                 rx_line.starts_with("SB:") || rx_line.starts_with("SBF:")
             }
+            Command::SetExternalSignal(_) => {
+                rx_line.starts_with("FM2:") || rx_line.starts_with("FM2F:")
+            }
             Command::RaspberryPiModeOk => {
                 rx_line.starts_with("DIP1:") || rx_line.starts_with("Side:")
             }
@@ -626,6 +629,8 @@ impl Command {
             Command::GetEliotCurrentLimit,
             Command::GetConsolidatedCurrentLimit,
             Command::GetTicCurrentLimit,
+            Command::GetBleShuntCurrentLimit,
+            Command::GetBleStandardCurrentLimit,
             // 4. Sockets & Functioning Modes
             Command::GetT2CEnabled,
             Command::GetDomesticEnabled,
@@ -639,8 +644,10 @@ impl Command {
             Command::GetDeferredStartDelay,
             Command::GetSleep,
             Command::GetEmergencyStop,
-            // 5. Metering, RFID & OCPP
+            // 5. Metering, RFID, Modbus & OCPP
             Command::GetEnergyMeterPulses,
+            Command::GetModbusEnergyMeterAddress,
+            Command::GetModbusDlmAddress,
             Command::GetRfidEnabled,
             Command::GetRfidUserManagement,
             Command::GetOcppParameters,
@@ -778,6 +785,11 @@ mod tests {
         assert!(sbnok.matches_response("SB:0"));
         assert!(sbnok.matches_response("SB:1"));
         assert!(!sbnok.matches_response("SBF:0"));
+
+        let fm2 = Command::SetExternalSignal(true);
+        assert!(fm2.matches_response("FM2:1"));
+        assert!(fm2.matches_response("FM2F:1"));
+        assert!(fm2.matches_response("FM2F:0"));
     }
 
     #[test]

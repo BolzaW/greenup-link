@@ -14,9 +14,9 @@ function updateClientTokenBadge() {
         } else if (token) {
             badge.className = 'sys-badge sys-badge-rose';
             badge.innerText = (typeof t === 'function' ? t('system.token_status_unauth') : 'Non authentifié') || 'Non authentifié';
-        } else if (!window.isAuthIhm) {
+        } else if (window.isKioskMode) {
             badge.className = 'sys-badge sys-badge-sky';
-            badge.innerText = (typeof t === 'function' ? t('system.token_status_kiosk') : 'Mode consultation') || 'Mode consultation';
+            badge.innerText = (typeof t === 'function' ? t('system.token_status_kiosk') : 'Mode Kiosk') || 'Mode Kiosk';
         } else {
             badge.className = 'sys-badge sys-badge-amber';
             badge.innerText = (typeof t === 'function' ? t('system.token_status_missing') : 'Token manquant') || 'Token manquant';
@@ -106,9 +106,10 @@ async function saveClientToken() {
 
         window.isAuthRequired = !!status.auth_required;
         window.isAuthenticated = !!status.authenticated;
-        window.isAuthIhm = status.auth_ihm !== false;
+        window.isKioskMode = !!status.kiosk_mode;
         if (typeof updateLogoutButton === 'function') updateLogoutButton();
         updateClientTokenBadge();
+        updateSystemModesUi(window.isSnifferMode, window.isKioskMode);
 
         if (status.auth_required && !status.authenticated) {
             if (feedback) {
@@ -166,11 +167,12 @@ async function clearClientToken() {
         const status = await res.json();
         window.isAuthRequired = !!status.auth_required;
         window.isAuthenticated = !!status.authenticated;
-        window.isAuthIhm = status.auth_ihm !== false;
+        window.isKioskMode = !!status.kiosk_mode;
         if (typeof updateLogoutButton === 'function') updateLogoutButton();
     } catch (_) {}
 
     updateClientTokenBadge();
+    updateSystemModesUi(window.isSnifferMode, window.isKioskMode);
 
     if (feedback) {
         feedback.innerText = (typeof t === 'function' ? t('system.token_cleared') : 'Clé effacée du navigateur') || 'Clé effacée du navigateur';
@@ -218,16 +220,7 @@ async function loadConfigData() {
             tokenInput.value = getApiToken();
         }
         updateClientTokenBadge();
-
-        // Sync supervision mode from /api/mode
-        try {
-            const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
-            const modeRes = await apiFetch(`/api/mode${sideQuery}`);
-            if (modeRes.ok) {
-                const modeData = await modeRes.json();
-                updateSupervisionModeUi(modeData.mode, modeData.can_switch);
-            }
-        } catch (_) {}
+        updateSystemModesUi(window.isSnifferMode, window.isKioskMode);
 
     } catch (e) {
         console.warn('Failed to refresh config panel info:', e);
@@ -424,104 +417,53 @@ function initConfig() {
     }
 }
 
-function updateSupervisionModeUi(mode) {
-    window.currentSupervisionMode = mode;
-    const isRemote = mode === 'remote';
-    const isLocal = mode === 'local';
-
-    const toggle = document.getElementById('modeToggle');
-    if (toggle) {
-        toggle.checked = isRemote;
+function updateSystemModesUi(snifferMode, kioskMode) {
+    if (typeof snifferMode === 'boolean') {
+        window.isSnifferMode = snifferMode;
+    }
+    if (typeof kioskMode === 'boolean') {
+        window.isKioskMode = kioskMode;
     }
 
-    const desc = document.getElementById('cfgModeDesc');
-    if (desc) {
-        desc.innerText = isRemote
-            ? (typeof t === 'function' ? t('system.mode_remote_desc') : "Mode normal : Green'Up Link pilote la borne et envoie les commandes à l'ATmega (autorisations, consigne de courant, TIC).")
-            : (typeof t === 'function' ? t('system.mode_local_desc') : "Mode écoute seule (passif) : la borne fonctionne en autonomie, Green'Up Link n'envoie aucune commande à l'ATmega.");
+    const isSniffer = !!window.isSnifferMode;
+    const isKiosk = !!window.isKioskMode;
+
+    // 1. Sniffer Mode badge in System tab
+    const snifferBadge = document.getElementById('cfgSnifferModeBadge');
+    if (snifferBadge) {
+        if (isSniffer) {
+            snifferBadge.className = 'sys-badge sys-badge-amber';
+            snifferBadge.innerText = (typeof t === 'function' ? t('system.mode_enabled') : 'Activé') || 'Activé';
+        } else {
+            snifferBadge.className = 'sys-badge sys-badge-muted';
+            snifferBadge.innerText = (typeof t === 'function' ? t('system.mode_disabled') : 'Désactivé') || 'Désactivé';
+        }
     }
 
-    // Controls Panel Banner
+    // 2. Kiosk Mode badge in System tab
+    const kioskBadge = document.getElementById('cfgKioskModeBadge');
+    if (kioskBadge) {
+        if (isKiosk) {
+            kioskBadge.className = 'sys-badge sys-badge-sky';
+            kioskBadge.innerText = (typeof t === 'function' ? t('system.mode_enabled') : 'Activé') || 'Activé';
+        } else {
+            kioskBadge.className = 'sys-badge sys-badge-muted';
+            kioskBadge.innerText = (typeof t === 'function' ? t('system.mode_disabled') : 'Désactivé') || 'Désactivé';
+        }
+    }
+
+    // 3. Controls Panel Banner
     const localBanner = document.getElementById('localModeBanner');
     if (localBanner) {
-        if (isLocal) {
+        if (isSniffer) {
             localBanner.classList.remove('hidden');
         } else {
             localBanner.classList.add('hidden');
         }
     }
 
-    // Lock/Unlock controls in Controls panel
+    // 4. Lock/Unlock controls in Controls panel & System actions when Sniffer mode is active
     if (typeof updateControlsForMode === 'function') {
-        updateControlsForMode(isLocal);
-    }
-}
-
-async function toggleSupervisionMode() {
-    if (window.isAuthRequired && !window.isAuthenticated) {
-        if (typeof showAuthModal === 'function') showAuthModal(false);
-        const toggle = document.getElementById('modeToggle');
-        if (toggle) toggle.checked = window.currentSupervisionMode === 'remote';
-        return;
-    }
-
-    const toggle = document.getElementById('modeToggle');
-    if (!toggle) return;
-    const targetMode = toggle.checked ? 'remote' : 'local';
-    const feedback = document.getElementById('cfgModeFeedback');
-
-    if (lastReportedState && lastReportedState !== 'A' && lastReportedState !== 'DISCONNECTED') {
-        toggle.checked = !toggle.checked;
-        if (feedback) {
-            feedback.innerText = (typeof t === 'function' ? t('system.mode_state_a_required') : "La bascule de mode nécessite que la borne soit à l'état A (Libre / Déconnectée).");
-            feedback.className = 'sys-feedback sys-feedback-warn';
-            setTimeout(() => { feedback.innerText = ''; }, 4000);
-        }
-        return;
-    }
-
-    toggle.disabled = true;
-    if (feedback) {
-        feedback.innerText = (typeof t === 'function' ? t('system.mode_switching') : "Changement de mode en cours...") || "Changement de mode en cours...";
-        feedback.className = 'sys-feedback sys-feedback-info animate-pulse';
-    }
-
-    try {
-        const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
-        const res = await apiFetch(`/api/mode${sideQuery}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mode: targetMode })
-        });
-
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            throw new Error(errData.error || ('HTTP ' + res.status));
-        }
-
-        const data = await res.json();
-        const effectiveMode = data.mode || targetMode;
-        updateSupervisionModeUi(effectiveMode);
-
-        if (feedback) {
-            feedback.innerText = (typeof t === 'function' ? t('system.mode_switch_success') : "Mode mis à jour avec succès") || "Mode mis à jour avec succès";
-            feedback.className = 'sys-feedback sys-feedback-ok';
-        }
-
-        if (typeof fetchTelemetry === 'function') {
-            fetchTelemetry();
-        }
-    } catch (err) {
-        console.error('Mode switch error:', err);
-        toggle.checked = window.currentSupervisionMode === 'remote';
-        if (feedback) {
-            feedback.innerText = (typeof t === 'function' ? t('alert.error') : 'Erreur: ') + (err.message || err);
-            feedback.className = 'sys-feedback sys-feedback-error';
-        }
-    } finally {
-        toggle.disabled = false;
-        if (feedback) {
-            setTimeout(() => { feedback.innerText = ''; }, 4000);
-        }
+        updateControlsForMode(isSniffer);
     }
 }

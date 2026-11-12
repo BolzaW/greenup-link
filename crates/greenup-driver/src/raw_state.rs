@@ -21,50 +21,13 @@ pub enum SerialStatus {
     UsbNoResponse,
 }
 
-/// Operating mode of the serial driver on the UART bus.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum SupervisionMode {
-    /// Active supervision mode (`RaspberryPiModeOK`, startup queries, watchdog pings, commands allowed).
-    #[default]
-    Remote,
-    /// Passive monitoring mode (RX-only listen mode, zero spontaneous TX frames).
-    Local,
-}
-
-impl std::str::FromStr for SupervisionMode {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_lowercase().as_str() {
-            "remote" => Ok(SupervisionMode::Remote),
-            "local" => Ok(SupervisionMode::Local),
-            _ => Err(()),
-        }
-    }
-}
-
-impl SupervisionMode {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            SupervisionMode::Remote => "remote",
-            SupervisionMode::Local => "local",
-        }
-    }
-
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
-        s.parse().ok()
-    }
-}
-
 /// JSON-serializable state of the USB serial link managed by `greenup-driver`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UsbLinkState {
     pub status: SerialStatus,
     pub port: String,
     pub baud_rate: u32,
-    pub mode: SupervisionMode,
+    pub sniffer_mode: bool,
     pub message: String,
     pub last_rx_secs_ago: Option<u64>,
     pub init_completed: bool,
@@ -78,7 +41,7 @@ impl Default for UsbLinkState {
             status: SerialStatus::UsbDisconnected,
             port: String::from("/dev/ttyUSB0"),
             baud_rate: 115_200,
-            mode: SupervisionMode::Remote,
+            sniffer_mode: false,
             message: String::from("USB cable not detected (/dev/ttyUSB0 not found)"),
             last_rx_secs_ago: None,
             init_completed: false,
@@ -123,7 +86,6 @@ pub struct AtmegaRawState {
     pub fcs: Option<bool>,
     pub dom: Option<bool>,
     pub sb: Option<bool>,
-    pub sbf: Option<bool>,
     pub cph: Option<String>,
 
     // --- 3. Current & Power Modulation ---
@@ -166,6 +128,10 @@ pub struct AtmegaRawState {
     pub tic_test_b: Option<String>,
     pub wt: Option<String>,
     pub wt_updates_count: u64,
+
+    // --- 9. Modbus Settings ---
+    pub modbus_ema: Option<String>,
+    pub modbus_dlma: Option<String>,
 }
 
 impl AtmegaRawState {
@@ -275,12 +241,8 @@ impl AtmegaRawState {
                 self.dom = Some(*b);
                 true
             }
-            ProtocolEvent::SbState(b) => {
+            ProtocolEvent::SbState(b) | ProtocolEvent::SbfState(b) => {
                 self.sb = Some(*b);
-                true
-            }
-            ProtocolEvent::SbfState(b) => {
-                self.sbf = Some(*b);
                 true
             }
             ProtocolEvent::ChargePhases(p) => {
@@ -367,7 +329,7 @@ impl AtmegaRawState {
                 self.fm = Some(m.clone());
                 true
             }
-            ProtocolEvent::ExternalSignal(b) => {
+            ProtocolEvent::ExternalSignal(b) | ProtocolEvent::ExternalSignalForced(b) => {
                 self.fm2 = Some(*b);
                 true
             }
@@ -407,7 +369,21 @@ impl AtmegaRawState {
                 true
             }
 
-            // Ignored acknowledgments and unsupported peripherals (Unlock, Sleep, EM, Modbus, RFID, OCPP config)
+            // 9. Modbus Settings
+            ProtocolEvent::ModbusEnergyMeterAddress(v) => {
+                if !v.starts_with("ok") {
+                    self.modbus_ema = Some(v.clone());
+                }
+                true
+            }
+            ProtocolEvent::ModbusDlmAddress(v) => {
+                if !v.starts_with("ok") {
+                    self.modbus_dlma = Some(v.clone());
+                }
+                true
+            }
+
+            // Ignored acknowledgments and unsupported peripherals (Unlock, Sleep, EM, other Modbus, RFID, OCPP config)
             _ => false,
         }
     }
@@ -451,6 +427,13 @@ mod tests {
         assert!(raw.apply_event(&parse_line("T2C:1")));
         assert!(raw.apply_event(&parse_line("FM2:0")));
         assert!(raw.apply_event(&parse_line("D:1")));
+        assert!(raw.apply_event(&parse_line("CCBLES:16")));
+        assert!(raw.apply_event(&parse_line("CCBLESh:32")));
+        assert!(raw.apply_event(&parse_line("ModbusEMA:2")));
+        assert!(raw.apply_event(&parse_line("ModbusDLMA:3")));
+        assert!(raw.apply_event(&parse_line("ModbusEMA:ok*")));
+        assert!(raw.apply_event(&parse_line("SBF:1")));
+        assert!(raw.apply_event(&parse_line("FM2F:1")));
 
         assert_eq!(raw.kit_com, Some(true));
         assert_eq!(raw.initialized, Some(true));
@@ -460,12 +443,17 @@ mod tests {
         assert_eq!(raw.state.as_deref(), Some("D"));
         assert_eq!(raw.cc, Some(20));
         assert_eq!(raw.cc_el, Some(16));
+        assert_eq!(raw.cc_bles, Some(16));
+        assert_eq!(raw.cc_blesh, Some(32));
+        assert_eq!(raw.modbus_ema.as_deref(), Some("2"));
+        assert_eq!(raw.modbus_dlma.as_deref(), Some("3"));
         assert_eq!(raw.cci, Some(15.8));
         assert_eq!(raw.cci_l2, Some(15.9));
         assert_eq!(raw.cci_l3, Some(16.0));
         assert_eq!(raw.cci_updates_count, 1);
         assert_eq!(raw.t2c, Some(true));
-        assert_eq!(raw.fm2, Some(false));
+        assert_eq!(raw.sb, Some(true));
+        assert_eq!(raw.fm2, Some(true));
         assert_eq!(raw.d, Some(true));
 
         let snap = DriverSnapshot {
@@ -477,6 +465,10 @@ mod tests {
         assert_eq!(json_val["atmega"]["reference"], "058001");
         assert_eq!(json_val["atmega"]["state"], "D");
         assert_eq!(json_val["atmega"]["cc_el"], 16);
+        assert_eq!(json_val["atmega"]["cc_bles"], 16);
+        assert_eq!(json_val["atmega"]["cc_blesh"], 32);
+        assert_eq!(json_val["atmega"]["modbus_ema"], "2");
+        assert_eq!(json_val["atmega"]["modbus_dlma"], "3");
         assert_eq!(json_val["usb"]["status"], "usb_disconnected");
     }
 }

@@ -9,19 +9,10 @@ use serde_json::json;
 use std::sync::Arc;
 use greenup_driver::logger;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AuthState {
     pub api_token: Option<Arc<String>>,
-    pub auth_ihm: bool,
-}
-
-impl Default for AuthState {
-    fn default() -> Self {
-        Self {
-            api_token: None,
-            auth_ihm: true,
-        }
-    }
+    pub kiosk_mode: bool,
 }
 
 pub type SharedAuthState = Arc<AuthState>;
@@ -166,7 +157,7 @@ pub fn is_request_authorized(headers: &HeaderMap, query: Option<&str>, expected_
     false
 }
 
-/// Returns true if the HTTP request is permitted in open consultation mode ("kiosk", `auth_ihm = false`).
+/// Returns true if the HTTP request is permitted in open consultation mode ("kiosk", `kiosk_mode = true`).
 pub fn is_kiosk_permitted(method: &axum::http::Method, path: &str) -> bool {
     if method != axum::http::Method::GET {
         return false;
@@ -186,7 +177,6 @@ pub fn is_kiosk_permitted(method: &axum::http::Method, path: &str) -> bool {
         || path == "/api/status"
         || path == "/api/sessions"
         || (path.starts_with("/api/sessions/") && path.ends_with("/export"))
-        || path == "/api/mode"
         || path == "/api/logs"
         || path == "/api/logs/stream"
         || path == "/api/logs/level"
@@ -211,8 +201,8 @@ pub async fn require_auth(
         return next.run(req).await;
     }
 
-    // In Kiosk / Consultation Libre mode (auth_ihm == false), permit read-only GET requests
-    if !auth_state.auth_ihm && is_kiosk_permitted(req.method(), req.uri().path()) {
+    // In Kiosk / Consultation Libre mode (kiosk_mode == true), permit read-only GET requests
+    if auth_state.kiosk_mode && is_kiosk_permitted(req.method(), req.uri().path()) {
         return next.run(req).await;
     }
 
@@ -242,7 +232,7 @@ pub async fn auth_status(
             Json(json!({
                 "auth_required": false,
                 "authenticated": true,
-                "auth_ihm": false
+                "kiosk_mode": auth_state.kiosk_mode
             }))
         }
         Some(ref expected) => {
@@ -250,14 +240,14 @@ pub async fn auth_status(
             logger::debug(
                 "API",
                 &format!(
-                    "🔐 Auth status check: required=true, authenticated={}, auth_ihm={}",
-                    valid, auth_state.auth_ihm
+                    "🔐 Auth status check: required=true, authenticated={}, kiosk_mode={}",
+                    valid, auth_state.kiosk_mode
                 ),
             );
             Json(json!({
                 "auth_required": true,
                 "authenticated": valid,
-                "auth_ihm": auth_state.auth_ihm
+                "kiosk_mode": auth_state.kiosk_mode
             }))
         }
     }
@@ -339,7 +329,6 @@ mod tests {
         assert!(is_kiosk_permitted(&Method::GET, "/api/status"));
         assert!(is_kiosk_permitted(&Method::GET, "/api/sessions"));
         assert!(is_kiosk_permitted(&Method::GET, "/api/sessions/123/export"));
-        assert!(is_kiosk_permitted(&Method::GET, "/api/mode"));
         assert!(is_kiosk_permitted(&Method::GET, "/api/logs"));
         assert!(is_kiosk_permitted(&Method::GET, "/api/logs/stream"));
         assert!(is_kiosk_permitted(&Method::GET, "/api/logs/level"));
@@ -355,7 +344,6 @@ mod tests {
         assert!(!is_kiosk_permitted(&Method::POST, "/api/bluetooth"));
         assert!(!is_kiosk_permitted(&Method::POST, "/api/command"));
         assert!(!is_kiosk_permitted(&Method::POST, "/api/voltage"));
-        assert!(!is_kiosk_permitted(&Method::POST, "/api/mode"));
         assert!(!is_kiosk_permitted(&Method::POST, "/api/logs/level"));
         assert!(!is_kiosk_permitted(&Method::POST, "/api/sessions/123/export"));
         assert!(!is_kiosk_permitted(&Method::DELETE, "/api/sessions/123"));

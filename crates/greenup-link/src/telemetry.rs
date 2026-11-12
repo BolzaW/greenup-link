@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
-pub use greenup_driver::{SerialStatus, SupervisionMode};
+pub use greenup_driver::SerialStatus;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct SerialConnection {
     pub status: SerialStatus,
     pub port: String,
+    #[serde(default)]
+    pub sniffer_mode: bool,
     pub message: String,
     pub last_rx_secs_ago: Option<u64>,
 }
@@ -14,6 +16,7 @@ impl Default for SerialConnection {
         Self {
             status: SerialStatus::UsbDisconnected,
             port: String::from("/dev/ttyUSB0"),
+            sniffer_mode: false,
             message: String::from("USB cable not detected (/dev/ttyUSB0 not found)"),
             last_rx_secs_ago: None,
         }
@@ -39,8 +42,6 @@ pub struct ExternalVoltage {
 pub struct Telemetry {
     #[serde(default = "default_side")]
     pub side: u8,
-    #[serde(default)]
-    pub mode: SupervisionMode,
     pub serial: SerialConnection,
     pub voltage: f32,
     #[serde(default = "default_voltage_source")]
@@ -77,7 +78,6 @@ impl Default for Telemetry {
     fn default() -> Self {
         Self {
             side: 1,
-            mode: SupervisionMode::default(),
             serial: SerialConnection::default(),
             voltage: 230.0,
             voltage_source: default_voltage_source(),
@@ -236,7 +236,7 @@ pub struct ConnectorStatus {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ConnectorControl {
     pub setpoint_amps: u32,
-    pub pilot_limit_amps: u32,
+    pub applied_limit_amps: u32,
     pub min_allowed_amps: u32,
     pub max_hardware_amps: u32,
     pub charge_authorized: bool,
@@ -286,7 +286,6 @@ pub struct StationData {
     pub hardware_version: String,
     pub firmware_version: String,
     pub link_version: String,
-    pub supervision_mode: SupervisionMode,
     pub serial_connection: SerialConnection,
     pub is_dual: bool,
     pub available_connectors: Vec<u8>,
@@ -336,8 +335,8 @@ impl Telemetry {
         let vehicle_connected = !matches!(raw_code.as_str(), "A" | "L" | "DISCONNECTED" | "Y" | "Z" | "") && iec != "A";
         let is_charging = (matches!(raw_code.as_str(), "D" | "E" | "G" | "H") || iec == "C") && !self.charge_paused;
 
-        let ocpp = if self.serial.status != SerialStatus::UsbConnected || self.mode == SupervisionMode::Local {
-            if self.mode == SupervisionMode::Local && vehicle_connected {
+        let ocpp = if self.serial.status != SerialStatus::UsbConnected || self.serial.sniffer_mode {
+            if self.serial.sniffer_mode && vehicle_connected {
                 if is_charging {
                     OcppChargePointStatus::Charging
                 } else {
@@ -387,7 +386,7 @@ impl Telemetry {
 
         let control = ConnectorControl {
             setpoint_amps: setpoint,
-            pilot_limit_amps: self.limit_amps,
+            applied_limit_amps: self.limit_amps,
             min_allowed_amps: 7,
             max_hardware_amps: max_hardware,
             charge_authorized: self.charge_authorized && !self.charge_paused,
