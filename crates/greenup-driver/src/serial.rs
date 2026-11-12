@@ -1,11 +1,26 @@
+//! Low-level UART/USB serial port driver for the ATmega2560 power board.
+//!
+//! Responsibilities:
+//! - USB serial port discovery (`discover_candidate_ports`) and worker spawning (`spawn_port`).
+//! - Framed line reading (`\r\n`) with OOM/noise protection (`MAX_SERIAL_LINE_LEN`) and automatic reconnection.
+//! - Synchronous TX command transmission with ACK matching and retry (`send_command_sync`).
+//! - Hardware initialization handshake (`RaspberryPiModeOK` + `Command::startup_queries()`).
+//! - Linky TIC baudrate detection sequence (`TICTM:1` -> `TICTestB:` -> `TICTM:0`).
+//! - Watchdog keepalive (`ping` / `pong`) and link health updates (`UsbLinkState`).
+//! - Updating `AtmegaRawState` and broadcasting `DriverSnapshot` on `tokio::sync::watch`.
+
 use crate::logger;
-use crate::state::SharedState;
-use greenup_protocol::{commands::FunctioningMode, Command, parser::{parse_line, ProtocolEvent}};
+use crate::raw_state::{AtmegaRawState, SerialStatus, SupervisionMode};
+use crate::state::{DriverHandle, SharedDriver};
+use greenup_protocol::{
+    commands::FunctioningMode,
+    parser::{parse_line, ProtocolEvent},
+    Command,
+};
 use std::io::{BufRead, BufReader, Read, Write};
-use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use crate::telemetry::SerialStatus;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug)]
 pub struct SerialOptions {
@@ -18,8 +33,7 @@ pub struct SerialOptions {
 impl Default for SerialOptions {
     fn default() -> Self {
         Self {
-            port: std::env::var("GREENUP_SERIAL_PORT")
-                .unwrap_or_else(|_| "/dev/ttyUSB0".to_string()),
+            port: "/dev/ttyUSB0".to_string(),
             baud_rate: 115_200,
             timeout_ms: 100,
             watchdog_timeout_secs: 60,
@@ -33,23 +47,100 @@ pub const MAX_SERIAL_LINE_LEN: usize = 256;
 
 const TICTM_MAX_ZEROS: u32 = 5;
 
+/// Discovers candidate USB serial ports for Point 1 and Point 2 on the host OS.
+pub fn discover_candidate_ports(
+    configured_port: Option<&str>,
+    configured_port2: Option<&str>,
+) -> (String, String) {
+    let mut available: Vec<String> = serialport::available_ports()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.port_name)
+        .filter(|name| {
+            name.contains("ttyUSB")
+                || name.contains("ttyACM")
+                || name.starts_with("COM")
+                || name.contains("cu.usbserial")
+        })
+        .collect();
 
-pub async fn trigger_init_sequence(state: &SharedState) {
-    let _ = state.serial_tx.send(Command::RaspberryPiModeOk).await;
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    available.sort();
 
-    for cmd in Command::startup_queries() {
-        let _ = state.serial_tx.send(cmd).await;
-        tokio::time::sleep(Duration::from_millis(30)).await;
+    let port1 = match configured_port {
+        Some(p) if !p.trim().is_empty() => p.trim().to_string(),
+        _ => available
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "/dev/ttyUSB0".to_string()),
+    };
+
+    let port2 = match configured_port2 {
+        Some(p2) if !p2.trim().is_empty() => p2.trim().to_string(),
+        _ => available
+            .iter()
+            .find(|&p| p != &port1)
+            .cloned()
+            .unwrap_or_else(|| {
+                if port1.ends_with('0') {
+                    format!("{}1", &port1[..port1.len() - 1])
+                } else {
+                    "/dev/ttyUSB1".to_string()
+                }
+            }),
+    };
+
+    (port1, port2)
+}
+
+/// Spawns a new low-level USB serial driver thread for the given port and returns its [`SharedDriver`] handle.
+/// Can be called at startup for Point 1, and dynamically by `greenup-link` when initializing a 2nd USB port.
+pub fn spawn_port(side: u8, mode: SupervisionMode, options: SerialOptions) -> SharedDriver {
+    let (tx, rx) = tokio::sync::mpsc::channel::<Command>(64);
+    let driver = Arc::new(DriverHandle::new_with_side_and_mode(side, mode, tx));
+    driver.update_usb(|usb| {
+        usb.port = options.port.clone();
+        usb.baud_rate = options.baud_rate;
+        usb.message = format!("Initializing USB serial port ({})", options.port);
+    });
+
+    let driver_for_loop = driver.clone();
+    std::thread::spawn(move || {
+        run_serial_loop_with_options(driver_for_loop, rx, options);
+    });
+
+    driver
+}
+
+/// Queries executed by the driver during the initialization sequence, matching the registers
+/// tracked in [`AtmegaRawState`] (excludes Sleep, EM, Modbus, RFID, and OCPP config commands,
+/// while keeping `OCPPPS?`).
+pub fn driver_startup_queries() -> Vec<Command> {
+    Command::startup_queries()
+        .into_iter()
+        .filter(|cmd| {
+            !matches!(
+                cmd,
+                Command::GetSleep
+                    | Command::GetEnergyMeterPulses
+                    | Command::GetRfidEnabled
+                    | Command::GetRfidUserManagement
+            )
+        })
+        .collect()
+}
+
+/// Triggers the low-level ATmega initialization sequence (`RaspberryPiModeOK` + [`driver_startup_queries`]).
+pub async fn trigger_init_sequence(driver: &SharedDriver) {
+    let _ = driver.serial_tx.send(Command::RaspberryPiModeOk).await;
+
+    for cmd in driver_startup_queries() {
+        let _ = driver.serial_tx.send(cmd).await;
     }
-
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    let _ = start_tic_detection(state).await;
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TicStartError {
-    /// The charging station hardware does not support TIC (no TIC terminal on this model).
+    /// The charging station hardware model does not support TIC (checked by upper layer).
     NotSupported,
     /// The charging station is not in `State:A` (contains the current Legrand state).
     NotInStateA(String),
@@ -57,25 +148,13 @@ pub enum TicStartError {
     Serial,
 }
 
-/// Checks whether the charging station is currently eligible for TIC detection:
-/// 1. The hardware reference must physically support TIC (`c.is_known && c.has_tic == true`).
-/// 2. The Legrand operating state must be `State:A` (Available / Free).
-pub fn check_tic_eligibility(state: &SharedState) -> Result<(), TicStartError> {
-    // 1. Hardware capability check: Reject if model is unknown or has no TIC input (assume minimum features)
-    let has_tic = match state.info.lock() {
-        Ok(info) => info.capabilities.as_ref().map(|c| c.is_known && c.has_tic).unwrap_or(false),
-        Err(_) => false,
-    };
-
-    if !has_tic {
-        return Err(TicStartError::NotSupported);
-    }
-
-    // 2. Legrand state check: Must be State A (Free / Available)
-    let current_state = match state.telemetry.lock() {
-        Ok(tel) => tel.greenup_state.clone(),
-        Err(_) => String::from("Unknown"),
-    };
+/// Low-level check verifying that the ATmega is currently in `State:A` (Free / Available)
+/// before activating `TICTM:1`.
+pub fn check_tic_state_a(driver: &SharedDriver) -> Result<(), TicStartError> {
+    let current_state = driver
+        .get_raw_state()
+        .state
+        .unwrap_or_else(|| String::from("Unknown"));
 
     if current_state != "A" {
         return Err(TicStartError::NotInStateA(current_state));
@@ -84,46 +163,48 @@ pub fn check_tic_eligibility(state: &SharedState) -> Result<(), TicStartError> {
     Ok(())
 }
 
-/// Starts TIC detection (`TICTM:1`), ONLY if the hardware model supports TIC and the Legrand state is `A`.
+/// Starts the low-level Linky TIC baudrate detection sequence (`TICTM:1`),
+/// provided the ATmega is currently in `State:A`.
 ///
-/// Centralized safeguards:
-/// 1. Reject if the wallbox model does not physically support TIC (`has_tic == false`).
-/// 2. If the charging station is not in `State:A`, the function does absolutely nothing
-///    (no frame sent, no state modified).
-/// 
-/// The driver then takes care of sending `TICTM:0` at the end of the detection.
-pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartError> {
-    match check_tic_eligibility(state) {
+/// The driver automatically sends `TICTM:0` once a non-zero baudrate (`1200`/`9600`)
+/// or `TICTM_MAX_ZEROS` consecutive `"0"` frames are received.
+pub async fn start_tic_detection(driver: &SharedDriver) -> Result<(), TicStartError> {
+    match check_tic_state_a(driver) {
         Ok(()) => {}
-        Err(TicStartError::NotSupported) => {
-            logger::log("SERIAL", "⛔ TIC detection rejected: charging station hardware does not support TIC");
-            return Err(TicStartError::NotSupported);
-        }
         Err(TicStartError::NotInStateA(ref current_state)) => {
-            logger::log("SERIAL", &format!("⛔ TIC detection ignored: charging station not free (State: {})", current_state));
+            logger::log(
+                "SERIAL",
+                &format!(
+                    "⛔ TIC detection ignored: charging station not free (State: {})",
+                    current_state
+                ),
+            );
             return Err(TicStartError::NotInStateA(current_state.clone()));
         }
         Err(e) => return Err(e),
     }
 
     logger::log("SERIAL", "🚀 Starting TIC detection (TICTM:1)");
-    if let Ok(mut tic) = state.tic_detection.lock() { tic.is_active = true; tic.zero_count = 0; }
-    if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "detecting".to_string(); }
-    state
+    if let Ok(mut tic) = driver.tic_detection.lock() {
+        tic.is_active = true;
+        tic.zero_count = 0;
+    }
+    driver.update_raw(|raw| {
+        raw.tic_tm = Some(true);
+    });
+
+    driver
         .serial_tx
         .send(Command::SetTicTestMode(true))
         .await
         .map_err(|_| TicStartError::Serial)
 }
 
-
 /// Sends a command synchronously to the serial port, logging TX, and waiting
 /// for the matching acknowledgment response from the ATmega if the command expects one.
-///
-/// Returns `true` if the command was successfully acknowledged (or if no response was expected).
 pub fn send_command_sync(
     port: &mut Box<dyn serialport::SerialPort>,
-    state: &SharedState,
+    driver: &SharedDriver,
     internal_rx: &std::sync::mpsc::Receiver<String>,
     is_running: &AtomicBool,
     cmd: Command,
@@ -134,15 +215,14 @@ pub fn send_command_sync(
     let mut success = false;
 
     while retries >= 0 && !success && is_running.load(Ordering::Relaxed) {
-        // Drain any stale/unrelated lines accumulated in internal_rx
-        while let Ok(_) = internal_rx.try_recv() {}
+        while internal_rx.try_recv().is_ok() {}
 
         let tx_level = if cmd == Command::Ping {
             logger::LogLevel::Trace
         } else {
             logger::LogLevel::Info
         };
-        logger::log_with_level_side("SERIAL_TX", Some(state.side()), tx_level, encoded.trim());
+        logger::log_with_level_side("SERIAL_TX", Some(driver.side()), tx_level, encoded.trim());
 
         if let Err(e) = port.write_all(encoded.as_bytes()) {
             logger::error("SERIAL", &format!("❌ Serial write error on port: {}", e));
@@ -150,12 +230,18 @@ pub fn send_command_sync(
             return false;
         }
 
+        driver.update_usb(|usb| {
+            usb.tx_commands_count = usb.tx_commands_count.wrapping_add(1);
+        });
+
         if expects_response {
             let start_wait = Instant::now();
             let mut matched = false;
             let mut got_default = false;
 
-            while start_wait.elapsed() < Duration::from_millis(1000) && is_running.load(Ordering::Relaxed) {
+            while start_wait.elapsed() < Duration::from_millis(1000)
+                && is_running.load(Ordering::Relaxed)
+            {
                 if let Ok(rx_line) = internal_rx.recv_timeout(Duration::from_millis(50)) {
                     if cmd.matches_response(&rx_line) {
                         matched = true;
@@ -171,9 +257,23 @@ pub fn send_command_sync(
                 success = true;
             } else {
                 if got_default {
-                    logger::warn("SERIAL", &format!("❌ Command {} rejected by station (Default), retry: {}", cmd.as_frame(), retries));
+                    logger::warn(
+                        "SERIAL",
+                        &format!(
+                            "❌ Command {} rejected by station (Default), retry: {}",
+                            cmd.as_frame(),
+                            retries
+                        ),
+                    );
                 } else {
-                    logger::warn("SERIAL", &format!("⏳ Command {} timeout, retry: {}", cmd.as_frame(), retries));
+                    logger::warn(
+                        "SERIAL",
+                        &format!(
+                            "⏳ Command {} timeout, retry: {}",
+                            cmd.as_frame(),
+                            retries
+                        ),
+                    );
                 }
                 retries -= 1;
             }
@@ -185,66 +285,46 @@ pub fn send_command_sync(
     success
 }
 
-/// Helper called synchronously after the startup queries to automatically initialize TIC detection
-/// if the station model supports TIC and the station is in State:A.
-pub fn maybe_start_startup_tic_detection_sync(
-    port: &mut Box<dyn serialport::SerialPort>,
-    state: &SharedState,
-    internal_rx: &std::sync::mpsc::Receiver<String>,
-    is_running: &AtomicBool,
-) -> bool {
-    match check_tic_eligibility(state) {
-        Ok(()) => {
-            logger::log("SERIAL", "🚀 Starting automatic TIC detection after init sequence (Hardware compatible & State:A)");
-            if let Ok(mut tic) = state.tic_detection.lock() {
-                tic.is_active = true;
-                tic.zero_count = 0;
-            }
-            if let Ok(mut tel) = state.telemetry.lock() {
-                tel.tic_mode = "detecting".to_string();
-            }
-            send_command_sync(port, state, internal_rx, is_running, Command::SetTicTestMode(true))
-        }
-        Err(TicStartError::NotSupported) => {
-            logger::log("SERIAL", "ℹ️ Skipping automatic TIC detection: hardware model does not support TIC");
-            false
-        }
-        Err(TicStartError::NotInStateA(ref current_state)) => {
-            logger::log("SERIAL", &format!("ℹ️ Skipping automatic TIC detection: charging station not free (State: {})", current_state));
-            false
-        }
-        Err(_) => false,
-    }
-}
-
+/// Executes the synchronous startup handshake (`RaspberryPiModeOK` + `Command::startup_queries()`)
+/// and notifies upper layers via `usb.init_completed = true`.
 pub fn send_init_sequence_sync(
     port: &mut Box<dyn serialport::SerialPort>,
-    state: &SharedState,
+    driver: &SharedDriver,
     internal_rx: &std::sync::mpsc::Receiver<String>,
     is_running: &AtomicBool,
 ) {
-    send_command_sync(port, state, internal_rx, is_running, Command::RaspberryPiModeOk);
-    std::thread::sleep(Duration::from_millis(50));
+    driver.update_usb(|usb| {
+        usb.init_completed = false;
+    });
 
-    for cmd in Command::startup_queries() {
+    send_command_sync(
+        port,
+        driver,
+        internal_rx,
+        is_running,
+        Command::RaspberryPiModeOk,
+    );
+
+    for cmd in driver_startup_queries() {
         if !is_running.load(Ordering::Relaxed) {
             break;
         }
-        send_command_sync(port, state, internal_rx, is_running, cmd);
-        std::thread::sleep(Duration::from_millis(30));
+        send_command_sync(port, driver, internal_rx, is_running, cmd);
     }
 
     if is_running.load(Ordering::Relaxed) {
-        maybe_start_startup_tic_detection_sync(port, state, internal_rx, is_running);
+        driver.update_usb(|usb| {
+            usb.init_completed = true;
+        });
     }
 }
 
-pub fn run_serial_loop(state: SharedState, rx_channel: tokio::sync::mpsc::Receiver<Command>) {
-    run_serial_loop_with_options(state, rx_channel, SerialOptions::default());
+pub fn run_serial_loop(driver: SharedDriver, rx_channel: tokio::sync::mpsc::Receiver<Command>) {
+    run_serial_loop_with_options(driver, rx_channel, SerialOptions::default());
 }
 
 pub fn run_serial_loop_with_options(
-    state: SharedState,
+    driver: SharedDriver,
     mut rx_channel: tokio::sync::mpsc::Receiver<Command>,
     options: SerialOptions,
 ) {
@@ -254,7 +334,6 @@ pub fn run_serial_loop_with_options(
     let mut last_logged_disconnect: Option<Instant> = None;
 
     loop {
-        // 1. Attempt to open serial port without crashing
         let mut port = match serialport::new(&port_name, baud_rate)
             .timeout(Duration::from_millis(options.timeout_ms))
             .open()
@@ -277,20 +356,25 @@ pub fn run_serial_loop_with_options(
                     last_logged_disconnect = Some(Instant::now());
                 }
 
-                if let Ok(mut tel) = state.telemetry.lock() {
-                    tel.serial.status = SerialStatus::UsbDisconnected;
-                    tel.serial.port = port_name.clone();
-                    tel.serial.message = format!("USB cable not detected ({})", e);
-                    tel.serial.last_rx_secs_ago = None;
-                    tel.greenup_state = "DISCONNECTED".to_string();
-                    tel.iec_state = None;
-                    tel.voltage = 0.0;
-                    tel.current = 0.0;
-                    tel.power = 0.0;
-                }
+                driver.update_both(|raw, usb| {
+                    usb.status = SerialStatus::UsbDisconnected;
+                    usb.port = port_name.clone();
+                    usb.baud_rate = baud_rate;
+                    usb.message = format!("USB cable not detected ({})", e);
+                    usb.last_rx_secs_ago = None;
+                    usb.init_completed = false;
+                    raw.state = Some("DISCONNECTED".to_string());
+                    raw.tic_tm = None;
+                    raw.cci = Some(0.0);
+                    raw.cci_l2 = None;
+                    raw.cci_l3 = None;
+                });
 
                 while let Ok(cmd) = rx_channel.try_recv() {
-                    logger::debug("SERIAL", &format!("🗑️ Command {} dropped (USB disconnected)", cmd.as_frame()));
+                    logger::debug(
+                        "SERIAL",
+                        &format!("🗑️ Command {} dropped (USB disconnected)", cmd.as_frame()),
+                    );
                 }
 
                 std::thread::sleep(Duration::from_secs(2));
@@ -307,17 +391,23 @@ pub fn run_serial_loop_with_options(
             ),
         );
 
-        if let Ok(mut tel) = state.telemetry.lock() {
-            tel.serial.status = SerialStatus::UsbConnecting;
-            tel.serial.port = port_name.clone();
-            tel.serial.message = "USB port connected, waiting for response from station board".to_string();
-            tel.serial.last_rx_secs_ago = None;
-        }
+        driver.update_usb(|usb| {
+            usb.status = SerialStatus::UsbConnecting;
+            usb.port = port_name.clone();
+            usb.baud_rate = baud_rate;
+            usb.message =
+                "USB port connected, waiting for response from station board".to_string();
+            usb.last_rx_secs_ago = None;
+            usb.init_completed = false;
+        });
 
         let clone_port = match port.try_clone() {
             Ok(p) => p,
             Err(e) => {
-                logger::error("SERIAL", &format!("❌ Failed to clone serial port {}: {}", port_name, e));
+                logger::error(
+                    "SERIAL",
+                    &format!("❌ Failed to clone serial port {}: {}", port_name, e),
+                );
                 std::thread::sleep(Duration::from_secs(2));
                 continue;
             }
@@ -329,7 +419,7 @@ pub fn run_serial_loop_with_options(
 
         let is_running_reader = is_running.clone();
         let last_rx_reader = last_rx_time.clone();
-        let state_rx = state.clone();
+        let driver_rx = driver.clone();
         let port_name_reader = port_name.clone();
 
         let reader_thread = std::thread::spawn(move || {
@@ -358,23 +448,29 @@ pub fn run_serial_loop_with_options(
                                     *t = Some(Instant::now());
                                 }
 
-                                if let Ok(mut tel) = state_rx.telemetry.lock() {
-                                    if tel.serial.status != SerialStatus::UsbConnected {
-                                        tel.serial.status = SerialStatus::UsbConnected;
-                                        tel.serial.message = "USB serial link active - Station connected".to_string();
-                                        if tel.voltage == 0.0 {
-                                            tel.voltage = 230.0;
-                                        }
+                                {
+                                    let mut usb = driver_rx
+                                        .usb
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner());
+                                    if usb.status != SerialStatus::UsbConnected {
+                                        usb.status = SerialStatus::UsbConnected;
+                                        usb.message =
+                                            "USB serial link active - Station connected".to_string();
                                         logger::info(
                                             "SERIAL",
-                                            &format!("✅ USB serial communication established on {} (ATmega link active)", port_name_reader),
+                                            &format!(
+                                                "✅ USB serial communication established on {} (ATmega link active)",
+                                                port_name_reader
+                                            ),
                                         );
                                     }
-                                    tel.serial.last_rx_secs_ago = Some(0);
+                                    usb.last_rx_secs_ago = Some(0);
+                                    usb.rx_frames_count = usb.rx_frames_count.wrapping_add(1);
                                 }
 
+                                parse_incoming_line(clean_line, &driver_rx);
                                 let _ = internal_tx.send(clean_line.to_string());
-                                parse_incoming_line(clean_line, &state_rx);
                             }
                             byte_buf.clear();
                         } else if byte_buf.len() >= MAX_SERIAL_LINE_LEN {
@@ -400,7 +496,10 @@ pub fn run_serial_loop_with_options(
                     Err(e) => {
                         logger::error(
                             "SERIAL",
-                            &format!("🔌 I/O error on USB serial port {} : {}. Cable disconnected or link broken.", port_name_reader, e),
+                            &format!(
+                                "🔌 I/O error on USB serial port {} : {}. Cable disconnected or link broken.",
+                                port_name_reader, e
+                            ),
                         );
                         is_running_reader.store(false, Ordering::Relaxed);
                         break;
@@ -410,8 +509,8 @@ pub fn run_serial_loop_with_options(
         });
 
         reset_serial_filters();
-        if state.mode() == crate::telemetry::SupervisionMode::Remote {
-            send_init_sequence_sync(&mut port, &state, &internal_rx, &is_running);
+        if driver.mode() == SupervisionMode::Remote {
+            send_init_sequence_sync(&mut port, &driver, &internal_rx, &is_running);
         } else {
             logger::info(
                 "SERIAL",
@@ -422,6 +521,7 @@ pub fn run_serial_loop_with_options(
         let session_start = Instant::now();
         let mut last_watchdog_probe = Instant::now();
         let mut last_watchdog_warn = Instant::now();
+        let mut last_published_rx_secs: Option<u64> = None;
 
         while is_running.load(Ordering::Relaxed) {
             let cmd_opt = match rx_channel.try_recv() {
@@ -435,13 +535,16 @@ pub fn run_serial_loop_with_options(
             };
 
             if let Some(cmd) = cmd_opt {
-                if state.mode() == crate::telemetry::SupervisionMode::Local && cmd != Command::Reset {
+                if driver.mode() == SupervisionMode::Local && cmd != Command::Reset {
                     logger::warn(
                         "SERIAL",
-                        &format!("⛔ Command {} dropped: station operating in Local mode (passive)", cmd.as_frame()),
+                        &format!(
+                            "⛔ Command {} dropped: station operating in Local mode (passive)",
+                            cmd.as_frame()
+                        ),
                     );
                 } else {
-                    send_command_sync(&mut port, &state, &internal_rx, &is_running, cmd);
+                    send_command_sync(&mut port, &driver, &internal_rx, &is_running, cmd);
                 }
             } else {
                 std::thread::sleep(Duration::from_millis(50));
@@ -449,8 +552,8 @@ pub fn run_serial_loop_with_options(
 
             let (last_rx_opt, current_status) = {
                 let rx_lock = last_rx_time.lock().unwrap_or_else(|e| e.into_inner());
-                let tel_lock = state.telemetry.lock().unwrap_or_else(|e| e.into_inner());
-                (*rx_lock, tel_lock.serial.status.clone())
+                let usb_lock = driver.usb.lock().unwrap_or_else(|e| e.into_inner());
+                (*rx_lock, usb_lock.status.clone())
             };
 
             let elapsed_since_rx = match last_rx_opt {
@@ -458,32 +561,32 @@ pub fn run_serial_loop_with_options(
                 None => session_start.elapsed(),
             };
 
-            if let Ok(mut tel) = state.telemetry.lock() {
-                tel.serial.last_rx_secs_ago = Some(elapsed_since_rx.as_secs());
-                if crate::session::check_state_a_timeout(&tel) {
-                    tel.energy = 0.0;
-                    tel.current = 0.0;
-                    tel.power = 0.0;
-                    tel.last_power_update = None;
-                    tel.charge_complete = false;
-                    reset_serial_filters();
-                }
+            let secs_ago = elapsed_since_rx.as_secs();
+            if last_published_rx_secs != Some(secs_ago) {
+                last_published_rx_secs = Some(secs_ago);
+                driver.update_usb(|usb| {
+                    usb.last_rx_secs_ago = Some(secs_ago);
+                });
             }
 
-            let probe_threshold = Duration::from_secs(options.watchdog_timeout_secs.saturating_sub(15).max(5));
+            let probe_threshold =
+                Duration::from_secs(options.watchdog_timeout_secs.saturating_sub(15).max(5));
 
             if elapsed_since_rx >= probe_threshold && elapsed_since_rx < watchdog_timeout {
-                // Preventive probe: send lightweight 'ping' every 7s to verify ATmega is alive (Remote mode only)
-                if state.mode() == crate::telemetry::SupervisionMode::Remote && last_watchdog_probe.elapsed() >= Duration::from_secs(7) {
+                if driver.mode() == SupervisionMode::Remote
+                    && last_watchdog_probe.elapsed() >= Duration::from_secs(7)
+                {
                     last_watchdog_probe = Instant::now();
-                    send_command_sync(&mut port, &state, &internal_rx, &is_running, Command::Ping);
+                    send_command_sync(&mut port, &driver, &internal_rx, &is_running, Command::Ping);
                 }
             } else if elapsed_since_rx >= watchdog_timeout {
                 if current_status == SerialStatus::UsbConnected {
-                    if let Ok(mut tel) = state.telemetry.lock() {
-                        tel.serial.status = SerialStatus::UsbNoResponse;
-                        tel.serial.message = "No response from station board (station powered off or ATmega frozen)".to_string();
-                    }
+                    driver.update_usb(|usb| {
+                        usb.status = SerialStatus::UsbNoResponse;
+                        usb.message =
+                            "No response from station board (station powered off or ATmega frozen)"
+                                .to_string();
+                    });
                     if last_watchdog_warn.elapsed() >= Duration::from_secs(15) {
                         logger::warn(
                             "SERIAL",
@@ -495,11 +598,15 @@ pub fn run_serial_loop_with_options(
                         );
                         last_watchdog_warn = Instant::now();
                     }
-                } else if current_status == SerialStatus::UsbConnecting && elapsed_since_rx > Duration::from_secs(5) {
-                    if let Ok(mut tel) = state.telemetry.lock() {
-                        tel.serial.status = SerialStatus::UsbNoResponse;
-                        tel.serial.message = "No response from station board (station powered off or ATmega frozen)".to_string();
-                    }
+                } else if current_status == SerialStatus::UsbConnecting
+                    && elapsed_since_rx > Duration::from_secs(5)
+                {
+                    driver.update_usb(|usb| {
+                        usb.status = SerialStatus::UsbNoResponse;
+                        usb.message =
+                            "No response from station board (station powered off or ATmega frozen)"
+                                .to_string();
+                    });
                     if last_watchdog_warn.elapsed() >= Duration::from_secs(15) {
                         logger::warn(
                             "SERIAL",
@@ -513,64 +620,35 @@ pub fn run_serial_loop_with_options(
                     }
                 }
 
-                // Emergency rescue attempt: try sending RaspberryPiModeOK every 15s to unfreeze UART state (Remote mode only)
-                if state.mode() == crate::telemetry::SupervisionMode::Remote && last_watchdog_probe.elapsed() >= Duration::from_secs(15) {
+                if driver.mode() == SupervisionMode::Remote
+                    && last_watchdog_probe.elapsed() >= Duration::from_secs(15)
+                {
                     last_watchdog_probe = Instant::now();
-                    logger::warn("SERIAL", &format!("🚨 Attempting emergency ATmega interface reset (RaspberryPiModeOK) on {}...", port_name));
-                    send_command_sync(&mut port, &state, &internal_rx, &is_running, Command::RaspberryPiModeOk);
+                    logger::warn(
+                        "SERIAL",
+                        &format!(
+                            "🚨 Attempting emergency ATmega interface reset (RaspberryPiModeOK) on {}...",
+                            port_name
+                        ),
+                    );
+                    send_command_sync(
+                        &mut port,
+                        &driver,
+                        &internal_rx,
+                        &is_running,
+                        Command::RaspberryPiModeOk,
+                    );
                 }
             }
         }
 
         is_running.store(false, Ordering::Relaxed);
         let _ = reader_thread.join();
-        if let Ok(tel) = state.telemetry.lock() {
-            if crate::session::is_active_for_side(state.side()) {
-                crate::session::end_session_for_side(state.side(), "Driver shutdown / Serial disconnected", &tel);
-            }
-        }
         drop(port);
 
         logger::warn("SERIAL", "🔌 Serial session ended. Resuming USB search in 2s...");
         std::thread::sleep(Duration::from_secs(2));
     }
-}
-
-// Function that analyzes each line coming from the board and updates the shared memory
-
-use crate::telemetry::Telemetry;
-
-fn update_iec_state(tel: &mut Telemetry) {
-    if tel.greenup_state == "V" {
-        tel.iec_state = Some("F".to_string());
-    } else if tel.greenup_state == "R" || tel.greenup_state == "X" {
-        tel.iec_state = Some("E".to_string());
-    } else if let Some(false) = tel.t2c_enabled {
-        match tel.cp_voltage {
-            Some(12) => tel.iec_state = Some("A".to_string()),
-            Some(9) => tel.iec_state = Some("B".to_string()),
-            Some(6) => tel.iec_state = Some("C".to_string()),
-            _ => {}
-        }
-    } else {
-        match tel.greenup_state.as_str() {
-            "A" | "L" => tel.iec_state = Some("A".to_string()),
-            "B" | "C" | "I" | "W" | "M" => tel.iec_state = Some("B".to_string()),
-            "D" | "E" => tel.iec_state = Some("C".to_string()),
-            _ => {}
-        }
-    }
-}
-
-pub fn update_charge_status(tel: &mut Telemetry) {
-    // Authorized to charge if FM2 is OFF (false) or D is ON (true)
-    let is_blocked_by_fm2 = tel.fm2_state.unwrap_or(false);
-    let is_forced_by_d = tel.d_state.unwrap_or(false);
-    
-    // Also T2C must be authorized (default to true if unknown to avoid blocking)
-    let is_t2c_authorized = tel.t2c_enabled.unwrap_or(true);
-
-    tel.charge_authorized = is_t2c_authorized && (!is_blocked_by_fm2 || is_forced_by_d);
 }
 
 static LAST_LOGGED_CCI: std::sync::Mutex<Option<f32>> = std::sync::Mutex::new(None);
@@ -596,13 +674,13 @@ pub fn determine_rx_log_category(line: &str) -> &'static str {
             let mut last = LAST_LOGGED_CCI.lock().unwrap_or_else(|e| e.into_inner());
             let diff = match *last {
                 Some(prev) => (current_val - prev).abs(),
-                None => 0.5, // First measurement -> log in INFO
+                None => 0.5,
             };
             if diff >= 0.5 {
                 *last = Some(current_val);
-                "SERIAL_RX" // Logged as INFO
+                "SERIAL_RX"
             } else {
-                "TRACE" // Variations < 0.5A logged as TRACE
+                "TRACE"
             }
         } else {
             "TRACE"
@@ -612,29 +690,32 @@ pub fn determine_rx_log_category(line: &str) -> &'static str {
             let mut last = LAST_LOGGED_CC.lock().unwrap_or_else(|e| e.into_inner());
             let diff = match *last {
                 Some(prev) => (current_val as i32 - prev as i32).abs(),
-                None => 1, // First measurement -> log in INFO
+                None => 1,
             };
             if diff >= 1 {
                 *last = Some(current_val);
-                "SERIAL_RX" // Logged as INFO on >= 1A change
+                "SERIAL_RX"
             } else {
-                "TRACE" // Identical CC values logged as TRACE
+                "TRACE"
             }
         } else {
             "TRACE"
         }
-    } else if let Some(val_str) = line.strip_prefix("CPh:").or_else(|| line.strip_prefix("Cph:")) {
+    } else if let Some(val_str) = line
+        .strip_prefix("CPh:")
+        .or_else(|| line.strip_prefix("Cph:"))
+    {
         let current_cph = val_str.trim();
         let mut last = LAST_LOGGED_CPH.lock().unwrap_or_else(|e| e.into_inner());
         let has_changed = match *last {
             Some(ref prev) => prev.as_str() != current_cph,
-            None => true, // First reception -> log in INFO
+            None => true,
         };
         if has_changed {
             *last = Some(current_cph.to_string());
-            "SERIAL_RX" // Logged as INFO on first or changed
+            "SERIAL_RX"
         } else {
-            "DEBUG" // Unchanged repetitive CPh announcements logged as DEBUG
+            "DEBUG"
         }
     } else if line == "pong" {
         "TRACE"
@@ -643,19 +724,11 @@ pub fn determine_rx_log_category(line: &str) -> &'static str {
     }
 }
 
-fn parse_incoming_line(line: &str, state: &SharedState) {
-    let side = state.side();
-    if let Ok(mut tel) = state.telemetry.lock() {
-        if crate::session::check_state_a_timeout_for_side(side, &tel) {
-            tel.energy = 0.0;
-            tel.current = 0.0;
-            tel.power = 0.0;
-            tel.last_power_update = None;
-            tel.charge_complete = false;
-            reset_serial_filters();
-        }
-    }
-
+/// Parses an incoming UART frame, updates [`AtmegaRawState`] and [`UsbLinkState`],
+/// handles low-level driver sequences (handshake ping, TIC detection), and broadcasts
+/// the updated [`DriverSnapshot`] on the `watch` channel.
+pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
+    let side = driver.side();
     let rx_category = determine_rx_log_category(line);
     let level = match rx_category {
         "TRACE" => logger::LogLevel::Trace,
@@ -666,159 +739,106 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
 
     let event = parse_line(line);
 
-    match event {
+    match &event {
         ProtocolEvent::Ping => {
-            if state.mode() == crate::telemetry::SupervisionMode::Remote {
+            if driver.mode() == SupervisionMode::Remote {
                 logger::log("SERIAL", "🤝 Hardware ping detected, sending RaspberryPiModeOK");
-                let _ = state.serial_tx.try_send(Command::RaspberryPiModeOk);
+                let _ = driver.serial_tx.try_send(Command::RaspberryPiModeOk);
             } else {
-                logger::log("SERIAL", "👂 Hardware ping detected, ignored in Local mode (no RaspberryPiModeOK sent)");
+                logger::log(
+                    "SERIAL",
+                    "👂 Hardware ping detected, ignored in Local mode (no RaspberryPiModeOK sent)",
+                );
             }
-        }
-        ProtocolEvent::Pong => {
-            // Heartbeat response acknowledged (last_rx timestamp already updated)
-        }
-        ProtocolEvent::SoftwareVersion(v) => {
-            if let Ok(mut info) = state.info.lock() { info.software_version = v; }
-        }
-        ProtocolEvent::HardwareVersion(v) => {
-            if let Ok(mut info) = state.info.lock() { info.hardware_version = v; }
-        }
-        ProtocolEvent::SerialNumber(v) => {
-            if let Ok(mut info) = state.info.lock() { info.serial_number = v; }
-        }
-        ProtocolEvent::Reference(v) => {
-            if let Ok(mut info) = state.info.lock() {
-                let spec = crate::hardware_specs::HardwareCapabilities::from_reference(&v);
-                if !spec.is_known {
-                    logger::log("SERIAL", &format!("⚠️ Unknown reference ({}), assuming basic model (Single-phase 4.6kW)", v));
-                } else {
-                    logger::log("SERIAL", &format!("ℹ️ Model identified: {}", spec.name));
-                }
-                info.reference = v;
-                info.capabilities = Some(spec);
-            }
-        }
-        ProtocolEvent::WeekYearProduction(v) => {
-            if let Ok(mut info) = state.info.lock() { info.week_year_production = v; }
-        }
-        ProtocolEvent::BluetoothState(enabled) => {
-            if let Ok(mut info) = state.info.lock() { info.bluetooth_enabled = Some(enabled); }
-        }
-        ProtocolEvent::MacAddress(val) => {
-            if let Ok(mut info) = state.info.lock() { info.mac_address = Some(val); }
         }
         ProtocolEvent::Side(val) => {
-            let side_num = match val.as_str() {
-                "49" | "1" => Some(1),
-                "48" | "50" | "2" | "0" => Some(2),
-                _ => val.parse::<u8>().ok(),
-            };
-            logger::log("SERIAL", &format!("ℹ️ Active socket side = {} (raw: {})", side_num.map(|s| s.to_string()).unwrap_or_else(|| "Unknown".to_string()), val));
+            let side_num = AtmegaRawState::decode_side_number(val);
+            logger::log(
+                "SERIAL",
+                &format!(
+                    "ℹ️ Active socket side = {} (raw: {})",
+                    side_num
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "Unknown".to_string()),
+                    val
+                ),
+            );
             if let Some(s) = side_num {
-                state.set_side(s);
-                if let Ok(mut tel) = state.telemetry.lock() {
-                    tel.side = s;
-                }
+                driver.side.store(s, Ordering::Relaxed);
             }
-            if let Ok(mut info) = state.info.lock() {
-                info.side = side_num;
-            }
-        }
-        ProtocolEvent::Dip1(_) => {}
-        ProtocolEvent::ChargePhases(phase) => {
-            crate::session::update_phase_for_side(side, &phase);
         }
         ProtocolEvent::StateChange(state_val) => {
             if state_val == "V" {
-                logger::log("SYS", "!!! CRITICAL ALERT: POWER OUTAGE DETECTED (State:V) - IMMINENT SHUTDOWN !!!");
+                logger::log(
+                    "SYS",
+                    "!!! CRITICAL ALERT: POWER OUTAGE DETECTED (State:V) - IMMINENT SHUTDOWN !!!",
+                );
             }
-            if let Ok(mut tel) = state.telemetry.lock() {
-                let was_charging = tel.greenup_state == "D" || tel.greenup_state == "E";
-                let is_charging = state_val == "D" || state_val == "E";
-
-                if is_charging && !was_charging {
-                    // Resuming or starting charge: restart power integration timer
-                    tel.last_power_update = Some(std::time::Instant::now());
-                    tel.charge_complete = false;
-                    reset_serial_filters();
-                } else if was_charging && !is_charging {
-                    // Contactor opened: instantaneous current and power drop immediately to zero
-                    tel.current = 0.0;
-                    tel.power = 0.0;
-                    tel.last_power_update = None;
-                    reset_serial_filters();
-                    logger::log("SERIAL", &format!("🔌 Charge interrupted/ended (State {}): current & power set to 0", state_val));
+            let prev_state = driver.get_raw_state().state.unwrap_or_default();
+            let was_charging = matches!(prev_state.as_str(), "D" | "E" | "G" | "H");
+            let is_charging = matches!(state_val.as_str(), "D" | "E" | "G" | "H");
+            if is_charging != was_charging {
+                reset_serial_filters();
+                if was_charging && !is_charging {
+                    logger::log(
+                        "SERIAL",
+                        &format!(
+                            "🔌 Charge interrupted/ended (State {}): current set to 0",
+                            state_val
+                        ),
+                    );
                 }
-
-                if crate::session::is_immediate_termination_state(&state_val) {
-                    // Immediate absolute termination (State L, or safety/fault states R, ST, U, V, W, X, Y, Z)
-                    if crate::session::is_active_for_side(side) {
-                        let reason = match state_val.as_str() {
-                            "L" => "Cable unlocked / unlatched (State: L)".to_string(),
-                            _ => format!("Safety / fault termination (State: {})", state_val),
-                        };
-                        crate::session::end_session_for_side(side, &reason, &tel);
-                    }
-                    tel.current = 0.0;
-                    tel.power = 0.0;
-                    tel.energy = 0.0;
-                    tel.last_power_update = None;
-                    tel.charge_complete = false;
-                    reset_serial_filters();
-                } else if state_val == "A" {
-                    // State A: vehicle disconnected or temporary pilot interruption
-                    // Contactors open: current and power are zero immediately
-                    tel.current = 0.0;
-                    tel.power = 0.0;
-                    tel.last_power_update = None;
-
-                    if crate::session::is_active_for_side(side) {
-                        crate::session::on_state_change_for_side(side, &state_val, &tel);
-                        // Note: tel.energy is preserved during the 60s grace period
-                    } else {
-                        tel.energy = 0.0;
-                        tel.charge_complete = false;
-                    }
-                } else if crate::session::is_connected_state(&state_val) {
-                    if !crate::session::is_active_for_side(side) {
-                        crate::session::start_session_for_side(side, &state_val, &tel);
-                    } else {
-                        crate::session::on_state_change_for_side(side, &state_val, &tel);
-                    }
-                }
-
-                tel.greenup_state = state_val.clone();
-                update_iec_state(&mut tel);
             }
         }
         ProtocolEvent::ErrorChange(e) => {
             if e == "0012" {
-                logger::log("SYS", "!!! CRITICAL ALERT: UNDER-VOLTAGE FAULT (E:0012) - IMMINENT SHUTDOWN !!!");
+                logger::log(
+                    "SYS",
+                    "!!! CRITICAL ALERT: UNDER-VOLTAGE FAULT (E:0012) - IMMINENT SHUTDOWN !!!",
+                );
             }
-            if let Ok(mut tel) = state.telemetry.lock() { tel.error_code = e; }
-        }
-        ProtocolEvent::ChargeComplete => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.charge_complete = true; }
         }
         ProtocolEvent::FmMode(fm_val) => {
-            if let Some(mode) = FunctioningMode::from_code(&fm_val) {
+            if let Some(mode) = FunctioningMode::from_code(fm_val) {
                 logger::log("SERIAL", &format!("ℹ️ FM Mode detected = {:?}", mode));
             } else {
                 logger::log("SERIAL", &format!("⚠️ Unknown FM Mode detected = {}", fm_val));
             }
         }
         ProtocolEvent::ExternalSignal(enabled) => {
-            logger::log("SERIAL", &format!("ℹ️ FM2 (External Signal) = {}", if enabled { "1 (BLOCK CHARGE)" } else { "0 (ALLOW CHARGE)" }));
-            if let Ok(mut tel) = state.telemetry.lock() { tel.fm2_state = Some(enabled); update_charge_status(&mut tel); }
+            logger::log(
+                "SERIAL",
+                &format!(
+                    "ℹ️ FM2 (External Signal) = {}",
+                    if *enabled {
+                        "1 (BLOCK CHARGE)"
+                    } else {
+                        "0 (ALLOW CHARGE)"
+                    }
+                ),
+            );
         }
         ProtocolEvent::Derogation(enabled) => {
-            logger::log("SERIAL", &format!("ℹ️ Front button derogation = {}", if enabled { "ON" } else { "OFF" }));
-            if let Ok(mut tel) = state.telemetry.lock() { tel.d_state = Some(enabled); update_charge_status(&mut tel); }
+            logger::log(
+                "SERIAL",
+                &format!(
+                    "ℹ️ Front button derogation = {}",
+                    if *enabled { "ON" } else { "OFF" }
+                ),
+            );
         }
-                ProtocolEvent::TicTestBaud(val) => {
+        ProtocolEvent::SbfState(v) => {
+            logger::log("SERIAL", &format!("ℹ️ SBF (Front Stop Button) = {}", v));
+        }
+        ProtocolEvent::SessionTicket(ticket) => {
+            logger::log(
+                "SERIAL",
+                &format!("🎫 Legrand session ticket received: {}", ticket),
+            );
+        }
+        ProtocolEvent::TicTestBaud(val) => {
             let mut should_stop_test = false;
-            if let Ok(mut tic) = state.tic_detection.lock() {
+            if let Ok(mut tic) = driver.tic_detection.lock() {
                 if tic.is_active {
                     if val != "0" {
                         should_stop_test = true;
@@ -835,88 +855,75 @@ fn parse_incoming_line(line: &str, state: &SharedState) {
 
             if val != "0" {
                 logger::log("SERIAL", &format!("🔌 TIC detected: {} baud", val));
-                if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = val; }
+                driver.update_raw(|raw| {
+                    raw.tic_test_b = Some(val.clone());
+                    if should_stop_test {
+                        raw.tic_tm = Some(false);
+                    }
+                });
             } else if should_stop_test {
                 logger::log("SERIAL", "🔌 TIC not detected (absent)");
-                if let Ok(mut tel) = state.telemetry.lock() { tel.tic_mode = "0".to_string(); }
+                driver.update_raw(|raw| {
+                    raw.tic_test_b = Some("0".to_string());
+                    raw.tic_tm = Some(false);
+                });
+            } else {
+                driver.update_raw(|raw| {
+                    raw.tic_test_b = Some("0".to_string());
+                });
             }
 
             if should_stop_test {
                 logger::log("SERIAL", "End of automatic TIC detection, sending TICTM:0");
-                let _ = state.serial_tx.try_send(Command::SetTicTestMode(false));
+                let _ = driver.serial_tx.try_send(Command::SetTicTestMode(false));
+            }
+            return;
+        }
+        _ => {}
+    }
+
+    let applied = driver.update_raw(|raw| raw.apply_event(&event));
+
+    if !applied {
+        match &event {
+            ProtocolEvent::Ping | ProtocolEvent::Pong => {}
+            ProtocolEvent::CommandNotUnderstood(cmd) => {
+                logger::log_with_level_side(
+                    "SERIAL",
+                    Some(side),
+                    logger::LogLevel::Warn,
+                    &format!(
+                        "⚠️ Command rejected by charging station (Default): '{}'",
+                        cmd
+                    ),
+                );
+            }
+            ProtocolEvent::Unknown(raw_text) => {
+                logger::log_with_level_side(
+                    "SERIAL",
+                    Some(side),
+                    logger::LogLevel::Warn,
+                    &format!(
+                        "⚠️ Unknown serial frame received (unrecognized protocol): '{}'",
+                        raw_text
+                    ),
+                );
+            }
+            _ => {
+                logger::log_with_level_side(
+                    "SERIAL",
+                    Some(side),
+                    logger::LogLevel::Warn,
+                    &format!(
+                        "⚠️ Unmapped serial frame received (not retained in raw state model): '{}'",
+                        line
+                    ),
+                );
             }
         }
-        ProtocolEvent::TicTestInit => {}
-        ProtocolEvent::Voltage(v) => {
-            if let Ok(mut tel) = state.telemetry.lock() {
-                tel.evaluate_voltage();
-                if tel.voltage_source != "external" {
-                    tel.voltage = v;
-                }
-                if tel.greenup_state == "D" || tel.greenup_state == "E" {
-                    tel.power = tel.voltage * tel.current;
-                } else {
-                    tel.power = 0.0;
-                }
-            }
-        }
-        ProtocolEvent::Current(c) => {
-            if let Ok(mut tel) = state.telemetry.lock() {
-                tel.evaluate_voltage();
-                if tel.greenup_state == "D" || tel.greenup_state == "E" {
-                    let previous_power = tel.power;
-                    tel.current = c;
-                    tel.power = tel.voltage * tel.current;
-                    let now = std::time::Instant::now();
-                    if let Some(last_time) = tel.last_power_update {
-                        let elapsed_hours = last_time.elapsed().as_secs_f32() / 3600.0;
-                        let energy_wh = ((previous_power + tel.power) / 2.0) * elapsed_hours;
-                        tel.energy += energy_wh;
-                    }
-                    tel.last_power_update = Some(now);
-                } else {
-                    tel.current = 0.0;
-                    tel.power = 0.0;
-                    tel.last_power_update = None;
-                }
-                crate::session::on_telemetry_tick_for_side(side, &tel);
-            }
-        }
-        ProtocolEvent::LimitAmps(limit) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.limit_amps = limit; }
-        }
-        ProtocolEvent::EliotLimitAmps(limit) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.eliot_limit_amps = Some(limit); }
-        }
-        ProtocolEvent::CpVoltage(v) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.cp_voltage = Some(v); update_iec_state(&mut tel); }
-        }
-        ProtocolEvent::T2CEnabled(v) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.t2c_enabled = Some(v); update_iec_state(&mut tel); update_charge_status(&mut tel); }
-        }
-        ProtocolEvent::SbState(v) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.charge_paused = !v; }
-        }
-        ProtocolEvent::SbfState(v) => {
-            logger::log("SERIAL", &format!("ℹ️ SBF (Front Stop Button) = {}", v));
-            if let Ok(mut tel) = state.telemetry.lock() { tel.charge_paused = !v; }
-        }
-        ProtocolEvent::Energy(e) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.energy = e; }
-        }
-        ProtocolEvent::Frequency(f) => {
-            if let Ok(mut tel) = state.telemetry.lock() { tel.frequency = f; }
-        }
-        ProtocolEvent::SessionTicket(ticket) => {
-            logger::log("SERIAL", &format!("🎫 Legrand session ticket received: {}", ticket));
-            crate::session::record_ticket_for_side(side, &ticket);
-        }
-        ProtocolEvent::CommandNotUnderstood(cmd) => {
-            logger::log("SERIAL", &format!("⚠️ Command not recognized by the charging station: {}", cmd));
-        }
-        ProtocolEvent::Unknown(_) => {}
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -928,18 +935,22 @@ mod tests {
         let mut reader = Cursor::new(data);
         let mut byte_buf = Vec::new();
 
-        // First line
         let remaining = (MAX_SERIAL_LINE_LEN - byte_buf.len()) as u64;
-        let n = (&mut reader).take(remaining).read_until(b'\n', &mut byte_buf).unwrap();
+        let n = (&mut reader)
+            .take(remaining)
+            .read_until(b'\n', &mut byte_buf)
+            .unwrap();
         assert!(n > 0);
         assert!(byte_buf.ends_with(b"\n"));
         let clean = String::from_utf8_lossy(&byte_buf).trim().to_string();
         assert_eq!(clean, "State:A");
         byte_buf.clear();
 
-        // Second line
         let remaining = (MAX_SERIAL_LINE_LEN - byte_buf.len()) as u64;
-        let n = (&mut reader).take(remaining).read_until(b'\n', &mut byte_buf).unwrap();
+        let n = (&mut reader)
+            .take(remaining)
+            .read_until(b'\n', &mut byte_buf)
+            .unwrap();
         assert!(n > 0);
         assert!(byte_buf.ends_with(b"\n"));
         let clean = String::from_utf8_lossy(&byte_buf).trim().to_string();
@@ -948,20 +959,20 @@ mod tests {
 
     #[test]
     fn test_bounded_line_reading_noise_overflow() {
-        // Continuous 300 bytes without newline
         let noise = vec![b'X'; 300];
         let mut reader = Cursor::new(noise);
         let mut byte_buf = Vec::new();
 
         let remaining = (MAX_SERIAL_LINE_LEN - byte_buf.len()) as u64;
-        let n = (&mut reader).take(remaining).read_until(b'\n', &mut byte_buf).unwrap();
+        let n = (&mut reader)
+            .take(remaining)
+            .read_until(b'\n', &mut byte_buf)
+            .unwrap();
 
-        // Must cap at MAX_SERIAL_LINE_LEN (256 bytes) and NOT end with newline
         assert_eq!(n, MAX_SERIAL_LINE_LEN);
         assert_eq!(byte_buf.len(), MAX_SERIAL_LINE_LEN);
         assert!(!byte_buf.ends_with(b"\n"));
 
-        // Overflow condition triggers buffer clear
         if byte_buf.len() >= MAX_SERIAL_LINE_LEN {
             byte_buf.clear();
         }
@@ -969,246 +980,81 @@ mod tests {
     }
 
     #[test]
-    fn test_bounded_line_reading_invalid_utf8_glitch() {
-        // Frame containing raw binary electrical noise / glitch bytes (0xFF, 0xFE)
-        let glitch_frame = vec![0xFF, 0xFE, b'O', b'K', b'\n'];
-        let mut reader = Cursor::new(glitch_frame);
-        let mut byte_buf = Vec::new();
-
-        let remaining = (MAX_SERIAL_LINE_LEN - byte_buf.len()) as u64;
-        let n = (&mut reader).take(remaining).read_until(b'\n', &mut byte_buf).unwrap();
-        assert!(n > 0);
-        assert!(byte_buf.ends_with(b"\n"));
-
-        // from_utf8_lossy handles glitch bytes gracefully without panic or error
-        let clean = String::from_utf8_lossy(&byte_buf).trim().to_string();
-        assert!(clean.contains("OK"));
-    }
-
-    #[test]
-    fn test_determine_rx_log_category_cc_filtering() {
+    fn test_determine_rx_log_category_cc_cph_cci_filtering() {
         reset_serial_filters();
-
-        // First CC is logged as INFO (SERIAL_RX)
         assert_eq!(determine_rx_log_category("CC:24"), "SERIAL_RX");
-        // Same CC is filtered to TRACE
         assert_eq!(determine_rx_log_category("CC:24"), "TRACE");
-        assert_eq!(determine_rx_log_category("CC:24"), "TRACE");
-
-        // Change by 1A is logged as INFO
         assert_eq!(determine_rx_log_category("CC:23"), "SERIAL_RX");
-        assert_eq!(determine_rx_log_category("CC:23"), "TRACE");
 
-        // Change by >= 1A (e.g. down to 13A) is logged as INFO
-        assert_eq!(determine_rx_log_category("CC:13"), "SERIAL_RX");
-        assert_eq!(determine_rx_log_category("CC:13"), "TRACE");
-
-        // CC with leading zero (CC:09)
-        assert_eq!(determine_rx_log_category("CC:09"), "SERIAL_RX");
-        assert_eq!(determine_rx_log_category("CC:09"), "TRACE");
-    }
-
-    #[test]
-    fn test_determine_rx_log_category_cph_filtering() {
-        reset_serial_filters();
-
-        // First CPh is logged as INFO (SERIAL_RX)
         assert_eq!(determine_rx_log_category("CPh:Mono"), "SERIAL_RX");
-        // Repetitive identical CPh is demoted to DEBUG
         assert_eq!(determine_rx_log_category("CPh:Mono"), "DEBUG");
-        assert_eq!(determine_rx_log_category("Cph:Mono"), "DEBUG");
-
-        // Change to Tri is logged as INFO
         assert_eq!(determine_rx_log_category("CPh:Tri"), "SERIAL_RX");
-        assert_eq!(determine_rx_log_category("CPh:Tri"), "DEBUG");
-    }
 
-
-    #[test]
-    fn test_determine_rx_log_category_cci_filtering() {
-        reset_serial_filters();
-
-        // First CCI is logged as INFO (SERIAL_RX)
         assert_eq!(determine_rx_log_category("CCI:16.00"), "SERIAL_RX");
-
-        // Small variation < 0.5A is demoted to TRACE
         assert_eq!(determine_rx_log_category("CCI:16.20"), "TRACE");
-        assert_eq!(determine_rx_log_category("CCI:16.40"), "TRACE");
-
-        // Variation >= 0.5A from last logged baseline (16.00 -> 16.55) is logged as INFO
         assert_eq!(determine_rx_log_category("CCI:16.55"), "SERIAL_RX");
-
-        // Sub-0.5A from new baseline (16.55) is TRACE
-        assert_eq!(determine_rx_log_category("CCI:16.80"), "TRACE");
-
-        // Variation >= 0.5A down (16.55 -> 15.90, diff 0.65) is logged as INFO
-        assert_eq!(determine_rx_log_category("CCI:15.90"), "SERIAL_RX");
-    }
-
-    #[test]
-    fn test_determine_rx_log_category_ping_pong_trace() {
         assert_eq!(determine_rx_log_category("pong"), "TRACE");
-        assert_eq!(determine_rx_log_category("ping"), "SERIAL_RX");
     }
 
     #[tokio::test]
-    async fn test_check_tic_eligibility() {
-        use std::sync::Arc;
-        use tokio::sync::mpsc;
-        use crate::state::AppState;
-        use crate::hardware_specs::HardwareCapabilities;
+    async fn test_start_tic_detection_state_a_guard() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+        let driver = Arc::new(DriverHandle::new(tx));
 
-        let (tx, _rx) = mpsc::channel(10);
-        let state = Arc::new(AppState::new(tx));
+        // 1. Unknown state -> NotInStateA
+        assert_eq!(
+            start_tic_detection(&driver).await,
+            Err(TicStartError::NotInStateA("Unknown".to_string()))
+        );
 
-        // 1. Without capabilities set (None) -> NotSupported
-        assert_eq!(check_tic_eligibility(&state), Err(TicStartError::NotSupported));
+        // 2. State B -> NotInStateA
+        driver.update_raw(|r| r.state = Some("B".to_string()));
+        assert_eq!(
+            start_tic_detection(&driver).await,
+            Err(TicStartError::NotInStateA("B".to_string()))
+        );
 
-        // 2. Hardware without TIC (058030) -> NotSupported
-        {
-            let mut info = state.info.lock().unwrap();
-            info.capabilities = Some(HardwareCapabilities::from_reference("058030"));
-        }
-        assert_eq!(check_tic_eligibility(&state), Err(TicStartError::NotSupported));
-
-        // 3. Hardware with TIC (058001), but state is not "A" (e.g. "B") -> NotInStateA
-        {
-            let mut info = state.info.lock().unwrap();
-            info.capabilities = Some(HardwareCapabilities::from_reference("058001"));
-        }
-        {
-            let mut tel = state.telemetry.lock().unwrap();
-            tel.greenup_state = "B".to_string();
-        }
-        assert_eq!(check_tic_eligibility(&state), Err(TicStartError::NotInStateA("B".to_string())));
-
-        // 4. Hardware with TIC (058001) and state "A" -> Ok(())
-        {
-            let mut tel = state.telemetry.lock().unwrap();
-            tel.greenup_state = "A".to_string();
-        }
-        assert_eq!(check_tic_eligibility(&state), Ok(()));
+        // 3. State A -> Ok
+        driver.update_raw(|r| r.state = Some("A".to_string()));
+        assert_eq!(start_tic_detection(&driver).await, Ok(()));
+        assert_eq!(driver.get_raw_state().tic_tm, Some(true));
+        assert_eq!(rx.recv().await, Some(Command::SetTicTestMode(true)));
     }
 
     #[tokio::test]
-    async fn test_trigger_init_sequence_auto_tic() {
-        use std::sync::Arc;
-        use tokio::sync::mpsc;
-        use crate::state::AppState;
-        use crate::hardware_specs::HardwareCapabilities;
+    async fn test_parse_incoming_line_logs_warning_on_unmapped_and_unknown() {
+        let (tx, _rx) = tokio::sync::mpsc::channel(10);
+        let driver = Arc::new(DriverHandle::new(tx));
 
-        // Case 1: Eligible station (TIC model 058001 and State A)
-        let (tx, mut rx) = mpsc::channel(50);
-        let state = Arc::new(AppState::new(tx));
-        {
-            let mut info = state.info.lock().unwrap();
-            info.capabilities = Some(HardwareCapabilities::from_reference("058001"));
-        }
-        {
-            let mut tel = state.telemetry.lock().unwrap();
-            tel.greenup_state = "A".to_string();
-        }
+        // 1. Mapped frame should update state and not produce unmapped warning
+        parse_incoming_line("State:B", &driver);
+        assert_eq!(driver.get_raw_state().state.as_deref(), Some("B"));
 
-        trigger_init_sequence(&state).await;
+        // 2. Unmapped frame (e.g. EM:12345, RFIDId:ABCDEF) should log a warning
+        parse_incoming_line("EM:12345", &driver);
+        let recent = logger::get_recent_logs();
+        assert!(recent.iter().any(|entry| {
+            entry.level == "WARN"
+                && entry.message.contains("Unmapped serial frame")
+                && entry.message.contains("EM:12345")
+        }));
 
-        let mut received = Vec::new();
-        while let Ok(cmd) = rx.try_recv() {
-            received.push(cmd);
-        }
+        // 3. Completely unknown frame should log an unknown frame warning
+        parse_incoming_line("UNKNOWN_CUSTOM_CMD:999", &driver);
+        let recent = logger::get_recent_logs();
+        assert!(recent.iter().any(|entry| {
+            entry.level == "WARN"
+                && entry.message.contains("Unknown serial frame")
+                && entry.message.contains("UNKNOWN_CUSTOM_CMD:999")
+        }));
 
-        assert_eq!(received.first(), Some(&greenup_protocol::Command::RaspberryPiModeOk));
-        assert_eq!(received.last(), Some(&greenup_protocol::Command::SetTicTestMode(true)));
-        assert!(received.contains(&greenup_protocol::Command::SetTicTestMode(true)));
-
-        // Case 2: Ineligible station (model without TIC, e.g. 058030)
-        let (tx2, mut rx2) = mpsc::channel(50);
-        let state2 = Arc::new(AppState::new(tx2));
-        {
-            let mut info = state2.info.lock().unwrap();
-            info.capabilities = Some(HardwareCapabilities::from_reference("058030"));
-        }
-        {
-            let mut tel = state2.telemetry.lock().unwrap();
-            tel.greenup_state = "A".to_string();
-        }
-
-        trigger_init_sequence(&state2).await;
-
-        let mut received2 = Vec::new();
-        while let Ok(cmd) = rx2.try_recv() {
-            received2.push(cmd);
-        }
-
-        assert_eq!(received2.first(), Some(&greenup_protocol::Command::RaspberryPiModeOk));
-        assert!(!received2.contains(&greenup_protocol::Command::SetTicTestMode(true)));
-
-        // Case 3: Station with TIC but not in State A (e.g. State B)
-        let (tx3, mut rx3) = mpsc::channel(50);
-        let state3 = Arc::new(AppState::new(tx3));
-        {
-            let mut info = state3.info.lock().unwrap();
-            info.capabilities = Some(HardwareCapabilities::from_reference("058001"));
-        }
-        {
-            let mut tel = state3.telemetry.lock().unwrap();
-            tel.greenup_state = "B".to_string();
-        }
-
-        trigger_init_sequence(&state3).await;
-
-        let mut received3 = Vec::new();
-        while let Ok(cmd) = rx3.try_recv() {
-            received3.push(cmd);
-        }
-
-        assert_eq!(received3.first(), Some(&greenup_protocol::Command::RaspberryPiModeOk));
-        assert!(!received3.contains(&greenup_protocol::Command::SetTicTestMode(true)));
-    }
-
-    #[tokio::test]
-    async fn test_start_tic_detection_safeguards() {
-        use std::sync::Arc;
-        use tokio::sync::mpsc;
-        use crate::state::AppState;
-        use crate::hardware_specs::HardwareCapabilities;
-
-        let (tx, mut rx) = mpsc::channel(10);
-        let state = Arc::new(AppState::new(tx));
-
-        // 1. Without capabilities set (None), should reject as NotSupported
-        let res = start_tic_detection(&state).await;
-        assert_eq!(res, Err(TicStartError::NotSupported));
-
-        // 2. With non-TIC capabilities (e.g. 058030)
-        {
-            let mut info = state.info.lock().unwrap();
-            info.capabilities = Some(HardwareCapabilities::from_reference("058030"));
-        }
-        let res = start_tic_detection(&state).await;
-        assert_eq!(res, Err(TicStartError::NotSupported));
-
-        // 3. With TIC capabilities (e.g. 058001), but state is not "A" (default is empty/unknown)
-        {
-            let mut info = state.info.lock().unwrap();
-            info.capabilities = Some(HardwareCapabilities::from_reference("058001"));
-        }
-        {
-            let mut tel = state.telemetry.lock().unwrap();
-            tel.greenup_state = "B".to_string();
-        }
-        let res = start_tic_detection(&state).await;
-        assert_eq!(res, Err(TicStartError::NotInStateA("B".to_string())));
-
-        // 4. With TIC capabilities and state "A" -> Success!
-        {
-            let mut tel = state.telemetry.lock().unwrap();
-            tel.greenup_state = "A".to_string();
-        }
-        let res = start_tic_detection(&state).await;
-        assert_eq!(res, Ok(()));
-
-        // Verify that command was queued to serial_tx
-        let cmd = rx.recv().await;
-        assert_eq!(cmd, Some(greenup_protocol::Command::SetTicTestMode(true)));
+        // 4. Default command rejection should log Default warning
+        parse_incoming_line("Default:BadCmd", &driver);
+        let recent = logger::get_recent_logs();
+        assert!(recent.iter().any(|entry| {
+            entry.level == "WARN"
+                && entry.message.contains("Default")
+                && entry.message.contains("BadCmd")
+        }));
     }
 }

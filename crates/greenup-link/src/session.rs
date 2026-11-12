@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use crate::logger;
+use greenup_driver::logger;
 use crate::telemetry::Telemetry;
 
 /// Returns true if the state indicates an immediate session termination
@@ -18,6 +18,16 @@ pub fn is_immediate_termination_state(state: &str) -> bool {
 /// Returns true if the state indicates a connected vehicle session.
 pub fn is_connected_state(state: &str) -> bool {
     !is_immediate_termination_state(state) && state != "A" && state != "DISCONNECTED"
+}
+
+/// Returns true if the Legrand state corresponds to the domestic / Schuko 2P+T socket (F, G, H, O).
+pub fn is_domestic_state(state: &str) -> bool {
+    matches!(state, "F" | "G" | "H" | "O")
+}
+
+/// Returns true if the Legrand state corresponds to active power delivery (Type 2: D/E, Schuko: G/H).
+pub fn is_charging_state(state: &str) -> bool {
+    matches!(state, "D" | "E" | "G" | "H")
 }
 
 /// Formats duration in seconds into a human-readable string (e.g. "2h 10m 18s" or "45m 12s" or "32s").
@@ -42,13 +52,10 @@ pub fn set_custom_sessions_dir(dir: Option<PathBuf>) {
 }
 
 /// Returns the configured sessions directory path.
-/// Checks custom override, `GREENUP_SESSIONS_DIR` env var, `/opt/greenup-link/sessions`, or local `sessions/`.
+/// Checks custom override, `/opt/greenup-link/sessions`, or local `sessions/`.
 pub fn get_sessions_dir() -> PathBuf {
     if let Some(ref dir) = *CUSTOM_SESSIONS_DIR.lock().unwrap_or_else(|e| e.into_inner()) {
         return dir.clone();
-    }
-    if let Ok(dir) = std::env::var("GREENUP_SESSIONS_DIR") {
-        return PathBuf::from(dir);
     }
     if Path::new("/opt/greenup-link/sessions").exists() {
         return PathBuf::from("/opt/greenup-link/sessions");
@@ -84,8 +91,10 @@ pub struct ActiveSession {
     pub max_power: f32,
     pub cumulative_energy_wh: f64,
     pub active_charging_duration_secs_f64: f64,
+    pub cumulative_current_a_secs: f64,
     pub last_tick_instant: Instant,
     pub phase: String,
+    pub plug_type: String,
     pub legrand_ticket: Option<String>,
     pub csv_path: PathBuf,
     pub txt_path: PathBuf,
@@ -136,7 +145,7 @@ impl ActiveSession {
         let effective_voltage = if tel.voltage > 50.0 { tel.voltage } else { 230.0 };
         let sample_power = if tel.power > 0.0 {
             tel.power
-        } else if tel.greenup_state == "D" || tel.greenup_state == "E" {
+        } else if is_charging_state(&tel.greenup_state) {
             effective_voltage * tel.current
         } else {
             0.0
@@ -244,6 +253,12 @@ pub fn start_session_for_side(side: u8, initial_state: &str, tel: &Telemetry) {
         &format!("Started charging session {} on Side {} (initial state: {})", session_id, side, initial_state),
     );
 
+    let initial_plug_type = if is_domestic_state(initial_state) {
+        "Schuko"
+    } else {
+        "Type 2"
+    };
+
     let mut session = ActiveSession {
         side,
         session_id,
@@ -256,8 +271,10 @@ pub fn start_session_for_side(side: u8, initial_state: &str, tel: &Telemetry) {
         max_power: tel.power,
         cumulative_energy_wh: 0.0,
         active_charging_duration_secs_f64: 0.0,
+        cumulative_current_a_secs: 0.0,
         last_tick_instant: now_instant,
         phase: "Mono".to_string(),
+        plug_type: initial_plug_type.to_string(),
         legrand_ticket: None,
         csv_path,
         txt_path,
@@ -284,6 +301,19 @@ pub fn on_state_change_for_side(side: u8, new_state: &str, tel: &Telemetry) {
     if let Some(ref mut session) = lock[idx] {
         let now_instant = Instant::now();
         let now_local = Local::now();
+
+        if is_domestic_state(new_state) {
+            session.plug_type = "Schuko".to_string();
+        }
+
+        // If transitioning away from an active charge state, integrate the remaining fraction
+        let was_charging = is_charging_state(&session.last_sample_state);
+        if was_charging && session.last_sample_current > 0.05 {
+            let dt = now_instant.duration_since(session.last_tick_instant).as_secs_f64().min(2.0);
+            session.active_charging_duration_secs_f64 += dt;
+            session.cumulative_current_a_secs += (session.last_sample_current as f64) * dt;
+        }
+        session.last_tick_instant = now_instant;
 
         if new_state == "A" {
             if session.pending_state_a_since.is_none() {
@@ -353,8 +383,13 @@ pub fn on_telemetry_tick_for_side(side: u8, tel: &Telemetry) {
         // 1. Durations and energy integration
         let dt = now_instant.duration_since(session.last_tick_instant).as_secs_f64();
         session.last_tick_instant = now_instant;
+        let dt = dt.min(2.0);
 
-        let is_charging = tel.greenup_state == "D" || tel.greenup_state == "E";
+        if is_domestic_state(&tel.greenup_state) {
+            session.plug_type = "Schuko".to_string();
+        }
+
+        let is_charging = is_charging_state(&tel.greenup_state);
         let effective_voltage = if tel.voltage > 50.0 { tel.voltage } else { 230.0 };
         let live_power = if tel.power > 0.0 {
             tel.power
@@ -366,6 +401,7 @@ pub fn on_telemetry_tick_for_side(side: u8, tel: &Telemetry) {
 
         if is_charging && tel.current > 0.05 {
             session.active_charging_duration_secs_f64 += dt;
+            session.cumulative_current_a_secs += (tel.current as f64) * dt;
             let wh = (live_power as f64) * (dt / 3600.0);
             session.cumulative_energy_wh += wh;
         }
@@ -475,15 +511,25 @@ pub fn end_session_for_side(side: u8, reason: &str, tel: &Telemetry) {
 
     let idle_duration_secs = total_duration_secs.saturating_sub(active_duration_secs);
 
-    let phase_str = match session.phase.as_str() {
-        "Mono" | "1" => "Mono (1-Phase)",
-        "Tri" | "3" => "Tri (3-Phase)",
-        other if !other.is_empty() => other,
-        _ => "Mono (1-Phase)",
+    let plug_type_str = if session.plug_type.is_empty() { "Type 2" } else { &session.plug_type };
+
+    let phase_str = if plug_type_str == "Domestique" || plug_type_str == "Schuko" {
+        "1-phase"
+    } else {
+        match session.phase.as_str() {
+            "3-phase" | "Tri" | "3" => "3-phase",
+            _ => "1-phase",
+        }
     };
 
     let avg_active_power_w = if active_duration_secs > 0 && final_energy_kwh > 0.0 {
         (final_energy_kwh * 1000.0) / (active_duration_secs as f64 / 3600.0)
+    } else {
+        0.0
+    };
+
+    let avg_active_current_a = if active_duration_secs > 0 && session.cumulative_current_a_secs > 0.0 {
+        (session.cumulative_current_a_secs / active_duration_secs as f64) as f32
     } else {
         0.0
     };
@@ -517,7 +563,9 @@ ENERGY & ELECTRICAL METRICS
 --------------------------------------------------------------------------------
 Total Energy:         {:.3} kWh
 Phase Detection:      {}
+Plug Type:            {}
 Max Current:          {:.2} A
+Average Current:      {:.2} A
 Max Power:            {:.0} W
 Average Active Power: {:.0} W
 
@@ -540,7 +588,9 @@ RAW LEGRAND TICKET
         idle_duration_secs,
         final_energy_kwh,
         phase_str,
+        plug_type_str,
         session.max_current,
+        avg_active_current_a,
         session.max_power,
         avg_active_power_w,
         ticket_str
@@ -576,6 +626,10 @@ pub fn is_valid_session_id(id: &str) -> bool {
         && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
+fn default_plug_type() -> String {
+    "Type 2".to_string()
+}
+
 /// Structured summary of a saved session.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionSummary {
@@ -590,7 +644,11 @@ pub struct SessionSummary {
     pub idle_duration_seconds: u64,
     pub total_energy_kwh: f64,
     pub phase: String,
+    #[serde(default = "default_plug_type")]
+    pub plug_type: String,
     pub max_current_a: f32,
+    #[serde(default)]
+    pub avg_current_a: f32,
     pub max_power_w: f32,
     pub avg_power_w: f32,
     pub has_csv: bool,
@@ -611,9 +669,17 @@ pub struct ActiveSessionSummary {
     pub current_a: f32,
     pub power_w: f32,
     pub max_current_a: f32,
+    #[serde(default)]
+    pub avg_current_a: f32,
     pub max_power_w: f32,
+    #[serde(default)]
+    pub avg_power_w: f32,
     pub state: String,
+    #[serde(default)]
+    pub iec_state: Option<String>,
     pub phase: String,
+    #[serde(default = "default_plug_type")]
+    pub plug_type: String,
 }
 
 fn extract_seconds_in_parens(s: &str) -> u64 {
@@ -650,8 +716,10 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
     let mut charging_duration_seconds = 0;
     let mut idle_duration_seconds = 0;
     let mut total_energy_kwh = 0.0;
-    let mut phase = "Mono (1-Phase)".to_string();
+    let mut phase = "1-phase".to_string();
+    let mut plug_type = "Type 2".to_string();
     let mut max_current_a = 0.0f32;
+    let mut avg_current_a = 0.0f32;
     let mut max_power_w = 0.0f32;
     let mut avg_power_w = 0.0f32;
 
@@ -675,8 +743,13 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
                 "Active Charging" => charging_duration_seconds = extract_seconds_in_parens(val),
                 "Idle / Waiting" => idle_duration_seconds = extract_seconds_in_parens(val),
                 "Total Energy" => total_energy_kwh = extract_first_float(val),
-                "Phase Detection" => phase = val.to_string(),
+                "Phase Detection" => {
+                    let p = val.to_lowercase();
+                    phase = if p.contains('3') { "3-phase".to_string() } else { "1-phase".to_string() };
+                }
+                "Plug Type" | "Type de prise" => plug_type = val.to_string(),
                 "Max Current" => max_current_a = extract_first_float(val) as f32,
+                "Average Current" | "Courant moyen" => avg_current_a = extract_first_float(val) as f32,
                 "Max Power" => max_power_w = extract_first_float(val) as f32,
                 "Average Active Power" => avg_power_w = extract_first_float(val) as f32,
                 _ => {}
@@ -715,7 +788,9 @@ pub fn parse_session_summary_from_txt(txt_path: &Path) -> Option<SessionSummary>
         idle_duration_seconds,
         total_energy_kwh,
         phase,
+        plug_type,
         max_current_a,
+        avg_current_a,
         max_power_w,
         avg_power_w,
         has_csv,
@@ -767,8 +842,19 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
         let effective_voltage = if tel.voltage > 50.0 { tel.voltage } else { 230.0 };
         let live_power = if tel.power > 0.0 {
             tel.power
-        } else if tel.greenup_state == "D" || tel.greenup_state == "E" {
+        } else if is_charging_state(&tel.greenup_state) {
             effective_voltage * tel.current
+        } else {
+            0.0
+        };
+
+        let avg_power = if charging > 0 && energy_kwh > 0.0 {
+            ((energy_kwh * 1000.0) / (charging as f64 / 3600.0)) as f32
+        } else {
+            0.0
+        };
+        let avg_current = if s.active_charging_duration_secs_f64 > 0.0 {
+            (s.cumulative_current_a_secs / s.active_charging_duration_secs_f64) as f32
         } else {
             0.0
         };
@@ -783,14 +869,20 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
             current_a: tel.current,
             power_w: live_power,
             max_current_a: s.max_current,
+            avg_current_a: avg_current,
             max_power_w: s.max_power,
+            avg_power_w: avg_power,
             state: tel.greenup_state.clone(),
-            phase: match s.phase.as_str() {
-                "Mono" | "1" => "Mono (1-Phase)".to_string(),
-                "Tri" | "3" => "Tri (3-Phase)".to_string(),
-                other if !other.is_empty() => other.to_string(),
-                _ => "Mono (1-Phase)".to_string(),
+            iec_state: tel.iec_state.clone(),
+            phase: if s.plug_type == "Domestique" || s.plug_type == "Schuko" {
+                "1-phase".to_string()
+            } else {
+                match s.phase.as_str() {
+                    "3-phase" | "Tri" | "3" => "3-phase".to_string(),
+                    _ => "1-phase".to_string(),
+                }
             },
+            plug_type: if s.plug_type.is_empty() { "Type 2".to_string() } else { s.plug_type.clone() },
         }
     })
 }
@@ -894,8 +986,10 @@ mod tests {
             max_power: 3680.0,
             cumulative_energy_wh: 100.0,
             active_charging_duration_secs_f64: 60.0,
+            cumulative_current_a_secs: 960.0,
             last_tick_instant: now,
             phase: "Mono".into(),
+            plug_type: "Type 2".into(),
             legrand_ticket: None,
             csv_path: PathBuf::new(),
             txt_path: PathBuf::new(),
@@ -979,7 +1073,7 @@ mod tests {
         assert!(txt_content.contains("GREENUP-LINK CHARGING SESSION SUMMARY"));
         assert!(txt_content.contains("Side 1 (Right / Droit)"));
         assert!(txt_content.contains("0.125 kWh"));
-        assert!(txt_content.contains("Mono (1-Phase)"));
+        assert!(txt_content.contains("1-phase"));
         assert!(txt_content.contains("WT:10:1138:50:CT:2:6:37:EVplug:5546.38:0.00:"));
 
         let _ = fs::remove_dir_all(&dir);
@@ -1139,10 +1233,16 @@ mod tests {
         tel.voltage = 230.0;
 
         // 1. Create a session
+        let mut tel = Telemetry::default();
+        tel.greenup_state = "B".to_string();
+        tel.iec_state = Some("B".to_string());
         start_session("B", &tel);
         let active = get_active_session_summary(&tel);
         assert!(active.is_some());
-        let active_id = active.unwrap().session_id;
+        let act = active.unwrap();
+        assert_eq!(act.state, "B");
+        assert_eq!(act.iec_state, Some("B".to_string()));
+        let active_id = act.session_id;
 
         // Trying to delete active session should fail
         assert!(delete_session(&active_id).is_err());
@@ -1168,6 +1268,85 @@ mod tests {
 
         // Second delete returns Ok(false)
         assert_eq!(delete_session(&active_id), Ok(false));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_idle_state_c_does_not_inflate_charging_duration() {
+        let dir = setup_test_dir();
+        let mut tel = Telemetry::default();
+        tel.greenup_state = "C".into();
+        tel.iec_state = Some("B".into());
+        tel.voltage = 230.0;
+        tel.current = 0.0;
+
+        // Start session in State C (EV plugged in, waiting for schedule / off-peak hours)
+        start_session("C", &tel);
+
+        // Simulate 3 hours passing in State C without any ticks
+        if let Some(ref mut session) = ACTIVE_SESSIONS.lock().unwrap()[0] {
+            session.start_instant = Instant::now() - Duration::from_secs(10800);
+            session.last_tick_instant = Instant::now() - Duration::from_secs(10800);
+        }
+
+        // Ticking in State C should NOT increase active charging duration
+        on_telemetry_tick(&tel);
+        let summary = get_active_session_summary(&tel).expect("active session");
+        assert_eq!(summary.charging_duration_seconds, 0);
+        assert!(summary.elapsed_seconds >= 10800);
+
+        // Transition from State C to State D (charging starts)
+        tel.greenup_state = "D".into();
+        tel.iec_state = Some("C".into());
+        on_state_change("D", &tel);
+
+        // First telemetry tick in State D with current = 32A
+        tel.current = 32.0;
+        tel.power = 7360.0;
+        on_telemetry_tick(&tel);
+
+        // Charging duration should still be ~0s (or at most clamped dt <= 2s), NOT 3h!
+        let summary_d = get_active_session_summary(&tel).expect("active session");
+        assert!(summary_d.charging_duration_seconds <= 2);
+        assert!(summary_d.elapsed_seconds >= 10800);
+
+        // End session
+        end_session("Test done", &tel);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_domestic_schuko_session_states_f_g_h() {
+        let dir = setup_test_dir();
+        let mut tel = Telemetry::default();
+        tel.greenup_state = "F".into();
+        tel.iec_state = Some("B".into());
+        tel.voltage = 230.0;
+
+        // Start session in State F (Schuko / domestic socket waiting for station)
+        start_session("F", &tel);
+        let act = get_active_session_summary(&tel).expect("active session");
+        assert_eq!(act.plug_type, "Schuko");
+        assert_eq!(act.phase, "1-phase");
+
+        // Transition to State G (Schuko charging)
+        tel.greenup_state = "G".into();
+        tel.iec_state = Some("C".into());
+        tel.current = 14.0;
+        tel.power = 3220.0;
+        on_state_change("G", &tel);
+
+        if let Some(ref mut session) = ACTIVE_SESSIONS.lock().unwrap()[0] {
+            session.active_charging_duration_secs_f64 = 120.0;
+            session.cumulative_energy_wh = 150.0; // 0.150 kWh
+        }
+
+        end_session("Session stopped (State: A > 60s)", &tel);
+        let sessions = list_saved_sessions();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].plug_type, "Schuko");
+        assert_eq!(sessions[0].phase, "1-phase");
 
         let _ = fs::remove_dir_all(&dir);
     }

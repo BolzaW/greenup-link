@@ -1,17 +1,5 @@
 use serde::{Deserialize, Serialize};
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum SerialStatus {
-    /// Aucun adaptateur USB détecté / câble USB débranché du Raspberry Pi
-    UsbDisconnected,
-    /// Port USB ouvert, en attente de la première réponse de la borne
-    UsbConnecting,
-    /// Liaison USB active et saine (dialogue bidirectionnel avec l'ATmega)
-    UsbConnected,
-    /// Port USB ouvert mais aucune réponse reçue (borne éteinte ou ATmega figé)
-    UsbNoResponse,
-}
+pub use greenup_driver::{SerialStatus, SupervisionMode};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct SerialConnection {
@@ -38,40 +26,6 @@ fn default_side() -> u8 {
 
 fn default_voltage_source() -> String {
     String::from("default")
-}
-
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum SupervisionMode {
-    #[default]
-    Remote,
-    Local,
-}
-
-impl std::str::FromStr for SupervisionMode {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim().to_lowercase().as_str() {
-            "remote" => Ok(SupervisionMode::Remote),
-            "local" => Ok(SupervisionMode::Local),
-            _ => Err(()),
-        }
-    }
-}
-
-impl SupervisionMode {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            SupervisionMode::Remote => "remote",
-            SupervisionMode::Local => "local",
-        }
-    }
-
-    #[allow(clippy::should_implement_trait)]
-    pub fn from_str(s: &str) -> Option<Self> {
-        s.parse().ok()
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -190,9 +144,43 @@ impl Telemetry {
             });
         }
         self.evaluate_voltage();
-        if self.greenup_state == "D" || self.greenup_state == "E" {
+        if matches!(self.greenup_state.as_str(), "D" | "E" | "G" | "H") {
             self.power = self.voltage * self.current;
         }
+    }
+
+    /// Recomputes `iec_state` from the raw Legrand state (`A`..`Z`), `t2c_enabled`, and `cp_voltage`.
+    pub fn update_iec_state(&mut self) {
+        if self.greenup_state == "U" || self.greenup_state == "V" {
+            self.iec_state = Some("F".to_string());
+        } else if matches!(self.greenup_state.as_str(), "R" | "S" | "T" | "X") {
+            self.iec_state = Some("E".to_string());
+        } else if let Some(false) = self.t2c_enabled {
+            match self.cp_voltage {
+                Some(12) => self.iec_state = Some("A".to_string()),
+                Some(9) => self.iec_state = Some("B".to_string()),
+                Some(6) => self.iec_state = Some("C".to_string()),
+                _ => {}
+            }
+        } else {
+            match self.greenup_state.as_str() {
+                "A" | "L" | "DISCONNECTED" => self.iec_state = Some("A".to_string()),
+                "B" | "C" | "F" | "I" | "J" | "K" | "M" | "N" | "O" | "P" | "W" => {
+                    self.iec_state = Some("B".to_string())
+                }
+                "D" | "E" | "G" | "H" => self.iec_state = Some("C".to_string()),
+                _ => {}
+            }
+        }
+    }
+
+    /// Recomputes `charge_authorized` from `t2c_enabled`, `fm2_state`, and `d_state`.
+    pub fn update_charge_status(&mut self) {
+        let is_blocked_by_fm2 = self.fm2_state.unwrap_or(false);
+        let is_forced_by_d = self.d_state.unwrap_or(false);
+        let is_t2c_authorized = self.t2c_enabled.unwrap_or(true);
+
+        self.charge_authorized = is_t2c_authorized && (!is_blocked_by_fm2 || is_forced_by_d);
     }
 }
 
@@ -326,18 +314,27 @@ impl Telemetry {
         let error_code = self.error_code.clone();
         let has_error = !error_code.is_empty() && error_code != "0000";
 
-        // Determine IEC state
-        let iec = match raw_code.as_str() {
-            "A" | "DISCONNECTED" => "A".to_string(),
-            "B" => "B".to_string(),
-            "C" => "C".to_string(),
-            "D" => "D".to_string(),
-            "E" => "E".to_string(),
-            other => self.iec_state.clone().unwrap_or_else(|| other.to_string()),
+        // Determine IEC 61851 state from Legrand state machine (see docs/STATE_MACHINE.md):
+        // - A, L: Disconnected -> IEC A
+        // - B (T2 waiting station), C (T2 waiting EV), F (Schuko waiting station), I/J/K/M/N/O/P/W: Connected -> IEC B
+        // - D, E (T2 charging), G, H (Schuko charging): Charging -> IEC C
+        // - R, S, T, X: Fault / Error -> IEC E
+        // - U, V: Fatal power loss -> IEC F
+        let iec = if let Some(ref explicit_iec) = self.iec_state {
+            explicit_iec.clone()
+        } else {
+            match raw_code.as_str() {
+                "A" | "L" | "DISCONNECTED" => "A".to_string(),
+                "B" | "C" | "F" | "I" | "J" | "K" | "M" | "N" | "O" | "P" | "W" => "B".to_string(),
+                "D" | "E" | "G" | "H" => "C".to_string(),
+                "R" | "S" | "T" | "X" => "E".to_string(),
+                "U" | "V" => "F".to_string(),
+                other => other.to_string(),
+            }
         };
 
-        let vehicle_connected = iec != "A" && iec != "DISCONNECTED";
-        let is_charging = (iec == "C" || iec == "D") && self.current > 0.5 && !self.charge_paused;
+        let vehicle_connected = !matches!(raw_code.as_str(), "A" | "L" | "DISCONNECTED" | "Y" | "Z" | "") && iec != "A";
+        let is_charging = (matches!(raw_code.as_str(), "D" | "E" | "G" | "H") || iec == "C") && !self.charge_paused;
 
         let ocpp = if self.serial.status != SerialStatus::UsbConnected || self.mode == SupervisionMode::Local {
             if self.mode == SupervisionMode::Local && vehicle_connected {
@@ -351,14 +348,14 @@ impl Telemetry {
             } else {
                 OcppChargePointStatus::Available
             }
-        } else if has_error {
+        } else if has_error || iec == "E" || iec == "F" {
             OcppChargePointStatus::Faulted
-        } else if self.charge_paused {
+        } else if self.charge_paused || matches!(raw_code.as_str(), "J" | "K" | "M" | "N" | "O" | "P") {
             OcppChargePointStatus::SuspendedEVSE
         } else if is_charging {
             OcppChargePointStatus::Charging
         } else if vehicle_connected {
-            if self.charge_complete {
+            if self.charge_complete || raw_code == "C" || raw_code == "I" {
                 OcppChargePointStatus::SuspendedEV
             } else {
                 OcppChargePointStatus::Preparing
@@ -411,6 +408,7 @@ impl Telemetry {
         let (tic_connected, tic_mode, tic_baud_rate) = match self.tic_mode.as_str() {
             "9600" => (true, "standard".to_string(), Some(9600)),
             "1200" => (true, "historic".to_string(), Some(1200)),
+            "detecting" => (false, "detecting".to_string(), None),
             "0" => (false, "none".to_string(), None),
             _ => (false, "unknown".to_string(), None),
         };
@@ -504,7 +502,7 @@ mod tests {
         assert_eq!(conn.control.setpoint_amps, 16);
         assert_eq!(conn.control.max_hardware_amps, 32);
 
-        // 2. Vehicle plugged in (State B)
+        // 2. Vehicle plugged in (State B: waiting for station, State F: Schuko waiting for station, State C: waiting for EV)
         tel.greenup_state = "B".to_string();
         let conn = tel.to_connector_data(&info);
         assert_eq!(conn.status.iec, "B");
@@ -512,17 +510,33 @@ mod tests {
         assert!(conn.status.vehicle_connected);
         assert!(!conn.status.charging);
 
-        // 3. Charging active (State C, 16A)
+        tel.greenup_state = "F".to_string();
+        let conn_f = tel.to_connector_data(&info);
+        assert_eq!(conn_f.status.iec, "B");
+        assert_eq!(conn_f.status.ocpp, OcppChargePointStatus::Preparing);
+        assert!(conn_f.status.vehicle_connected);
+        assert!(!conn_f.status.charging);
+
         tel.greenup_state = "C".to_string();
-        tel.current = 15.9;
-        tel.power = 3736.0;
-        let conn = tel.to_connector_data(&info);
-        assert_eq!(conn.status.iec, "C");
-        assert_eq!(conn.status.ocpp, OcppChargePointStatus::Charging);
-        assert!(conn.status.vehicle_connected);
-        assert!(conn.status.charging);
-        assert_eq!(conn.meter.power_w, 3736.0);
-        assert_eq!(conn.meter.current_a, 15.9);
+        let conn_c = tel.to_connector_data(&info);
+        assert_eq!(conn_c.status.iec, "B");
+        assert_eq!(conn_c.status.ocpp, OcppChargePointStatus::SuspendedEV);
+        assert!(conn_c.status.vehicle_connected);
+        assert!(!conn_c.status.charging);
+
+        // 3. Charging active (Legrand State D, E for Type 2, and G, H for Schuko -> IEC C)
+        for chg_state in &["D", "E", "G", "H"] {
+            tel.greenup_state = chg_state.to_string();
+            tel.current = 15.9;
+            tel.power = 3736.0;
+            let conn = tel.to_connector_data(&info);
+            assert_eq!(conn.status.iec, "C");
+            assert_eq!(conn.status.ocpp, OcppChargePointStatus::Charging);
+            assert!(conn.status.vehicle_connected);
+            assert!(conn.status.charging);
+            assert_eq!(conn.meter.power_w, 3736.0);
+            assert_eq!(conn.meter.current_a, 15.9);
+        }
 
         // 4. Charge paused
         tel.charge_paused = true;
@@ -549,11 +563,29 @@ mod tests {
         assert_eq!(conn.status.error_description, Some("Control pilot short-circuit (cable/vehicle)".to_string()));
         tel.error_code.clear();
 
-        // 6. TIC mode 9600
+        // 6. TIC modes (9600, 1200, detecting, 0)
         tel.tic_mode = "9600".to_string();
         let conn = tel.to_connector_data(&info);
         assert!(conn.grid.tic_connected);
         assert_eq!(conn.grid.tic_mode, "standard");
         assert_eq!(conn.grid.tic_baud_rate, Some(9600));
+
+        tel.tic_mode = "1200".to_string();
+        let conn = tel.to_connector_data(&info);
+        assert!(conn.grid.tic_connected);
+        assert_eq!(conn.grid.tic_mode, "historic");
+        assert_eq!(conn.grid.tic_baud_rate, Some(1200));
+
+        tel.tic_mode = "detecting".to_string();
+        let conn = tel.to_connector_data(&info);
+        assert!(!conn.grid.tic_connected);
+        assert_eq!(conn.grid.tic_mode, "detecting");
+        assert_eq!(conn.grid.tic_baud_rate, None);
+
+        tel.tic_mode = "0".to_string();
+        let conn = tel.to_connector_data(&info);
+        assert!(!conn.grid.tic_connected);
+        assert_eq!(conn.grid.tic_mode, "none");
+        assert_eq!(conn.grid.tic_baud_rate, None);
     }
 }

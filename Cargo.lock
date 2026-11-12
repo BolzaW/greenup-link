@@ -411,6 +411,7 @@ dependencies = [
  "chrono",
  "greenup-protocol",
  "serde",
+ "serde_json",
  "serialport",
  "tokio",
 ]
@@ -441,6 +442,7 @@ dependencies = [
  "serialport",
  "tokio",
  "tokio-stream",
+ "tower",
  "zip",
 ]
 

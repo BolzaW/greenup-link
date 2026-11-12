@@ -14,12 +14,15 @@ function updateClientTokenBadge() {
         } else if (token) {
             badge.className = 'sys-badge sys-badge-rose';
             badge.innerText = (typeof t === 'function' ? t('system.token_status_unauth') : 'Non authentifié') || 'Non authentifié';
+        } else if (!window.isAuthIhm) {
+            badge.className = 'sys-badge sys-badge-sky';
+            badge.innerText = (typeof t === 'function' ? t('system.token_status_kiosk') : 'Mode consultation') || 'Mode consultation';
         } else {
             badge.className = 'sys-badge sys-badge-amber';
             badge.innerText = (typeof t === 'function' ? t('system.token_status_missing') : 'Token manquant') || 'Token manquant';
         }
     } else {
-        badge.className = 'sys-badge sys-badge-muted';
+        badge.className = 'sys-badge sys-badge-rose';
         badge.innerText = (typeof t === 'function' ? t('system.token_status_no_auth') : "Accès libre (pas d'auth)") || "Accès libre (pas d'auth)";
     }
 }
@@ -41,6 +44,52 @@ function toggleTokenVisibility() {
     }
 }
 
+async function copyClientToken() {
+    const input = document.getElementById('cfgClientToken');
+    const token = input ? input.value : (typeof getApiToken === 'function' ? getApiToken() : '');
+    if (!token) return;
+
+    const iconCopy = document.getElementById('iconTokenCopy');
+    const iconCheck = document.getElementById('iconTokenCopyCheck');
+    const feedback = document.getElementById('cfgTokenFeedback');
+
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(token);
+        } else if (input) {
+            const prevType = input.type;
+            input.type = 'text';
+            input.select();
+            document.execCommand('copy');
+            input.type = prevType;
+        }
+
+        if (iconCopy) iconCopy.classList.add('hidden');
+        if (iconCheck) iconCheck.classList.remove('hidden');
+        if (feedback) {
+            feedback.innerText = (typeof t === 'function' ? t('system.token_copied') : 'Clé copiée dans le presse-papier !') || 'Clé copiée !';
+            feedback.className = 'sys-feedback sys-feedback-ok';
+        }
+        setTimeout(() => {
+            if (iconCopy) iconCopy.classList.remove('hidden');
+            if (iconCheck) iconCheck.classList.add('hidden');
+            if (feedback && feedback.innerText.includes('copiée')) {
+                feedback.innerText = '';
+                feedback.className = 'sys-feedback';
+            }
+        }, 1500);
+    } catch (e) {
+        console.warn('Clipboard write failed:', e);
+        if (input) {
+            const prevType = input.type;
+            input.type = 'text';
+            input.select();
+            document.execCommand('copy');
+            input.type = prevType;
+        }
+    }
+}
+
 async function saveClientToken() {
     const input = document.getElementById('cfgClientToken');
     const feedback = document.getElementById('cfgTokenFeedback');
@@ -57,6 +106,7 @@ async function saveClientToken() {
 
         window.isAuthRequired = !!status.auth_required;
         window.isAuthenticated = !!status.authenticated;
+        window.isAuthIhm = status.auth_ihm !== false;
         if (typeof updateLogoutButton === 'function') updateLogoutButton();
         updateClientTokenBadge();
 
@@ -116,6 +166,7 @@ async function clearClientToken() {
         const status = await res.json();
         window.isAuthRequired = !!status.auth_required;
         window.isAuthenticated = !!status.authenticated;
+        window.isAuthIhm = status.auth_ihm !== false;
         if (typeof updateLogoutButton === 'function') updateLogoutButton();
     } catch (_) {}
 
@@ -129,7 +180,7 @@ async function clearClientToken() {
 }
 
 async function loadConfigData() {
-    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    if (!window.canReadData || !window.canReadData()) return;
 
     try {
         // Sync hardware / BLE state from /api/station
@@ -184,6 +235,10 @@ async function loadConfigData() {
 }
 
 async function refreshTicFromConfig() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     const feedback = document.getElementById('cfgTicFeedback');
     const btn = document.getElementById('btnRefreshTicConfig');
     const icon = document.getElementById('iconRefreshTic');
@@ -211,10 +266,12 @@ async function refreshTicFromConfig() {
 
     try {
         if (feedback) {
-            feedback.innerText = (typeof t === 'function' ? t('system.tic_refreshing') : "Détection TIC lancée sur l'ATmega...") || "Détection TIC lancée sur l'ATmega...";
-            feedback.className = 'sys-feedback sys-feedback-info animate-pulse';
+            feedback.innerText = '';
+            feedback.className = 'sys-feedback';
         }
-        if (typeof updateTicSpeedBadge === 'function') {
+        if (typeof updateLinky === 'function') {
+            updateLinky('detecting');
+        } else if (typeof updateTicSpeedBadge === 'function') {
             updateTicSpeedBadge('detecting');
         }
         const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
@@ -226,9 +283,6 @@ async function refreshTicFromConfig() {
         if (typeof fetchTelemetry === 'function') {
             fetchTelemetry();
         }
-        setTimeout(() => {
-            if (feedback) feedback.innerText = '';
-        }, 4000);
     } catch (err) {
         console.error('TIC refresh error:', err);
         if (typeof updateTicSpeedBadge === 'function') {
@@ -245,6 +299,10 @@ async function refreshTicFromConfig() {
 }
 
 async function handleSerialInit() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     const btn = document.getElementById('btnSerialInit');
     const icon = document.getElementById('iconSerialInit');
     const feedback = document.getElementById('serialActionFeedback');
@@ -285,6 +343,10 @@ async function handleSerialInit() {
 }
 
 async function handleSerialReset() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     const btn = document.getElementById('btnSerialReset');
     const icon = document.getElementById('iconSerialReset');
     const feedback = document.getElementById('serialActionFeedback');
@@ -342,6 +404,9 @@ function initConfig() {
     const btnToggleEye = document.getElementById('btnToggleTokenVisibility');
     if (btnToggleEye) btnToggleEye.addEventListener('click', toggleTokenVisibility);
 
+    const btnCopyToken = document.getElementById('btnCopyClientToken');
+    if (btnCopyToken) btnCopyToken.addEventListener('click', copyClientToken);
+
     const btnSaveToken = document.getElementById('btnSaveClientToken');
     if (btnSaveToken) btnSaveToken.addEventListener('click', saveClientToken);
 
@@ -359,69 +424,25 @@ function initConfig() {
     }
 }
 
-function updateSupervisionModeUi(mode, can_switch) {
+function updateSupervisionModeUi(mode) {
     window.currentSupervisionMode = mode;
-    const badgeActive = document.getElementById('cfgModeActiveBadge');
-    const btnRemote = document.getElementById('btnModeRemote');
-    const btnLocal = document.getElementById('btnModeLocal');
-    const badgeRemote = document.getElementById('badgeModeRemote');
-    const badgeLocal = document.getElementById('badgeModeLocal');
-    const hdrModeBadge = document.getElementById('hdrModeBadge');
-    const localBanner = document.getElementById('localModeBanner');
-
+    const isRemote = mode === 'remote';
     const isLocal = mode === 'local';
 
-    // Header badge
-    if (hdrModeBadge) {
-        hdrModeBadge.classList.remove('hidden');
-        if (isLocal) {
-            hdrModeBadge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded border font-mono mode-badge-local';
-            hdrModeBadge.innerText = (typeof t === 'function' ? t('system.mode_local_short') : 'Passif') || 'Passif';
-            hdrModeBadge.title = (typeof t === 'function' ? t('system.mode_local_desc') : 'Mode passif sniffer');
-        } else {
-            hdrModeBadge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded border font-mono mode-badge-remote';
-            hdrModeBadge.innerText = (typeof t === 'function' ? t('system.mode_remote_short') : 'Supervisé') || 'Supervisé';
-            hdrModeBadge.title = (typeof t === 'function' ? t('system.mode_remote_desc') : 'Mode supervisé actif');
-        }
+    const toggle = document.getElementById('modeToggle');
+    if (toggle) {
+        toggle.checked = isRemote;
     }
 
-    // Config Panel Buttons
-    if (btnRemote && btnLocal) {
-        if (isLocal) {
-            btnLocal.classList.add('active', 'mode-local-active');
-            btnRemote.classList.remove('active');
-            if (badgeLocal) badgeLocal.classList.remove('hidden');
-            if (badgeRemote) badgeRemote.classList.add('hidden');
-            if (badgeActive) {
-                badgeActive.className = 'sys-badge sys-badge-amber';
-                badgeActive.innerText = (typeof t === 'function' ? t('system.mode_local_short') : 'Passif') || 'Passif';
-            }
-        } else {
-            btnRemote.classList.add('active');
-            btnLocal.classList.remove('active', 'mode-local-active');
-            if (badgeRemote) badgeRemote.classList.remove('hidden');
-            if (badgeLocal) badgeLocal.classList.add('hidden');
-            if (badgeActive) {
-                badgeActive.className = 'sys-badge sys-badge-emerald';
-                badgeActive.innerText = (typeof t === 'function' ? t('system.mode_remote_short') : 'Supervisé') || 'Supervisé';
-            }
-        }
-
-        if (can_switch !== undefined) {
-            const notice = document.getElementById('cfgModeNotice');
-            if (!can_switch) {
-                btnRemote.disabled = true;
-                btnLocal.disabled = true;
-                if (notice) notice.classList.add('text-amber-400');
-            } else {
-                btnRemote.disabled = false;
-                btnLocal.disabled = false;
-                if (notice) notice.classList.remove('text-amber-400');
-            }
-        }
+    const desc = document.getElementById('cfgModeDesc');
+    if (desc) {
+        desc.innerText = isRemote
+            ? (typeof t === 'function' ? t('system.mode_remote_desc') : "Mode normal : Green'Up Link pilote la borne et envoie les commandes à l'ATmega (autorisations, consigne de courant, TIC).")
+            : (typeof t === 'function' ? t('system.mode_local_desc') : "Mode écoute seule (passif) : la borne fonctionne en autonomie, Green'Up Link n'envoie aucune commande à l'ATmega.");
     }
 
     // Controls Panel Banner
+    const localBanner = document.getElementById('localModeBanner');
     if (localBanner) {
         if (isLocal) {
             localBanner.classList.remove('hidden');
@@ -436,26 +457,30 @@ function updateSupervisionModeUi(mode, can_switch) {
     }
 }
 
-async function switchSupervisionMode(targetMode) {
-    if (window.currentSupervisionMode === targetMode) return;
-
-    if (lastReportedState && lastReportedState !== 'A' && lastReportedState !== 'DISCONNECTED') {
-        alert(typeof t === 'function' ? t('system.mode_state_a_required') : "La bascule de mode nécessite que la borne soit à l'état A (Libre / Déconnectée).");
+async function toggleSupervisionMode() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        const toggle = document.getElementById('modeToggle');
+        if (toggle) toggle.checked = window.currentSupervisionMode === 'remote';
         return;
     }
 
-    const confirmMsg = targetMode === 'local'
-        ? (typeof t === 'function' ? t('system.mode_switch_confirm_local') : "Attention : le passage en mode Passif (Local) envoie une commande Reset à l'ATmega pour libérer la borne, puis cesse tout envoi de trame. Voulez-vous continuer ?")
-        : (typeof t === 'function' ? t('system.mode_switch_confirm_remote') : "Voulez-vous réactiver la supervision active (mode Distant) et réinitialiser la communication avec la borne ?");
-
-    if (!confirm(confirmMsg)) return;
-
+    const toggle = document.getElementById('modeToggle');
+    if (!toggle) return;
+    const targetMode = toggle.checked ? 'remote' : 'local';
     const feedback = document.getElementById('cfgModeFeedback');
-    const btnRemote = document.getElementById('btnModeRemote');
-    const btnLocal = document.getElementById('btnModeLocal');
-    if (btnRemote) btnRemote.disabled = true;
-    if (btnLocal) btnLocal.disabled = true;
 
+    if (lastReportedState && lastReportedState !== 'A' && lastReportedState !== 'DISCONNECTED') {
+        toggle.checked = !toggle.checked;
+        if (feedback) {
+            feedback.innerText = (typeof t === 'function' ? t('system.mode_state_a_required') : "La bascule de mode nécessite que la borne soit à l'état A (Libre / Déconnectée).");
+            feedback.className = 'sys-feedback sys-feedback-warn';
+            setTimeout(() => { feedback.innerText = ''; }, 4000);
+        }
+        return;
+    }
+
+    toggle.disabled = true;
     if (feedback) {
         feedback.innerText = (typeof t === 'function' ? t('system.mode_switching') : "Changement de mode en cours...") || "Changement de mode en cours...";
         feedback.className = 'sys-feedback sys-feedback-info animate-pulse';
@@ -475,7 +500,8 @@ async function switchSupervisionMode(targetMode) {
         }
 
         const data = await res.json();
-        updateSupervisionModeUi(data.mode || targetMode);
+        const effectiveMode = data.mode || targetMode;
+        updateSupervisionModeUi(effectiveMode);
 
         if (feedback) {
             feedback.innerText = (typeof t === 'function' ? t('system.mode_switch_success') : "Mode mis à jour avec succès") || "Mode mis à jour avec succès";
@@ -487,13 +513,13 @@ async function switchSupervisionMode(targetMode) {
         }
     } catch (err) {
         console.error('Mode switch error:', err);
+        toggle.checked = window.currentSupervisionMode === 'remote';
         if (feedback) {
             feedback.innerText = (typeof t === 'function' ? t('alert.error') : 'Erreur: ') + (err.message || err);
             feedback.className = 'sys-feedback sys-feedback-error';
         }
     } finally {
-        if (btnRemote) btnRemote.disabled = false;
-        if (btnLocal) btnLocal.disabled = false;
+        toggle.disabled = false;
         if (feedback) {
             setTimeout(() => { feedback.innerText = ''; }, 4000);
         }

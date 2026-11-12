@@ -15,15 +15,16 @@ use tokio_stream::StreamExt;
 use serde_json::json;
 use axum::extract::Query;
 use greenup_driver::logger;
-use greenup_driver::{SharedState, SharedStation};
 use greenup_driver::serial::TicStartError;
 use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
+use crate::station::{SharedState, SharedStation};
 
 use std::sync::Arc;
 use axum::http::header::{
     HeaderValue, CACHE_CONTROL, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS, X_FRAME_OPTIONS,
 };
-use crate::auth::{self, SharedApiToken};
+use crate::auth::{self, AuthState, SharedAuthState};
+use crate::config::HttpConfig;
 
 /// Axum middleware appending standard defensive HTTP security headers to all responses.
 async fn security_headers_middleware(req: Request, next: Next) -> Response {
@@ -65,12 +66,15 @@ pub struct SideQuery {
     pub side: Option<u8>,
 }
 
-pub fn build_router(station: SharedStation, api_token: Option<String>) -> Router {
-    let token_state: SharedApiToken = api_token.map(Arc::new);
+pub fn build_router(station: SharedStation, config: HttpConfig) -> Router {
+    let auth_state: SharedAuthState = Arc::new(AuthState {
+        api_token: config.api_token.map(Arc::new),
+        auth_ihm: config.auth_ihm,
+    });
 
     let protected_api = Router::new()
         .route("/api/sessions", get(list_sessions_handler))
-        .route("/api/sessions/:id/export", post(export_session_handler))
+        .route("/api/sessions/:id/export", get(export_session_handler))
         .route("/api/sessions/:id", axum::routing::delete(delete_session_handler))
         .route("/api/logs", get(get_logs))
         .route("/api/logs/stream", get(stream_logs))
@@ -93,15 +97,16 @@ pub fn build_router(station: SharedStation, api_token: Option<String>) -> Router
         .route("/api/connectors/:id/status", get(get_connector_status_by_id))
         .route("/api/meter", get(get_meter))
         .route("/api/status", get(get_status))
+        .route("/api/driver/raw", get(get_driver_raw))
         .with_state(station)
         .route_layer(axum::middleware::from_fn_with_state(
-            token_state.clone(),
+            auth_state.clone(),
             auth::require_auth,
         ));
 
     let auth_router = Router::new()
         .route("/api/auth/status", get(auth::auth_status))
-        .with_state(token_state);
+        .with_state(auth_state);
 
     let api_router = Router::new()
         .merge(auth_router)
@@ -386,17 +391,32 @@ async fn get_status(
     Json(state.to_connector_data().status)
 }
 
+/// GET /api/driver/raw
+/// Returns the raw low-level JSON snapshot (`AtmegaRawState` + `UsbLinkState`) directly from `greenup-driver`.
+async fn get_driver_raw(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
+    if let Some(side) = query.side {
+        let point = station.get_point(Some(side));
+        Json(point.driver.get_snapshot_json())
+    } else {
+        Json(station.raw_driver_snapshot_json())
+    }
+}
+
 fn check_serial_connected(state: &SharedState) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    state.sync_from_driver();
     let tel = state.telemetry.lock().unwrap_or_else(|e| e.into_inner());
-    if tel.serial.status != greenup_driver::telemetry::SerialStatus::UsbConnected {
+    if tel.serial.status != crate::telemetry::SerialStatus::UsbConnected {
         let err_msg = match tel.serial.status {
-            greenup_driver::telemetry::SerialStatus::UsbDisconnected => {
+            crate::telemetry::SerialStatus::UsbDisconnected => {
                 "USB cable disconnected (no USB adapter detected)"
             }
-            greenup_driver::telemetry::SerialStatus::UsbConnecting => {
+            crate::telemetry::SerialStatus::UsbConnecting => {
                 "USB serial link initializing (waiting for station board)"
             }
-            greenup_driver::telemetry::SerialStatus::UsbNoResponse => {
+            crate::telemetry::SerialStatus::UsbNoResponse => {
                 "No response from station board (station powered off or ATmega frozen)"
             }
             _ => "USB serial link unavailable",
@@ -414,7 +434,7 @@ fn check_serial_connected(state: &SharedState) -> Result<(), (StatusCode, Json<s
 }
 
 fn check_mode_allows_commands(state: &SharedState) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
-    if state.mode() == greenup_driver::telemetry::SupervisionMode::Local {
+    if state.mode() == crate::telemetry::SupervisionMode::Local {
         return Err((
             StatusCode::FORBIDDEN,
             Json(json!({
@@ -494,7 +514,7 @@ async fn init_sequence(
     tokio::spawn(async move {
         // TIC detection is never started automatically:
         // it must be explicitly requested via POST /api/tic/refresh.
-        greenup_driver::serial::trigger_init_sequence(&state).await;
+        crate::station::trigger_init_sequence(&state).await;
     });
     (StatusCode::OK, Json(json!({"status": "success", "message": "Initialization sequence started"})))
 }
@@ -589,7 +609,7 @@ async fn refresh_tic(
         return res;
     }
     logger::log("API", &format!("🔄 Manual TIC detection request (TICTM:1) on Side {}", state.side()));
-    match greenup_driver::serial::start_tic_detection(&state).await {
+    match crate::station::start_tic_detection(&state).await {
         Ok(()) => (StatusCode::OK, Json(json!({"status": "success", "message": "TIC detection started"}))),
         Err(TicStartError::NotSupported) => (
             StatusCode::BAD_REQUEST,
@@ -703,7 +723,7 @@ async fn set_mode(
     Query(query): Query<SideQuery>,
     Json(payload): Json<SetModePayload>,
 ) -> Response {
-    let target_mode = match greenup_driver::telemetry::SupervisionMode::from_str(&payload.mode) {
+    let target_mode = match crate::telemetry::SupervisionMode::from_str(&payload.mode) {
         Some(m) => m,
         None => {
             return (
@@ -751,18 +771,18 @@ async fn set_mode(
     }
 
     match target_mode {
-        greenup_driver::telemetry::SupervisionMode::Local => {
+        crate::telemetry::SupervisionMode::Local => {
             // 1. Send Reset to ATmega so it reboots and clears its internal Pi mode
             let _ = state.serial_tx.send(Command::Reset).await;
             // 2. Set mode to Local so no RaspberryPiModeOk will ever be sent
-            state.set_mode(greenup_driver::telemetry::SupervisionMode::Local);
+            state.set_mode(crate::telemetry::SupervisionMode::Local);
 
             // If dual-point and no specific side was requested, switch point 2 as well
             let p2_opt = station.point2.read().unwrap_or_else(|e| e.into_inner()).clone();
             if query.side.is_none() {
                 if let Some(ref p2) = p2_opt {
                     let _ = p2.serial_tx.send(Command::Reset).await;
-                    p2.set_mode(greenup_driver::telemetry::SupervisionMode::Local);
+                    p2.set_mode(crate::telemetry::SupervisionMode::Local);
                 }
             }
 
@@ -779,24 +799,24 @@ async fn set_mode(
                 })),
             ).into_response()
         }
-        greenup_driver::telemetry::SupervisionMode::Remote => {
+        crate::telemetry::SupervisionMode::Remote => {
             // 1. Set mode to Remote
-            state.set_mode(greenup_driver::telemetry::SupervisionMode::Remote);
+            state.set_mode(crate::telemetry::SupervisionMode::Remote);
 
             // 2. Trigger startup sequence (RaspberryPiModeOk + startup queries)
             let state_clone = state.clone();
             tokio::spawn(async move {
-                greenup_driver::trigger_init_sequence(&state_clone).await;
+                crate::station::trigger_init_sequence(&state_clone).await;
             });
 
             // If dual-point and no specific side was requested, switch point 2 as well
             let p2_opt = station.point2.read().unwrap_or_else(|e| e.into_inner()).clone();
             if query.side.is_none() {
                 if let Some(ref p2) = p2_opt {
-                    p2.set_mode(greenup_driver::telemetry::SupervisionMode::Remote);
+                    p2.set_mode(crate::telemetry::SupervisionMode::Remote);
                     let p2_clone = p2.clone();
                     tokio::spawn(async move {
-                        greenup_driver::trigger_init_sequence(&p2_clone).await;
+                        crate::station::trigger_init_sequence(&p2_clone).await;
                     });
                 }
             }
@@ -922,12 +942,12 @@ async fn list_sessions_handler(
     let target_side = query.side.unwrap_or(1);
     let state = station.get_point(Some(target_side));
     let active_summary = if let Ok(tel) = state.telemetry.lock() {
-        greenup_driver::session::get_active_session_summary_for_side(target_side, &tel)
+        crate::session::get_active_session_summary_for_side(target_side, &tel)
     } else {
         None
     };
 
-    let saved_sessions = greenup_driver::session::list_saved_sessions_filtered(query.side);
+    let saved_sessions = crate::session::list_saved_sessions_filtered(query.side);
     logger::debug(
         "API",
         &format!(
@@ -945,28 +965,28 @@ async fn list_sessions_handler(
 }
 
 #[derive(serde::Deserialize)]
-pub struct ExportSessionPayload {
-    pub format: String,
+pub struct ExportSessionQuery {
+    pub format: Option<String>,
 }
 
-/// POST /api/sessions/:id/export
-/// Exports a session file in the requested format (csv, txt, zip).
+/// GET /api/sessions/:id/export?format=csv|txt|zip
+/// Exports a session file in the requested format (csv, txt, zip). Defaults to csv.
 async fn export_session_handler(
     Path(id): Path<String>,
-    Json(payload): Json<ExportSessionPayload>,
+    Query(query): Query<ExportSessionQuery>,
 ) -> Result<Response, (StatusCode, Json<serde_json::Value>)> {
-    if !greenup_driver::session::is_valid_session_id(&id) {
+    if !crate::session::is_valid_session_id(&id) {
         return Err((
             StatusCode::BAD_REQUEST,
             Json(json!({ "error": "Invalid session ID format" })),
         ));
     }
 
-    let sessions_dir = greenup_driver::session::get_sessions_dir();
+    let sessions_dir = crate::session::get_sessions_dir();
     let csv_path = sessions_dir.join(format!("{}.csv", id));
     let txt_path = sessions_dir.join(format!("{}.txt", id));
 
-    let fmt = payload.format.trim().to_lowercase();
+    let fmt = query.format.as_deref().unwrap_or("csv").trim().to_lowercase();
     logger::debug("API", &format!("Export requested for session '{}' in format '{}'", id, fmt));
 
     match fmt.as_str() {
@@ -1124,7 +1144,7 @@ async fn delete_session_handler(
     }
 
     logger::info("API", &format!("Delete requested for session '{}'", id));
-    match greenup_driver::session::delete_session(&id) {
+    match crate::session::delete_session(&id) {
         Ok(true) => Ok(Json(json!({
             "message": "Session deleted successfully",
             "id": id,
@@ -1152,9 +1172,9 @@ mod tests {
     use super::*;
     use std::sync::Arc;
     use tokio::sync::mpsc;
-    use greenup_driver::hardware_specs::HardwareCapabilities;
-    use greenup_driver::state::{AppState, StationManager};
-    use greenup_driver::telemetry::{OcppChargePointStatus, SerialStatus, SupervisionMode};
+    use crate::hardware_specs::HardwareCapabilities;
+    use crate::station::{AppState, StationManager};
+    use crate::telemetry::{OcppChargePointStatus, SerialStatus, SupervisionMode};
 
     fn make_test_station() -> (Arc<StationManager>, Arc<AppState>, mpsc::Receiver<Command>) {
         let (tx, rx) = mpsc::channel(20);
@@ -1675,9 +1695,152 @@ mod tests {
         assert!(res_del_unknown.is_err());
         assert_eq!(res_del_unknown.unwrap_err().0, StatusCode::NOT_FOUND);
 
-        // 4. POST /api/sessions/:id/export with invalid format -> 400 Bad Request
-        let res_export_bad = export_session_handler(Path("some_session".to_string()), Json(ExportSessionPayload { format: "invalid_format".to_string() })).await;
+        // 4. GET /api/sessions/:id/export with invalid format -> 400 Bad Request
+        let res_export_bad = export_session_handler(
+            Path("some_session".to_string()),
+            Query(ExportSessionQuery { format: Some("invalid_format".to_string()) }),
+        ).await;
         assert!(res_export_bad.is_err());
         assert_eq!(res_export_bad.unwrap_err().0, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_auth_ihm_strict_vs_kiosk_router() {
+        use tower::ServiceExt;
+        use axum::body::Body;
+
+        let (station, _p1, _rx) = make_test_station();
+
+        // 1. Strict Mode (auth_ihm = true) with token
+        let strict_config = HttpConfig {
+            bind: "0.0.0.0:8080".to_string(),
+            api_token: Some("secret_pass_123".to_string()),
+            auth_ihm: true,
+        };
+        let app_strict = build_router(station.clone(), strict_config);
+
+        // GET /api/state without token -> 401 Unauthorized
+        let res = app_strict.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/state")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // GET /api/auth/status without token -> 200 OK (public endpoint)
+        let res = app_strict.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/auth/status")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // GET /api/state WITH Bearer token -> 200 OK
+        let res = app_strict.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/state")
+                .header("Authorization", "Bearer secret_pass_123")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // 2. Kiosk Mode (auth_ihm = false) with token
+        let kiosk_config = HttpConfig {
+            bind: "0.0.0.0:8080".to_string(),
+            api_token: Some("secret_pass_123".to_string()),
+            auth_ihm: false,
+        };
+        let app_kiosk = build_router(station.clone(), kiosk_config);
+
+        // GET /api/state without token -> 200 OK in Kiosk mode!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/state")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // GET /api/station without token -> 200 OK in Kiosk mode!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/station")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // GET /api/logs without token -> 200 OK in Kiosk mode!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/logs")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // GET /api/sessions/2026-11-02_12-00-00_point1/export without token -> reaches handler (404 Not Found, NOT 401)
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/sessions/2026-11-02_12-00-00_point1/export?format=csv")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+
+        // DELETE /api/sessions/2026-11-02_12-00-00_point1 without token -> 401 Unauthorized!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .method("DELETE")
+                .uri("/api/sessions/2026-11-02_12-00-00_point1")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // Sensitive GET /api/logs/export without token -> 401 Unauthorized!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .uri("/api/logs/export")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // Sensitive POST /api/charge without token -> 401 Unauthorized!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/api/charge")
+                .header("Content-Type", "application/json")
+                .body(Body::from(r#"{"action":"enable"}"#))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // Sensitive POST /api/current/16 without token -> 401 Unauthorized!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/api/current/16")
+                .body(Body::empty())
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // Sensitive POST /api/charge WITH Bearer token -> 200 OK in Kiosk mode!
+        let res = app_kiosk.clone().oneshot(
+            axum::http::Request::builder()
+                .method("POST")
+                .uri("/api/charge")
+                .header("Content-Type", "application/json")
+                .header("Authorization", "Bearer secret_pass_123")
+                .body(Body::from(r#"{"action":"enable"}"#))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
     }
 }

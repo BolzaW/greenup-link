@@ -65,16 +65,18 @@ function updateLinky(ticMode) {
     let labelText = "";
 
     switch(ticMode) {
+        case 'standard':
         case '9600':
             linkyIcon.classList.replace('text-slate-600', 'text-sky-400');
-            linkyContainer.classList.add('border-sky-500/30');
+            linkyContainer.classList.add('linky-active-halo');
             animWireLinky.classList.remove('opacity-0');
             animWireLinky.style.animationDuration = '0.5s';
             labelText = t('tic.standard');
             break;
+        case 'historic':
         case '1200':
             linkyIcon.classList.replace('text-slate-600', 'text-sky-400');
-            linkyContainer.classList.add('border-sky-500/30');
+            linkyContainer.classList.add('linky-active-halo');
             animWireLinky.classList.remove('opacity-0');
             animWireLinky.style.animationDuration = '2.0s';
             labelText = t('tic.historic');
@@ -86,6 +88,8 @@ function updateLinky(ticMode) {
             animWireLinky.classList.add('opacity-0');
             labelText = t('tic.detecting');
             break;
+        case 'none':
+        case 'disabled':
         case '0':
             animWireLinky.classList.add('opacity-0');
             labelText = t('tic.disconnected');
@@ -110,10 +114,12 @@ function updateTicSpeedBadge(ticMode) {
     if (!badge) return;
 
     switch (ticMode) {
+        case 'standard':
         case '9600':
             badge.className = 'sys-badge sys-badge-sky';
             badge.innerText = 'Standard • 9600';
             break;
+        case 'historic':
         case '1200':
             badge.className = 'sys-badge sys-badge-sky';
             badge.innerText = 'Historique • 1200';
@@ -122,6 +128,8 @@ function updateTicSpeedBadge(ticMode) {
             badge.className = 'sys-badge sys-badge-amber animate-pulse';
             badge.innerText = (typeof t === 'function' ? t('tic.detecting') : 'Détection...') || 'Détection...';
             break;
+        case 'none':
+        case 'disabled':
         case '0':
             badge.className = 'sys-badge sys-badge-muted';
             badge.innerText = (typeof t === 'function' ? t('tic.disconnected') : 'Non connecté') || 'Non connecté';

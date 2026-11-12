@@ -1,10 +1,12 @@
-use crate::engine::{AtmegaEngine, EngineConfig, EngineState};
+use crate::engine::{AtmegaEngine, EngineState};
 #[cfg(unix)]
 use crate::pty::PtyPair;
+#[cfg(unix)]
 use std::io::Write;
 #[cfg(unix)]
 use std::io::Read;
 use std::sync::{Arc, Mutex};
+#[cfg(unix)]
 use std::time::Duration;
 use tokio::sync::mpsc;
 

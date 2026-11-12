@@ -5,9 +5,40 @@ let sessionsCache = { active_session: null, sessions: [] };
 let selectedSessionId = null;
 let sessionCsvCache = new Map();
 let currentChartPoints = [];
+let currentSessionStartSeconds = null;
 let deleteConfirmTimer = null;
+let sessionMetricMode = localStorage.getItem('greenup_session_metric_mode') || 'power';
 
-function formatSessionDuration(totalSeconds) {
+function updateSessionStartInfo(startTimeStr, sessionIdStr) {
+    currentSessionStartSeconds = null;
+    let dateStr = '';
+
+    const src = startTimeStr || '';
+    const dateMatch = src.match(/(\d{4}-\d{2}-\d{2})/) || (sessionIdStr || '').match(/(\d{4}-\d{2}-\d{2})/);
+    if (dateMatch) {
+        dateStr = dateMatch[1];
+    }
+
+    const timeMatch = src.match(/(\d{2}):(\d{2})(?::(\d{2}))?/);
+    if (timeMatch) {
+        const hh = parseInt(timeMatch[1], 10);
+        const mm = parseInt(timeMatch[2], 10);
+        const ss = parseInt(timeMatch[3] || '0', 10);
+        currentSessionStartSeconds = hh * 3600 + mm * 60 + ss;
+    } else if (sessionIdStr) {
+        const idTimeMatch = sessionIdStr.match(/_(\d{2})-(\d{2})-(\d{2})$/);
+        if (idTimeMatch) {
+            const hh = parseInt(idTimeMatch[1], 10);
+            const mm = parseInt(idTimeMatch[2], 10);
+            const ss = parseInt(idTimeMatch[3], 10);
+            currentSessionStartSeconds = hh * 3600 + mm * 60 + ss;
+        }
+    }
+
+    setElemText('sessionChartDate', dateStr);
+}
+
+function formatSessionDuration(totalSeconds, includeSeconds = true) {
     if (totalSeconds == null || isNaN(totalSeconds)) return '--';
     const s = Math.max(0, Math.floor(totalSeconds));
     const h = Math.floor(s / 3600);
@@ -18,15 +49,32 @@ function formatSessionDuration(totalSeconds) {
     const sLabel = t('sessions.time_s') || 's';
 
     if (h > 0) {
-        return `${h}${hLabel} ${m.toString().padStart(2, '0')}${mLabel}`;
+        if (!includeSeconds) {
+            return `${h}${hLabel} ${m.toString().padStart(2, '0')}${mLabel}`;
+        }
+        return `${h}${hLabel} ${m.toString().padStart(2, '0')}${mLabel} ${sec.toString().padStart(2, '0')}${sLabel}`;
     }
     if (m > 0) {
+        if (!includeSeconds) {
+            return `${m}${mLabel}`;
+        }
         return `${m}${mLabel} ${sec.toString().padStart(2, '0')}${sLabel}`;
     }
     return `${sec}${sLabel}`;
 }
 
-function formatChartTimeLabel(totalSeconds) {
+function formatChartTimeLabel(totalSeconds, maxT = null, includeSeconds = false) {
+    if (currentSessionStartSeconds != null) {
+        const totalSec = ((Math.round(currentSessionStartSeconds + totalSeconds) % 86400) + 86400) % 86400;
+        const hh = Math.floor(totalSec / 3600).toString().padStart(2, '0');
+        const mm = Math.floor((totalSec % 3600) / 60).toString().padStart(2, '0');
+        if (includeSeconds || (maxT != null && maxT < 240)) {
+            const ss = (totalSec % 60).toString().padStart(2, '0');
+            return `${hh}:${mm}:${ss}`;
+        }
+        return `${hh}:${mm}`;
+    }
+
     const s = Math.max(0, Math.floor(totalSeconds));
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
@@ -37,6 +85,61 @@ function formatChartTimeLabel(totalSeconds) {
         return m > 0 ? `${h}${hLabel}${m.toString().padStart(2, '0')}` : `${h}${hLabel}`;
     }
     return `${m}${mLabel}`;
+}
+
+function formatSessionState(st, iecState) {
+    if (!st) return '--';
+    const s = st.toUpperCase();
+    if (s === 'D' || s === 'E' || s === 'G' || s === 'H') {
+        return `${t('sessions.state_charging') || 'En charge'} (${s})`;
+    } else if (s === 'C') {
+        return `${t('sessions.state_waiting_car') || 'Attente véhicule'} (${s})`;
+    } else if (s === 'B' || s === 'F') {
+        return `${t('sessions.state_waiting_station') || 'Attente borne'} (${s})`;
+    } else if (s === 'I') {
+        return `${t('sessions.state_complete') || 'Charge terminée (Veille)'} (${s})`;
+    } else if (s === 'A') {
+        return `${t('sessions.state_disconnected') || 'Débranché'} (${s})`;
+    } else if (s === 'L') {
+        return `${t('sessions.state_unlatched') || 'Câble déverrouillé'} (${s})`;
+    } else if (['R', 'V', 'X', 'ST', 'S', 'T', 'U', 'Y', 'Z'].includes(s)) {
+        return `${t('sessions.state_fault') || 'Défaut borne'} (${s})`;
+    }
+    return `${t('state.connected') || 'Connecté'} (${s})`;
+}
+
+function formatTerminationReason(reason) {
+    if (!reason || reason === '--') return '--';
+    const r = reason.trim();
+    if (r.includes('State: A') || r.toLowerCase().includes('state: a') || r.toLowerCase().includes('disconnected')) {
+        return t('sessions.reason_unplugged') || 'Véhicule débranché';
+    }
+    if (r.includes('State: L') || r.toLowerCase().includes('unlocked') || r.toLowerCase().includes('unlatched')) {
+        return t('sessions.reason_unlatched') || 'Câble déverrouillé';
+    }
+    if (r.toLowerCase().includes('fault') || r.toLowerCase().includes('safety')) {
+        const match = r.match(/State:\s*([A-Za-z0-9_-]+)/i);
+        const codeSuffix = match ? ` (${match[1]})` : '';
+        return `${t('sessions.reason_fault') || 'Défaut borne'}${codeSuffix}`;
+    }
+    if (r.toLowerCase().includes('shutdown')) {
+        return t('sessions.reason_shutdown') || 'Arrêt liaison / service';
+    }
+    if (r.toLowerCase().includes('superseded')) {
+        return t('sessions.reason_superseded') || 'Nouvelle session détectée';
+    }
+    return r;
+}
+
+function formatPlugAndPhase(plugType, rawPhase) {
+    const plug = plugType || 'Type 2';
+    const lower = plug.toLowerCase();
+    if (lower.includes('domestique') || lower.includes('domestic') || lower.includes('schuko')) {
+        return `${plug} • 1-phase`;
+    }
+    const isTri = rawPhase && (rawPhase.includes('3') || rawPhase.toLowerCase().includes('tri'));
+    const phaseStr = isTri ? '3-phase' : '1-phase';
+    return `${plug} • ${phaseStr}`;
 }
 
 // ==============================================================================
@@ -97,7 +200,7 @@ function switchMainTab(tabName) {
 // ==============================================================================
 
 async function loadSessionsData(isDefaultSelectionRequested = false) {
-    if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
+    if (!window.canReadData || !window.canReadData()) return;
 
     try {
         const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
@@ -138,8 +241,7 @@ function updateSessionsDropdown(isDefaultSelectionRequested) {
         const act = sessionsCache.active_session;
         const opt = document.createElement('option');
         opt.value = 'active';
-        const prefix = t('sessions.active_prefix') || '⚡ [En cours]';
-        opt.innerText = `${prefix} ${act.start_time} — ${act.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(act.charging_duration_seconds)})`;
+        opt.innerText = `${act.start_time} — ${act.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(act.charging_duration_seconds, false)})`;
         select.appendChild(opt);
     }
 
@@ -148,7 +250,7 @@ function updateSessionsDropdown(isDefaultSelectionRequested) {
         const opt = document.createElement('option');
         opt.value = s.id;
         const sideBadge = (window.isDualStation && s.side) ? `[P${s.side}] ` : '';
-        opt.innerText = `📅 ${sideBadge}${s.start_time} — ${s.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(s.charging_duration_seconds)})`;
+        opt.innerText = `${sideBadge}${s.start_time} — ${s.total_energy_kwh.toFixed(2)} kWh (${formatSessionDuration(s.charging_duration_seconds, false)})`;
         select.appendChild(opt);
     });
 
@@ -181,10 +283,105 @@ function updateSessionsDropdown(isDefaultSelectionRequested) {
     }
 }
 
+function renderMetricCard() {
+    const act = (selectedSessionId === 'active') ? sessionsCache.active_session : null;
+    const savedList = sessionsCache.sessions || [];
+    const s = act || savedList.find(item => item.id === selectedSessionId);
+
+    const titleEl = document.getElementById('sessionMetricTitle');
+    const maxValEl = document.getElementById('sessionValMaxPower');
+    const avgValEl = document.getElementById('sessionValAvgPower');
+    const unitEl = document.getElementById('sessionValMetricUnit');
+    const valuesContainer = document.getElementById('sessionMetricValues');
+    const subLabelEl = document.getElementById('sessionValAvgPowerSub');
+
+    if (subLabelEl) {
+        subLabelEl.setAttribute('data-i18n', 'sessions.stat_max_avg');
+        subLabelEl.innerText = t('sessions.stat_max_avg') || 'Max / Moyenne';
+    }
+
+    if (!s) {
+        if (maxValEl) maxValEl.innerText = '--';
+        if (avgValEl) avgValEl.innerText = '--';
+        if (unitEl) unitEl.innerText = sessionMetricMode === 'current' ? 'A' : 'kW';
+        return;
+    }
+
+    if (sessionMetricMode === 'current') {
+        if (titleEl) {
+            titleEl.setAttribute('data-i18n', 'sessions.stat_current_max');
+            titleEl.innerText = t('sessions.stat_current_max') || 'Courant';
+        }
+        if (valuesContainer) {
+            valuesContainer.className = 'text-sm sm:text-base font-bold text-emerald-400 font-mono mt-1 flex items-baseline truncate';
+        }
+        const maxA = s.max_current_a != null ? s.max_current_a : 0;
+        const avgA = (s.avg_current_a != null && s.avg_current_a > 0) ? s.avg_current_a : 0;
+        if (maxValEl) maxValEl.innerText = maxA.toFixed(1);
+        if (avgValEl) avgValEl.innerText = avgA > 0 ? avgA.toFixed(1) : '--';
+        if (unitEl) unitEl.innerText = 'A';
+    } else {
+        // power mode
+        if (titleEl) {
+            titleEl.setAttribute('data-i18n', 'sessions.stat_power_max');
+            titleEl.innerText = t('sessions.stat_power_max') || 'Puissance';
+        }
+        if (valuesContainer) {
+            valuesContainer.className = 'text-sm sm:text-base font-bold text-sky-400 font-mono mt-1 flex items-baseline truncate';
+        }
+        const maxW = s.max_power_w != null ? s.max_power_w : 0;
+        const avgW = (s.avg_power_w != null && s.avg_power_w > 0) ? s.avg_power_w : 0;
+        if (maxValEl) maxValEl.innerText = (maxW / 1000).toFixed(2);
+        if (avgValEl) avgValEl.innerText = avgW > 0 ? (avgW / 1000).toFixed(2) : '--';
+        if (unitEl) unitEl.innerText = 'kW';
+    }
+}
+
+function setSessionMetricMode(mode) {
+    if (mode !== 'current' && mode !== 'power') mode = 'power';
+    sessionMetricMode = mode;
+    localStorage.setItem('greenup_session_metric_mode', mode);
+
+    const toggleKw = document.getElementById('toggleKwLabel');
+    const toggleAmps = document.getElementById('toggleAmpsLabel');
+    if (toggleKw) toggleKw.classList.toggle('active', mode === 'power');
+    if (toggleAmps) toggleAmps.classList.toggle('active', mode === 'current');
+
+    const btnKw = document.getElementById('btnChartModeKw');
+    const btnAmps = document.getElementById('btnChartModeAmps');
+    if (btnKw) btnKw.classList.toggle('active', mode === 'power');
+    if (btnAmps) btnAmps.classList.toggle('active', mode === 'current');
+
+    const chartTitle = document.getElementById('sessionChartTitle');
+    const chartDot = document.getElementById('sessionChartDot');
+    if (chartTitle) {
+        const key = mode === 'current' ? 'sessions.chart_current_curve' : 'sessions.chart_power_curve';
+        chartTitle.setAttribute('data-i18n', key);
+        chartTitle.innerText = t(key) || (mode === 'current' ? 'Courbe de courant' : 'Courbe de puissance');
+    }
+    if (chartDot) {
+        if (mode === 'current') {
+            chartDot.classList.remove('bg-sky-400');
+            chartDot.classList.add('bg-emerald-400');
+        } else {
+            chartDot.classList.remove('bg-emerald-400');
+            chartDot.classList.add('bg-sky-400');
+        }
+    }
+
+    renderMetricCard();
+    drawChart(currentChartPoints);
+}
+
 function renderEmptySessionView() {
     selectedSessionId = null;
     currentChartPoints = [];
+    currentSessionStartSeconds = null;
+    setElemText('sessionChartDate', '');
     resetDeleteButton();
+
+    const activeDot = document.getElementById('sessionActiveDot');
+    if (activeDot) activeDot.classList.add('hidden');
 
     const btnZip = document.getElementById('btnSessionDownloadZip');
     const btnDel = document.getElementById('btnSessionDelete');
@@ -195,8 +392,7 @@ function renderEmptySessionView() {
     setElemText('sessionValTotalDuration', '--');
     setElemText('sessionValEnergy', '--');
     setElemText('sessionValPhase', '--');
-    setElemText('sessionValMaxPower', '--');
-    setElemText('sessionValAvgPower', '--');
+    renderMetricCard();
     const reasonEl = document.getElementById('sessionValReason');
     if (reasonEl) {
         reasonEl.setAttribute('data-i18n', 'sessions.no_sessions');
@@ -212,6 +408,15 @@ function onSessionSelected(id) {
     selectedSessionId = id;
     resetDeleteButton();
 
+    const activeDot = document.getElementById('sessionActiveDot');
+    if (activeDot) {
+        if (id === 'active') {
+            activeDot.classList.remove('hidden');
+        } else {
+            activeDot.classList.add('hidden');
+        }
+    }
+
     const btnZip = document.getElementById('btnSessionDownloadZip');
     const btnDel = document.getElementById('btnSessionDelete');
 
@@ -219,20 +424,25 @@ function onSessionSelected(id) {
         const act = sessionsCache.active_session;
         if (!act) return;
 
+        updateSessionStartInfo(act.start_time, act.session_id);
+
         // Active session metrics
         setElemText('sessionValChargingDuration', formatSessionDuration(act.charging_duration_seconds));
         setElemText('sessionValTotalDuration', `Total: ${formatSessionDuration(act.elapsed_seconds)}`);
         setElemText('sessionValEnergy', `${act.total_energy_kwh.toFixed(2)} kWh`);
-        setElemText('sessionValPhase', act.phase || 'Mono');
-        setElemText('sessionValMaxPower', `${(act.max_power_w / 1000).toFixed(2)} kW`);
-        setElemText('sessionValAvgPower', `Max: ${act.max_current_a.toFixed(1)} A`);
+        setElemText('sessionValPhase', formatPlugAndPhase(act.plug_type, act.phase));
+
+        renderMetricCard();
+
         const reasonEl = document.getElementById('sessionValReason');
         if (reasonEl) {
             reasonEl.removeAttribute('data-i18n');
-            reasonEl.innerText = `${t('sessions.active_reason') || 'En cours'} (État ${act.state})`;
-            reasonEl.title = '';
+            reasonEl.innerText = formatSessionState(act.state, act.iec_state);
+            const iecPart = act.iec_state ? ` • IEC 61851: État ${act.iec_state}` : '';
+            reasonEl.title = `État Legrand: ${act.state}${iecPart}`;
         }
-        setElemText('sessionValEndTime', `Inst: ${(act.power_w / 1000).toFixed(2)} kW (${act.current_a.toFixed(1)} A)`);
+        // Supprime toute référence aux données instantanées
+        setElemText('sessionValEndTime', t('sessions.active_ongoing') || 'Session en cours');
 
         if (btnZip) btnZip.disabled = false;
         if (btnDel) {
@@ -247,19 +457,22 @@ function onSessionSelected(id) {
         const s = savedList.find(item => item.id === id);
         if (!s) return;
 
+        updateSessionStartInfo(s.start_time, s.id);
+
         setElemText('sessionValChargingDuration', formatSessionDuration(s.charging_duration_seconds));
         setElemText('sessionValTotalDuration', `Total: ${formatSessionDuration(s.total_duration_seconds)}`);
         setElemText('sessionValEnergy', `${s.total_energy_kwh.toFixed(2)} kWh`);
-        setElemText('sessionValPhase', s.phase || 'Mono');
-        setElemText('sessionValMaxPower', `${(s.max_power_w / 1000).toFixed(2)} kW`);
-        setElemText('sessionValAvgPower', `Moy: ${(s.avg_power_w / 1000).toFixed(2)} kW`);
+        setElemText('sessionValPhase', formatPlugAndPhase(s.plug_type, s.phase));
+
+        renderMetricCard();
+
         const reasonElem = document.getElementById('sessionValReason');
         if (reasonElem) {
             reasonElem.removeAttribute('data-i18n');
-            reasonElem.innerText = s.termination_reason || '--';
+            reasonElem.innerText = formatTerminationReason(s.termination_reason);
             reasonElem.title = s.termination_reason || '';
         }
-        setElemText('sessionValEndTime', s.end_time || '--');
+        setElemText('sessionValEndTime', s.end_time ? `Fin: ${s.end_time}` : '--');
 
         if (btnZip) btnZip.disabled = !s.has_csv && !s.has_txt;
         if (btnDel) {
@@ -282,7 +495,9 @@ function setElemText(id, text) {
 
 async function loadAndDisplayChart(sessionId) {
     const statusElem = document.getElementById('sessionChartStatus');
-    if (statusElem) statusElem.innerText = t('sessions.chart_loading') || 'Chargement...';
+    if (statusElem && currentChartPoints.length === 0) {
+        statusElem.innerText = t('sessions.chart_loading') || 'Chargement...';
+    }
 
     if (sessionCsvCache.has(sessionId)) {
         const cachedPoints = sessionCsvCache.get(sessionId);
@@ -293,11 +508,7 @@ async function loadAndDisplayChart(sessionId) {
     }
 
     try {
-        const res = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/export`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ format: 'csv' })
-        });
+        const res = await apiFetch(`/api/sessions/${encodeURIComponent(sessionId)}/export?format=csv`);
 
         if (!res.ok) {
             currentChartPoints = [];
@@ -329,11 +540,14 @@ function parseCsvPoints(csvText) {
     const lines = csvText.trim().split('\n');
     if (lines.length < 2) return [];
 
-    const headers = lines[0].split(',').map(h => h.trim());
-    const elapsedIdx = headers.indexOf('Elapsed_s');
-    const powerIdx = headers.indexOf('Power_W');
-    const currentIdx = headers.indexOf('Current_A');
-    const stateIdx = headers.indexOf('State');
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    let elapsedIdx = headers.indexOf('elapsed_s');
+    if (elapsedIdx === -1) elapsedIdx = headers.indexOf('elapsed');
+    let powerIdx = headers.indexOf('power_w');
+    if (powerIdx === -1) powerIdx = headers.indexOf('power');
+    let currentIdx = headers.indexOf('current_a');
+    if (currentIdx === -1) currentIdx = headers.indexOf('current');
+    let stateIdx = headers.indexOf('state');
 
     if (elapsedIdx === -1 || powerIdx === -1) return [];
 
@@ -359,7 +573,7 @@ function parseCsvPoints(csvText) {
 }
 
 // Native Canvas Drawing with High DPI & Hover interactions
-let chartCanvasGeometry = { width: 0, height: 0, padLeft: 42, padRight: 15, padTop: 18, padBottom: 26 };
+let chartCanvasGeometry = { width: 0, height: 0, padLeft: 42, padRight: 22, padTop: 18, padBottom: 26 };
 
 function resizeAndRedrawChart() {
     const canvas = document.getElementById('sessionChartCanvas');
@@ -403,16 +617,26 @@ function drawChart(points, hoverIndex = -1) {
     const plotH = Math.max(10, height - padTop - padBottom);
 
     const maxT = Math.max(points[points.length - 1].t, 60);
-    let maxKw = 0;
+    const isCurrentMode = sessionMetricMode === 'current';
+
+    let maxVal = 0;
     for (let p of points) {
-        if (p.kw > maxKw) maxKw = p.kw;
+        const val = isCurrentMode ? p.amps : p.kw;
+        if (val > maxVal) maxVal = val;
     }
-    // Round maxKw up to next pleasant step (e.g. 4.0, 7.5, 11.0, 22.0)
-    let yMax = Math.ceil(Math.max(maxKw * 1.15, 3.7));
+
+    let yMax;
+    if (isCurrentMode) {
+        yMax = Math.ceil(Math.max(maxVal * 1.15, 16));
+        if (yMax > 16 && yMax <= 32) yMax = 32;
+        else if (yMax > 32 && yMax <= 40) yMax = 40;
+    } else {
+        yMax = Math.ceil(Math.max(maxVal * 1.15, 3.7));
+    }
 
     // Coordinates mapping
     const getX = (t) => padLeft + (t / maxT) * plotW;
-    const getY = (kw) => padTop + plotH - (kw / yMax) * plotH;
+    const getY = (val) => padTop + plotH - (val / yMax) * plotH;
 
     // 1. Draw horizontal grid lines & Y labels (3 divisions)
     ctx.lineWidth = 1;
@@ -432,7 +656,8 @@ function drawChart(points, hoverIndex = -1) {
         ctx.stroke();
 
         ctx.fillStyle = '#64748b';
-        ctx.fillText(`${stepVal.toFixed(1)}k`, padLeft - 6, y);
+        const labelText = isCurrentMode ? `${Math.round(stepVal)} A` : `${stepVal.toFixed(1)}k`;
+        ctx.fillText(labelText, padLeft - 6, y);
     }
 
     // 2. Draw X axis time labels (4 intervals)
@@ -443,19 +668,26 @@ function drawChart(points, hoverIndex = -1) {
         const tVal = (maxT / xSteps) * i;
         const x = getX(tVal);
         ctx.fillStyle = '#64748b';
-        ctx.fillText(formatChartTimeLabel(tVal), x, height - padBottom + 6);
+        ctx.fillText(formatChartTimeLabel(tVal, maxT), x, height - padBottom + 6);
     }
 
     // 3. Draw gradient filled area under the curve
     const gradient = ctx.createLinearGradient(0, padTop, 0, padTop + plotH);
-    gradient.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
-    gradient.addColorStop(0.7, 'rgba(14, 165, 233, 0.15)');
-    gradient.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+    if (isCurrentMode) {
+        gradient.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
+        gradient.addColorStop(0.7, 'rgba(52, 211, 153, 0.15)');
+        gradient.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+    } else {
+        gradient.addColorStop(0, 'rgba(14, 165, 233, 0.35)');
+        gradient.addColorStop(0.7, 'rgba(56, 189, 248, 0.15)');
+        gradient.addColorStop(1, 'rgba(15, 23, 42, 0.0)');
+    }
 
     ctx.beginPath();
     ctx.moveTo(getX(points[0].t), getY(0));
     for (let i = 0; i < points.length; i++) {
-        ctx.lineTo(getX(points[i].t), getY(points[i].kw));
+        const val = isCurrentMode ? points[i].amps : points[i].kw;
+        ctx.lineTo(getX(points[i].t), getY(val));
     }
     ctx.lineTo(getX(points[points.length - 1].t), getY(0));
     ctx.closePath();
@@ -464,13 +696,13 @@ function drawChart(points, hoverIndex = -1) {
 
     // 4. Draw curve line
     ctx.beginPath();
-    ctx.strokeStyle = '#10b981';
+    ctx.strokeStyle = isCurrentMode ? '#10b981' : '#0ea5e9';
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     for (let i = 0; i < points.length; i++) {
         const x = getX(points[i].t);
-        const y = getY(points[i].kw);
+        const y = getY(isCurrentMode ? points[i].amps : points[i].kw);
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
     }
@@ -480,11 +712,11 @@ function drawChart(points, hoverIndex = -1) {
     if (hoverIndex >= 0 && hoverIndex < points.length) {
         const p = points[hoverIndex];
         const hx = getX(p.t);
-        const hy = getY(p.kw);
+        const hy = getY(isCurrentMode ? p.amps : p.kw);
 
         // Vertical dashed line
         ctx.setLineDash([3, 3]);
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+        ctx.strokeStyle = isCurrentMode ? 'rgba(52, 211, 153, 0.8)' : 'rgba(56, 189, 248, 0.8)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(hx, padTop);
@@ -495,13 +727,13 @@ function drawChart(points, hoverIndex = -1) {
         // Outer glow
         ctx.beginPath();
         ctx.arc(hx, hy, 6, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+        ctx.fillStyle = isCurrentMode ? 'rgba(16, 185, 129, 0.35)' : 'rgba(14, 165, 233, 0.35)';
         ctx.fill();
 
         // Inner solid point
         ctx.beginPath();
         ctx.arc(hx, hy, 3.5, 0, Math.PI * 2);
-        ctx.fillStyle = '#38bdf8';
+        ctx.fillStyle = isCurrentMode ? '#34d399' : '#38bdf8';
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
@@ -548,12 +780,22 @@ function setupChartInteractions() {
         drawChart(currentChartPoints, closestIdx);
 
         if (tooltip) {
-            const timeStr = formatSessionDuration(p.t);
-            const stateStr = p.state ? ` • État ${p.state}` : '';
-            tooltip.innerHTML = `
-                <div class="font-bold text-sky-400 font-mono">${p.kw.toFixed(2)} kW <span class="text-slate-300 font-normal">(${p.amps.toFixed(1)} A)</span></div>
-                <div class="text-[9px] text-slate-400 font-mono mt-0.5">${timeStr}${stateStr}</div>
-            `;
+            const timeStr = currentSessionStartSeconds != null
+                ? `${formatChartTimeLabel(p.t, null, true)} (+${formatSessionDuration(p.t, false)})`
+                : formatSessionDuration(p.t);
+            const stateLabel = p.state ? formatSessionState(p.state) : '';
+            const stateStr = stateLabel ? ` • ${stateLabel}` : '';
+            if (sessionMetricMode === 'current') {
+                tooltip.innerHTML = `
+                    <div class="font-bold text-emerald-400 font-mono">${p.amps.toFixed(1)} A <span class="text-slate-300 font-normal">(${p.kw.toFixed(2)} kW)</span></div>
+                    <div class="text-[9px] text-slate-400 font-mono mt-0.5">${timeStr}${stateStr}</div>
+                `;
+            } else {
+                tooltip.innerHTML = `
+                    <div class="font-bold text-sky-400 font-mono">${p.kw.toFixed(2)} kW <span class="text-slate-300 font-normal">(${p.amps.toFixed(1)} A)</span></div>
+                    <div class="text-[9px] text-slate-400 font-mono mt-0.5">${timeStr}${stateStr}</div>
+                `;
+            }
             tooltip.style.display = 'block';
             tooltip.style.left = `${mouseX}px`;
             tooltip.style.top = `${mouseY}px`;
@@ -581,6 +823,10 @@ function setupChartInteractions() {
 // ==============================================================================
 
 async function downloadSelectedSessionZip() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     if (!selectedSessionId) return;
 
     const actualId = (selectedSessionId === 'active')
@@ -598,11 +844,7 @@ async function downloadSelectedSessionZip() {
         if (iconSpinner) iconSpinner.classList.remove('hidden');
         if (btnZip) btnZip.disabled = true;
 
-        const res = await apiFetch(`/api/sessions/${encodeURIComponent(actualId)}/export`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ format: 'zip' })
-        });
+        const res = await apiFetch(`/api/sessions/${encodeURIComponent(actualId)}/export?format=zip`);
 
         if (!res.ok) {
             let errMsg = 'Export failed';
@@ -653,6 +895,10 @@ function resetDeleteButton() {
 }
 
 async function handleDeleteSessionClick() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
     if (!selectedSessionId || selectedSessionId === 'active') return;
 
     const btnDel = document.getElementById('btnSessionDelete');
@@ -733,6 +979,29 @@ function initSessions() {
         const btnDel = document.getElementById('btnSessionDelete');
         if (btnDel) btnDel.addEventListener('click', handleDeleteSessionClick);
 
+        // Metric unit toggles (kW / A)
+        const btnToggleMetric = document.getElementById('btnSessionMetricToggle');
+        if (btnToggleMetric) {
+            btnToggleMetric.addEventListener('click', () => {
+                const nextMode = (sessionMetricMode === 'power') ? 'current' : 'power';
+                setSessionMetricMode(nextMode);
+            });
+        }
+
+        const btnChartKw = document.getElementById('btnChartModeKw');
+        if (btnChartKw) {
+            btnChartKw.addEventListener('click', () => {
+                setSessionMetricMode('power');
+            });
+        }
+
+        const btnChartAmps = document.getElementById('btnChartModeAmps');
+        if (btnChartAmps) {
+            btnChartAmps.addEventListener('click', () => {
+                setSessionMetricMode('current');
+            });
+        }
+
         // Chart interactions & resize
         setupChartInteractions();
         window.addEventListener('resize', () => {
@@ -743,10 +1012,14 @@ function initSessions() {
         });
     }
 
+    // Apply stored metric mode (power / current)
+    setSessionMetricMode(sessionMetricMode);
+
     // Check stored active tab
     const savedTab = localStorage.getItem('greenup_active_tab') || 'board';
     switchMainTab(savedTab);
 }
 
-// Expose updateSessionsDropdown to global scope so i18n can trigger re-renders on language changes
+// Expose updateSessionsDropdown and setSessionMetricMode to global scope
 window.updateSessionsDropdown = updateSessionsDropdown;
+window.setSessionMetricMode = setSessionMetricMode;
