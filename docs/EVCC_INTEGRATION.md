@@ -57,53 +57,60 @@ chargers:
     status:
       source: http
       uri: http://<GREENUP_IP>:8080/api/status
-      # Uncomment headers if api_token is enabled in greenup.toml:
+      jq: .iec
+      timeout: 10s
       # headers:
       #   - Authorization: Bearer <YOUR_API_TOKEN>
-      jq: .iec
-      timeout: 5s
       
     # 2. Real-time Power (Watts)
     power:
       source: http
       uri: http://<GREENUP_IP>:8080/api/meter
+      jq: .power_w
+      timeout: 10s
       # headers:
       #   - Authorization: Bearer <YOUR_API_TOKEN>
-      jq: .power_w
-      timeout: 5s
       
     # 3. Session Energy (kWh)
     energy:
       source: http
       uri: http://<GREENUP_IP>:8080/api/meter
+      jq: .energy_kwh
+      timeout: 10s
       # headers:
       #   - Authorization: Bearer <YOUR_API_TOKEN>
-      jq: .energy_kwh
-      timeout: 5s
       
     # 4. Charger Enable State
     # Combines charge_authorized and !charge_paused directly in the API
     enabled:
       source: http
       uri: http://<GREENUP_IP>:8080/api/connectors/1
+      jq: .control.charge_authorized
+      timeout: 10s
       # headers:
       #   - Authorization: Bearer <YOUR_API_TOKEN>
-      jq: .control.charge_authorized
-      timeout: 5s
       
     # 5. Start / Stop Action
-    # Script setter with JSON body. EVCC replaces ${enable} with true/false
-    # (If api_token is enabled, add: -H 'Authorization: Bearer <YOUR_API_TOKEN>')
+    # Pure HTTP POST with JSON body. EVCC replaces {{if .enable}} with enable or disable
     enable:
-      source: script
-      cmd: /bin/sh -c "if [ '${enable}' = 'true' ]; then curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"enable\"}' http://<GREENUP_IP>:8080/api/charge; else curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"disable\"}' http://<GREENUP_IP>:8080/api/charge; fi"
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/charge
+      method: POST
+      headers:
+        - Content-Type: application/json
+        # - Authorization: Bearer <YOUR_API_TOKEN>
+      body: '{"action": "{{if .enable}}enable{{else}}disable{{end}}"}'
+      timeout: 10s
       
     # 6. Current Limiting Action (Amps)
-    # Allows EVCC to modulate charging power (e.g., for solar surplus matching)
-    # (If api_token is enabled, add: -H 'Authorization: Bearer <YOUR_API_TOKEN>')
+    # EVCC replaces {{.maxcurrent}} dynamically with the integer target (6 to 32A)
     maxcurrent:
-      source: script
-      cmd: curl -s -X POST http://<GREENUP_IP>:8080/api/current/${maxcurrent}
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/current/{{.maxcurrent}}
+      method: POST
+      timeout: 10s
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
 ```
 
 ### 3.2 Dual Charge Point Configuration (2 Independent Loadpoints)
@@ -119,28 +126,46 @@ chargers:
       source: http
       uri: http://<GREENUP_IP>:8080/api/connectors/1/status
       jq: .iec
-      timeout: 5s
+      timeout: 10s
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
     power:
       source: http
       uri: http://<GREENUP_IP>:8080/api/connectors/1/meter
       jq: .power_w
-      timeout: 5s
+      timeout: 10s
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
     energy:
       source: http
       uri: http://<GREENUP_IP>:8080/api/connectors/1/meter
       jq: .energy_kwh
-      timeout: 5s
+      timeout: 10s
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
     enabled:
       source: http
       uri: http://<GREENUP_IP>:8080/api/connectors/1
       jq: .control.charge_authorized
-      timeout: 5s
+      timeout: 10s
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
     enable:
-      source: script
-      cmd: /bin/sh -c "if [ '${enable}' = 'true' ]; then curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"enable\"}' 'http://<GREENUP_IP>:8080/api/charge?side=1'; else curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"disable\"}' 'http://<GREENUP_IP>:8080/api/charge?side=1'; fi"
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/charge?side=1
+      method: POST
+      headers:
+        - Content-Type: application/json
+        # - Authorization: Bearer <YOUR_API_TOKEN>
+      body: '{"action": "{{if .enable}}enable{{else}}disable{{end}}"}'
+      timeout: 10s
     maxcurrent:
-      source: script
-      cmd: curl -s -X POST "http://<GREENUP_IP>:8080/api/current/${maxcurrent}?side=1"
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/current/{{.maxcurrent}}?side=1
+      method: POST
+      timeout: 10s
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
 
   # Charge Point 2 (Left / Côté Gauche)
   - name: greenup_point2
@@ -149,68 +174,190 @@ chargers:
       source: http
       uri: http://<GREENUP_IP>:8080/api/connectors/2/status
       jq: .iec
-      timeout: 5s
+      timeout: 10s
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
     power:
       source: http
       uri: http://<GREENUP_IP>:8080/api/connectors/2/meter
       jq: .power_w
-      timeout: 5s
+      timeout: 10s
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
     energy:
       source: http
       uri: http://<GREENUP_IP>:8080/api/connectors/2/meter
       jq: .energy_kwh
-      timeout: 5s
+      timeout: 10s
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
     enabled:
       source: http
       uri: http://<GREENUP_IP>:8080/api/connectors/2
       jq: .control.charge_authorized
-      timeout: 5s
+      timeout: 10s
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
     enable:
-      source: script
-      cmd: /bin/sh -c "if [ '${enable}' = 'true' ]; then curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"enable\"}' 'http://<GREENUP_IP>:8080/api/charge?side=2'; else curl -s -X POST -H 'Content-Type: application/json' -d '{\"action\":\"disable\"}' 'http://<GREENUP_IP>:8080/api/charge?side=2'; fi"
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/charge?side=2
+      method: POST
+      headers:
+        - Content-Type: application/json
+        # - Authorization: Bearer <YOUR_API_TOKEN>
+      body: '{"action": "{{if .enable}}enable{{else}}disable{{end}}"}'
+      timeout: 10s
     maxcurrent:
-      source: script
-      cmd: curl -s -X POST "http://<GREENUP_IP>:8080/api/current/${maxcurrent}?side=2"
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/current/{{.maxcurrent}}?side=2
+      method: POST
+      timeout: 10s
+      # headers:
+      #   - Authorization: Bearer <YOUR_API_TOKEN>
 
 loadpoints:
   - title: Garage Point 1 (Right)
     charger: greenup_point1
     mode: pv
-    mincurrent: 7
+    mincurrent: 7   # Legrand Green'up hardware minimum (7A)
     maxcurrent: 32
 
   - title: Garage Point 2 (Left)
     charger: greenup_point2
     mode: pv
-    mincurrent: 7
+    mincurrent: 7   # Legrand Green'up hardware minimum (7A)
     maxcurrent: 32
 ```
 
-### 3.3 Full Minimal Example (Single Charger)
+### 3.3 Off-Peak / Peak Tariffs Configuration (Optional)
 
-To make EVCC work, you must link the charger to a `loadpoint` and a `site`. Here is a complete minimal `evcc.yaml`:
+If your electricity contract includes Off-Peak / Peak hours (Heures Creuses / Heures Pleines), you can define a time-of-use grid tariff under `tariffs`.
+
+> **Note on Midnight Crossing:** EVCC evaluates daily schedules sequentially. Time spans that cross midnight must be split around `0` (e.g. `22-0` for evening and `0-6` for morning). Do not use `24`.
+
+```yaml
+tariffs:
+  currency: EUR
+  grid:
+    type: fixed
+    price: 0.2516 # Peak Hours price per kWh (Heures Pleines)
+    zones:
+      # Evening off-peak segment (e.g., 22:00 to midnight)
+      - hours: 22-0
+        price: 0.1758 # Off-Peak price per kWh (Heures Creuses)
+      # Morning off-peak segment (e.g., midnight to 06:00)
+      - hours: 0-6
+        price: 0.1758
+```
+
+**How to charge automatically during Off-Peak hours:**
+1. Set the charger mode to **`pv`** (Solar / Smart mode) in the EVCC Web UI.
+2. In the charger settings, set the **Price Limit** (Smart Grid threshold) to your Off-Peak rate (e.g. `0.18 €`).
+3. During the day, the charger will only charge if solar surplus is available. At 22:00, the grid rate drops below your threshold, triggering automatic night charging until 06:00.
+
+### 3.4 MQTT-based Configuration
+
+When MQTT is enabled in Green'up Link (`[mqtt]` in `greenup.toml`), you can pilot your charger using native MQTT without running local HTTP requests:
+
+```yaml
+chargers:
+  - name: greenup_mqtt
+    type: custom
+
+    # 1. IEC Operating State (A, B, C, E, F)
+    status:
+      source: mqtt
+      topic: greenup/connector/1/status/state
+
+    # 2. Real-time Power (Watts)
+    power:
+      source: mqtt
+      topic: greenup/connector/1/meter/active_power_w
+
+    # 3. Total Energy (kWh)
+    energy:
+      source: mqtt
+      topic: greenup/connector/1/meter/energy_total_kwh
+
+    # 4. Charger Enable State
+    enabled:
+      source: mqtt
+      topic: greenup/connector/1/control/charge
+      jq: . == "ON"
+
+    # 5. Enable / Disable Command
+    enable:
+      source: mqtt
+      topic: greenup/connector/1/control/charge/set
+      payload: ${enable:ON:OFF}
+
+    # 6. Dynamic Current Regulation (Amperes)
+    maxcurrent:
+      source: mqtt
+      topic: greenup/connector/1/control/setpoint_amps/set
+```
+
+For full MQTT topic reference and Home Assistant discovery, see [GREENUP_LINK_MQTT.md](GREENUP_LINK_MQTT.md).
+
+### 3.5 Full Minimal Example (Single Charger)
+
+To make EVCC work, you must link the charger to a `loadpoint` and a `site`. Here is a complete minimal `/etc/evcc.yaml`:
 
 ```yaml
 network:
   schema: http
   port: 7070
 
+# Replace with your actual grid meter (Shelly, Enphase, Teleinfo / Linky...)
 meters:
   - name: my_grid
     type: template
-    template: dummy # REPLACE with your actual grid meter (Shelly, Enphase, Teleinfo...)
+    template: dummy
     usage: grid
 
 chargers:
   - name: greenup
-    # ... (paste the custom block from above here) ...
+    type: custom
+    status:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/status
+      jq: .iec
+      timeout: 10s
+    power:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/meter
+      jq: .power_w
+      timeout: 10s
+    energy:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/meter
+      jq: .energy_kwh
+      timeout: 10s
+    enabled:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/connectors/1
+      jq: .control.charge_authorized
+      timeout: 10s
+    enable:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/charge
+      method: POST
+      headers:
+        - Content-Type: application/json
+      body: '{"action": "{{if .enable}}enable{{else}}disable{{end}}"}'
+      timeout: 10s
+    maxcurrent:
+      source: http
+      uri: http://<GREENUP_IP>:8080/api/current/{{.maxcurrent}}
+      method: POST
+      timeout: 10s
 
 loadpoints:
   - title: Garage
     charger: greenup
-    mode: pv        # 'pv' (solar surplus), 'now' (fast charge), or 'minpv'
-    mincurrent: 7   # Minimum 8A for most EVs
-    maxcurrent: 32  # Maximum 32A
+    mode: pv        # 'pv' (solar / smart price), 'now' (fast charge), or 'minpv'
+    mincurrent: 7   # Minimum 7A for Legrand Green'up (hardware threshold)
+    maxcurrent: 32  # Maximum 32A (7.4 kW monophase / 22 kW triphase)
 
 site:
   title: My Home

@@ -257,6 +257,7 @@ The ATmega2560 continuously broadcasts asynchronous notifications on `TX1` regar
 | Frame (RX) | Transmission Trigger | Explanation |
 | :--- | :--- | :--- |
 | `RaspberryPi?` | System Boot | Broadcast periodically at power-on to probe for supervisor readiness. |
+| `Start` | System Boot / Front Trigger | Emitted spontaneously by ATmega upon startup/wake-up or when the front button / charge start trigger is engaged. |
 | `State:<A..Z>` | State Transition | Emitted immediately whenever the charging state machine transitions (e.g., `State:B`, `State:C`). |
 | `CCI:<amps>` | During Active Charge | Broadcast periodically while charging to report actual RMS current drawn across the active phases. |
 | `E:<0000..0015>` | Error Event / Boot | Emitted upon boot (`E:0000`) and whenever a hardware fault occurs or clears. |

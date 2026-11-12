@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Green'Up Link</title>
-    <link rel="icon" href="/favicon.ico?v=5">
-    <link rel="stylesheet" href="/css/style.css?v=5">
+    <link rel="icon" href="/favicon.ico?v=7">
+    <link rel="stylesheet" href="/css/style.css?v=7">
 </head>
 <body class="min-h-screen flex flex-col p-4 md:p-8 selection:bg-sky-500/30">
 
@@ -232,7 +232,7 @@
                 <!-- Energy -->
                 <div class="session-stat-card">
                     <span class="session-stat-header text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center">
-                        <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        <svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h13a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V9a2 2 0 012-2zm15 4h1a1 1 0 011 1v2a1 1 0 01-1 1h-1v-4z"/></svg>
                         <span data-i18n="sessions.stat_energy">Énergie</span>
                     </span>
                     <span id="sessionValEnergy" class="text-sm sm:text-base font-bold text-sky-400 font-mono mt-1">--</span>
@@ -271,18 +271,18 @@
             <!-- Chart Container -->
             <div class="session-chart-wrap">
                 <!-- Header inside chart container -->
-                <div class="flex items-center justify-between px-3 pt-2 pb-2 mb-1 border-b border-slate-900/80">
-                    <span class="session-chart-header text-[10px] uppercase font-bold text-slate-400 tracking-wider flex items-center">
+                <div class="session-chart-header-row flex items-center justify-between px-3 pt-2 pb-2 mb-1 border-b border-slate-900/80 gap-1.5 sm:gap-2">
+                    <span class="session-chart-header uppercase font-bold text-slate-400 tracking-wider flex items-center">
                         <span id="sessionChartDot" class="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block transition-colors"></span>
                         <span id="sessionChartTitle" data-i18n="sessions.chart_power_curve">Courbe de puissance</span>
                     </span>
-                    <span id="sessionChartDate" class="text-[11px] font-mono font-medium text-slate-400 tracking-wide"></span>
-                    <div class="flex items-center gap-2">
+                    <span id="sessionChartDate" class="session-chart-date font-mono font-medium text-slate-400 tracking-wide"></span>
+                    <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
                         <div class="session-chart-pill">
                             <button id="btnChartModeKw" type="button" class="chart-pill-btn active">kW</button>
                             <button id="btnChartModeAmps" type="button" class="chart-pill-btn">A</button>
                         </div>
-                        <span id="sessionChartStatus" class="text-[10px] font-mono text-slate-500"></span>
+                        <span id="sessionChartStatus" class="session-chart-status font-mono text-slate-500"></span>
                     </div>
                 </div>
 
@@ -604,7 +604,7 @@
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-center relative overflow-hidden group">
                 <div class="absolute inset-0 bg-sky-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2 relative z-10">
-                    <svg class="w-4 h-4 text-sky-500/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
+                    <svg class="w-4 h-4 text-sky-500/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
                     <span data-i18n="telemetry.power">Puissance</span>
                 </div>
                 <div class="flex items-baseline space-x-1 relative z-10">
@@ -616,7 +616,7 @@
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col justify-center relative overflow-hidden group">
                 <div class="absolute inset-0 bg-sky-500/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                 <div class="text-slate-500 text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-2 relative z-10">
-                    <svg class="w-4 h-4 text-sky-500/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <svg class="w-4 h-4 text-sky-500/70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h13a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V9a2 2 0 012-2zm15 4h1a1 1 0 011 1v2a1 1 0 01-1 1h-1v-4z"></path></svg>
                     <span data-i18n="telemetry.energy">Énergie</span>
                 </div>
                 <div class="flex items-baseline space-x-1 relative z-10">
@@ -642,11 +642,11 @@
                     <div class="flex justify-between items-end mb-4">
                         <label id="lblSliderTitle" class="text-xs font-bold text-slate-400 uppercase tracking-wide transition-colors" data-i18n="controls.current_limit">Consigne de Courant</label>
                         <div class="flex items-center gap-2">
-                            <div id="boxAppliedValue" class="bg-emerald-500/15 px-2.5 py-1 rounded border border-emerald-500/30 transition-all duration-300 cursor-help" title="Consigne réellement appliquée par la borne (CC)">
-                                <span id="lblAppliedLimit" class="font-bold text-emerald-400 font-mono text-sm transition-colors">16 A</span>
+                            <div id="boxAppliedValue" class="limit-badge-applied state-equal" title="Consigne réellement appliquée par la borne (CC)" data-i18n-title="controls.applied_limit_tooltip">
+                                <span id="lblAppliedLimit">16 A</span>
                             </div>
-                            <div id="boxSliderValue" class="bg-sky-500/10 px-3 py-1 rounded border border-sky-500/20 transition-all duration-300">
-                                <span id="lblSlider" class="font-bold text-sky-400 font-mono text-sm transition-colors">16 A</span>
+                            <div id="boxSliderValue" class="limit-badge-slider">
+                                <span id="lblSlider">16 A</span>
                             </div>
                         </div>
                     </div>
@@ -714,15 +714,15 @@
     </div>
 </div>
 
-<script src="/js/dom.js?v=5"></script>
-<script src="/js/i18n.js?v=5"></script>
-<script src="/js/linky.js?v=5"></script>
-<script src="/js/controls.js?v=5"></script>
-<script src="/js/visuals.js?v=5"></script>
-<script src="/js/api.js?v=5"></script>
-<script src="/js/console.js?v=5"></script>
-<script src="/js/sessions.js?v=5"></script>
-<script src="/js/config.js?v=5"></script>
-<script src="/js/main.js?v=5"></script>
+<script src="/js/dom.js?v=7"></script>
+<script src="/js/i18n.js?v=7"></script>
+<script src="/js/linky.js?v=7"></script>
+<script src="/js/controls.js?v=7"></script>
+<script src="/js/visuals.js?v=7"></script>
+<script src="/js/api.js?v=7"></script>
+<script src="/js/console.js?v=7"></script>
+<script src="/js/sessions.js?v=7"></script>
+<script src="/js/config.js?v=7"></script>
+<script src="/js/main.js?v=7"></script>
 </body>
 </html>

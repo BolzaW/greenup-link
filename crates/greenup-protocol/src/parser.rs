@@ -12,6 +12,8 @@ pub enum ProtocolEvent {
     Ping,
     /// `pong` – Response to `ping`.
     Pong,
+    /// `Start` – Spontaneous boot or front-panel charge trigger event.
+    Start,
     /// `KitCom:0` / `KitCom:1` – Supervisor presence flag in ATmega SRAM.
     KitCom(bool),
     /// `Initialized:0` / `Initialized:1` – Boot autotests completion state.
@@ -194,6 +196,9 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
     }
     if trimmed == "pong" {
         return ProtocolEvent::Pong;
+    }
+    if trimmed == "Start" {
+        return ProtocolEvent::Start;
     }
     if let Some(val) = trimmed.strip_prefix("KitCom:") {
         if let Some(b) = parse_bool_01(val) {
@@ -538,6 +543,8 @@ mod tests {
     fn parses_identity_and_boot_frames() {
         assert_eq!(parse_line("RaspberryPi?"), ProtocolEvent::Ping);
         assert_eq!(parse_line("pong\r"), ProtocolEvent::Pong);
+        assert_eq!(parse_line("Start"), ProtocolEvent::Start);
+        assert_eq!(parse_line("Start\r\n"), ProtocolEvent::Start);
         assert_eq!(parse_line("KitCom:1"), ProtocolEvent::KitCom(true));
         assert_eq!(parse_line("KitCom:0"), ProtocolEvent::KitCom(false));
         assert_eq!(parse_line("Initialized:1"), ProtocolEvent::Initialized(true));

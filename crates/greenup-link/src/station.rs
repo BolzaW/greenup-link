@@ -371,7 +371,7 @@ impl AppState {
         if should_auto_start_tic {
             match check_tic_eligibility(self) {
                 Ok(()) => {
-                    logger::log(
+                    logger::debug(
                         "SERIAL",
                         "🚀 Starting automatic TIC detection after init sequence (Hardware compatible & State:A)",
                     );
@@ -550,7 +550,6 @@ impl StationManager {
         self: &Arc<Self>,
         configured_port1: Option<String>,
         configured_port2: Option<String>,
-        baud_rate: u32,
         watchdog_timeout_secs: u64,
         link_version: String,
     ) {
@@ -584,7 +583,7 @@ impl StationManager {
                                 sniffer_mode,
                                 SerialOptions {
                                     port: port2_target,
-                                    baud_rate,
+                                    baud_rate: greenup_driver::ATMEGA_BAUD_RATE,
                                     timeout_ms: 100,
                                     watchdog_timeout_secs,
                                 },
@@ -655,6 +654,16 @@ impl StationManager {
         } else {
             self.point1.clone()
         }
+    }
+
+    /// Returns whether the low-level hardware initialization sequence has completed on Point 1.
+    pub fn is_init_completed(&self) -> bool {
+        self.point1.driver.get_snapshot().usb.init_completed
+    }
+
+    /// Returns the current USB connection status of Point 1.
+    pub fn usb_status(&self) -> greenup_driver::SerialStatus {
+        self.point1.driver.get_snapshot().usb.status
     }
 
     /// Returns the raw low-level JSON snapshot (`AtmegaRawState` + `UsbLinkState`) for all active USB ports.

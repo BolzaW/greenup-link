@@ -38,6 +38,11 @@ log_dir = "logs"
 # Default: "sessions" (or "/var/lib/greenup-link/sessions")
 sessions_dir = "sessions"
 
+# Logging verbosity level:
+# Options: "ERROR", "WARN", "INFO", "DEBUG", "TRACE"
+# Default: "INFO"
+log_level = "INFO"
+
 [serial]
 # Dual charge point mode:
 # - "auto"  : Automatically detects 1 or 2 charge points based on the station hardware reference (Default)
@@ -50,10 +55,6 @@ dual_point = "auto"
 # port = "/dev/ttyUSB0"
 # port2 = "/dev/ttyUSB1"
 
-# Baud rate for communication with the ATmega2560 board.
-# Default: 115200
-baud_rate = 115200
-
 # Silence timeout before alerting on loss of communication (seconds).
 # Default: 60
 watchdog_timeout_secs = 60
@@ -63,6 +64,29 @@ watchdog_timeout_secs = 60
 # - false : (Default) Active supervision — manages charging and communicates with the ATmega board.
 # - true  : Sniffer mode — passive RX-only monitoring, zero TX commands are ever sent to the ATmega.
 sniffer_mode = false
+
+[mqtt]
+# Enable or disable the MQTT client:
+# - false : (Default) MQTT client is not started.
+# - true  : Green'up Link connects to the MQTT broker, publishes telemetry, and listens for commands.
+enabled = false
+
+# MQTT broker host and port (e.g. Mosquitto, Home Assistant broker).
+# Default: "127.0.0.1:1883"
+broker = "127.0.0.1:1883"
+
+# Optional MQTT username.
+# When set (or when api_token is configured under [http]), greenup-link authenticates
+# using `username` (defaults to "greenup-link" if empty) and `http.api_token` as password.
+username = ""
+
+# Base MQTT topic prefix.
+# Default: "greenup"
+base_topic = "greenup"
+
+# Publish Home Assistant MQTT Auto-Discovery payloads (`homeassistant/.../config`).
+# Default: true
+ha_discovery = true
 "#;
 
 #[derive(Debug, Clone)]
@@ -86,6 +110,7 @@ impl Default for HttpConfig {
 pub struct StorageConfig {
     pub log_dir: String,
     pub sessions_dir: String,
+    pub log_level: Option<String>,
 }
 
 impl Default for StorageConfig {
@@ -93,6 +118,7 @@ impl Default for StorageConfig {
         Self {
             log_dir: "logs".to_string(),
             sessions_dir: "sessions".to_string(),
+            log_level: None,
         }
     }
 }
@@ -126,7 +152,6 @@ pub struct SerialConfig {
     pub dual_point: DualPointMode,
     pub port: Option<String>,
     pub port2: Option<String>,
-    pub baud_rate: u32,
     pub watchdog_timeout_secs: u64,
 }
 
@@ -136,7 +161,6 @@ impl Default for SerialConfig {
             dual_point: DualPointMode::Auto,
             port: None,
             port2: None,
-            baud_rate: 115_200,
             watchdog_timeout_secs: 60,
         }
     }
@@ -147,12 +171,37 @@ pub struct StationConfig {
     pub sniffer_mode: bool,
 }
 
+#[derive(Debug, Clone)]
+pub struct MqttConfig {
+    pub enabled: bool,
+    pub broker: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub base_topic: String,
+    pub ha_discovery: bool,
+}
+
+impl Default for MqttConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            broker: "127.0.0.1:1883".to_string(),
+            username: None,
+            password: None,
+            base_topic: "greenup".to_string(),
+            ha_discovery: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct AppConfig {
     pub http: HttpConfig,
     pub storage: StorageConfig,
     pub serial: SerialConfig,
     pub station: StationConfig,
+    pub mqtt: MqttConfig,
+    pub config_path: String,
 }
 
 impl AppConfig {
@@ -173,10 +222,7 @@ impl AppConfig {
 
         let mut config = if path.exists() {
             match fs::read_to_string(path) {
-                Ok(content) => {
-                    logger::log("SYS", &format!("📄 Configuration loaded from '{}'", config_path));
-                    Self::parse_toml(&content)
-                }
+                Ok(content) => Self::parse_toml(&content),
                 Err(err) => {
                     logger::log(
                         "SYS",
@@ -197,6 +243,8 @@ impl AppConfig {
             }
             Self::default()
         };
+
+        config.config_path = config_path;
 
         // Environment variable override (API token only, for security/secrets injection)
         if let Ok(env_token) = env::var("GREENUP_API_TOKEN") {
@@ -255,7 +303,7 @@ impl AppConfig {
                         }
                         _ => {}
                     }
-                } else if current_section == "storage" {
+                } else if current_section == "storage" || current_section == "logging" {
                     match key.as_str() {
                         "log_dir" => {
                             if !val.is_empty() {
@@ -265,6 +313,12 @@ impl AppConfig {
                         "sessions_dir" => {
                             if !val.is_empty() {
                                 config.storage.sessions_dir = val;
+                            }
+                        }
+                        "log_level" | "level" => {
+                            let trimmed = val.trim();
+                            if !trimmed.is_empty() {
+                                config.storage.log_level = Some(trimmed.to_string());
                             }
                         }
                         _ => {}
@@ -294,11 +348,6 @@ impl AppConfig {
                                 config.serial.port2 = Some(trimmed.to_string());
                             }
                         }
-                        "baud_rate" => {
-                            if let Ok(b) = val.parse::<u32>() {
-                                config.serial.baud_rate = b;
-                            }
-                        }
                         "watchdog_timeout_secs" => {
                             if let Ok(w) = val.parse::<u64>() {
                                 config.serial.watchdog_timeout_secs = w;
@@ -313,6 +362,52 @@ impl AppConfig {
                             "false" | "0" | "no" => config.station.sniffer_mode = false,
                             _ => {}
                         }
+                    }
+                } else if current_section == "mqtt" {
+                    match key.as_str() {
+                        "enabled" => {
+                            match val.trim().to_lowercase().as_str() {
+                                "true" | "1" | "yes" => config.mqtt.enabled = true,
+                                "false" | "0" | "no" => config.mqtt.enabled = false,
+                                _ => {}
+                            }
+                        }
+                        "broker" => {
+                            let trimmed = val.trim();
+                            if !trimmed.is_empty() {
+                                config.mqtt.broker = trimmed.to_string();
+                            }
+                        }
+                        "username" => {
+                            let trimmed = val.trim();
+                            if trimmed.is_empty() {
+                                config.mqtt.username = None;
+                            } else {
+                                config.mqtt.username = Some(trimmed.to_string());
+                            }
+                        }
+                        "password" => {
+                            let trimmed = val.trim();
+                            if trimmed.is_empty() {
+                                config.mqtt.password = None;
+                            } else {
+                                config.mqtt.password = Some(trimmed.to_string());
+                            }
+                        }
+                        "base_topic" => {
+                            let trimmed = val.trim().trim_matches('/');
+                            if !trimmed.is_empty() {
+                                config.mqtt.base_topic = trimmed.to_string();
+                            }
+                        }
+                        "ha_discovery" => {
+                            match val.trim().to_lowercase().as_str() {
+                                "true" | "1" | "yes" => config.mqtt.ha_discovery = true,
+                                "false" | "0" | "no" => config.mqtt.ha_discovery = false,
+                                _ => {}
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -373,6 +468,29 @@ mod tests {
         assert!(!cfg.station.sniffer_mode, "Default sniffer_mode should be false");
         assert_eq!(cfg.storage.log_dir, "logs");
         assert_eq!(cfg.storage.sessions_dir, "sessions");
+        assert!(!cfg.mqtt.enabled, "Default mqtt.enabled should be false");
+        assert_eq!(cfg.mqtt.broker, "127.0.0.1:1883");
+        assert_eq!(cfg.mqtt.username, None);
+        assert_eq!(cfg.mqtt.base_topic, "greenup");
+        assert!(cfg.mqtt.ha_discovery, "Default mqtt.ha_discovery should be true");
+    }
+
+    #[test]
+    fn test_mqtt_config_parsing() {
+        let toml = r#"
+        [mqtt]
+        enabled = true
+        broker = "192.168.1.50:1883"
+        username = "my_mqtt_user"
+        base_topic = "home/evse"
+        ha_discovery = false
+        "#;
+        let cfg = AppConfig::parse_toml(toml);
+        assert!(cfg.mqtt.enabled);
+        assert_eq!(cfg.mqtt.broker, "192.168.1.50:1883");
+        assert_eq!(cfg.mqtt.username.as_deref(), Some("my_mqtt_user"));
+        assert_eq!(cfg.mqtt.base_topic, "home/evse");
+        assert!(!cfg.mqtt.ha_discovery);
     }
 
     #[test]
@@ -464,5 +582,26 @@ mod tests {
         assert_eq!(cfg_auto.serial.dual_point, DualPointMode::Auto);
         assert_eq!(cfg_auto.serial.port, None);
         assert_eq!(cfg_auto.serial.port2, None);
+    }
+
+    #[test]
+    fn test_storage_log_level_parsing() {
+        let toml = r#"
+        [storage]
+        log_dir = "/var/log/greenup"
+        sessions_dir = "/var/lib/greenup/sessions"
+        log_level = "DEBUG"
+        "#;
+        let cfg = AppConfig::parse_toml(toml);
+        assert_eq!(cfg.storage.log_dir, "/var/log/greenup");
+        assert_eq!(cfg.storage.sessions_dir, "/var/lib/greenup/sessions");
+        assert_eq!(cfg.storage.log_level.as_deref(), Some("DEBUG"));
+
+        let toml_logging = r#"
+        [logging]
+        level = "warn"
+        "#;
+        let cfg2 = AppConfig::parse_toml(toml_logging);
+        assert_eq!(cfg2.storage.log_level.as_deref(), Some("warn"));
     }
 }
