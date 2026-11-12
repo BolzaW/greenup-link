@@ -19,6 +19,10 @@
 
 **Green'Up Link** est un logiciel léger, performant et indépendant écrit en Rust. Il peut s'installer directement sur le Kit de Communication officiel Legrand (référence 059056) pour remplacer le logiciel ("KitCom") fourni par le fabricant, ou sur un **Raspberry Pi standard** (Pi Zero 2 W, Pi 3, Pi 4...) équipé d'une image officielle Raspberry Pi OS 64-bit Lite et relié via un câble USB (voir le [Guide du kit de communication alternatif DIY](docs/KIT_COMMUNICATION_DIY.md)).
 
+<p align="center">
+  <img src="docs/images/ui_demo.webp" alt="Démonstration de l'interface Web Green'Up Link" width="750">
+</p>
+
 Il communique avec la carte de puissance de la borne via un câble USB interne et expose :
 - Une **interface Web locale** épurée et réactive avec visualiseur animé, contrôle de charge (7A à 32A), statut Linky TIC et console live intégrée (flux de logs temps réel SSE).
 - Une **API REST** complète et documentée (voir la [Documentation de l'API REST](docs/GREENUP_LINK_REST_API.md)), idéale pour l'intégration domotique (Home Assistant, Jeedom, Node-RED, etc.).
@@ -211,6 +215,18 @@ Le script d'installation configure l'ensemble du système automatiquement :
 
 ### 6. Utilisation
 - **Interface Web** : Ouvrez `http://<ip_borne>:8080` dans votre navigateur. Visualiseur en direct, contrôles de charge (7A à 32A), statut Linky TIC et console live intégrée.
+  <details>
+  <summary>📸 <strong>Cliquez pour afficher les captures d'écran (Tableau de bord, Sessions, Console, Système)</strong></summary>
+
+  | Tableau de bord en direct | Historique des sessions & Courbe de puissance |
+  | :---: | :---: |
+  | ![Tableau de bord](docs/images/ui-dashboard.webp) | ![Historique des sessions](docs/images/ui-session.webp) |
+
+  | Console temps réel | Informations Système & Matériel |
+  | :---: | :---: |
+  | ![Console temps réel](docs/images/ui-consol.webp) | ![Informations Système](docs/images/ui-system.webp) |
+
+  </details>
 - **Intégration Home Assistant** : Consultez le [Guide d'intégration Home Assistant](docs/HOME_ASSISTANT_INTEGRATION.md) pour profiter de l'Auto-Discovery MQTT natif sans configuration YAML.
 - **Intégration MQTT** : Consultez le [Guide MQTT](docs/GREENUP_LINK_MQTT.md) pour les topics publiés, topics de commande et schémas JSON.
 - **API REST** : Consultez la [Documentation de l'API REST](docs/GREENUP_LINK_REST_API.md) pour l'intégration avec Home Assistant, Jeedom, Node-RED ou vos propres scripts.

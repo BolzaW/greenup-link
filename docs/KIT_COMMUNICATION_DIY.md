@@ -96,6 +96,10 @@ The low-voltage power cord is simply routed into the charging station enclosure 
 
 Field testing on a real Green'up Premium wallbox confirms that **a standard Raspberry Pi 3B+ in an off-the-shelf plastic protective case fits directly into the upper left section of the lateral side panel (the exact location of the official kit)**:
 
+<p align="center">
+  <img src="images/diy_rasppi_installation.webp" alt="Raspberry Pi physical installation inside Legrand Green'Up Premium wallbox" width="600">
+</p>
+
 | Component | Status & Specifications | Notes | Indicative Cost |
 | :--- | :--- | :--- | :--- |
 | **Pragmatic Mounting (Field-Validated)** | **Heavy-duty double-sided foam tape + electrical tape** | The Raspberry Pi in its standard vented case is secured against the smooth internal plastic chassis. No chassis drilling or 3D printer required. Highly stable, zero vibration inside the garage/outdoor box. | ~**1 €** |
@@ -120,6 +124,10 @@ Field testing on a real Green'up Premium wallbox confirms that **a standard Rasp
 ## 3. Synoptic Wiring Diagrams
 
 ### Setup A: Internal Power Tap (Field-Validated Kit V1)
+
+<p align="center">
+  <img src="images/diy_wiring.webp" alt="DIY Communication Kit internal wiring and power tap" width="600">
+</p>
 
 ```text
 [ Internal Station Power Supply (12V DC) ]

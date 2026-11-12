@@ -19,6 +19,10 @@
 
 **Green'Up Link** is a lightweight, high-performance, independent software written in Rust. It can be installed directly on the official Legrand Communication Kit (reference 059056) to replace the manufacturer's software ("KitCom"), or on a **standard Raspberry Pi** (Pi Zero 2 W, Pi 3, Pi 4, etc.) running an official Raspberry Pi OS 64-bit Lite image connected via a USB cable (see the [DIY Communication Kit Guide](docs/KIT_COMMUNICATION_DIY.md)). 
 
+<p align="center">
+  <img src="docs/images/ui_demo.webp" alt="Green'Up Link Web UI Demo" width="750">
+</p>
+
 It communicates with the charging station's power board via an internal USB cable and exposes:
 - A clean, responsive **local Web GUI** with live visualizer, charging controls (7A–32A), Linky TIC status, and an integrated real-time debug console (SSE log streaming).
 - A comprehensive and documented **REST API** (see the [REST API Documentation](docs/GREENUP_LINK_REST_API.md)), perfect for home automation integration (Home Assistant, Jeedom, Node-RED, etc.).
@@ -214,6 +218,18 @@ The automated installer performs all required setup steps:
 
 ### 6. Usage
 - **Web GUI**: Open `http://<station_ip>:8080` in your browser. Includes interactive telemetry, charging controls (7A–32A), Linky TIC status, and real-time live console with SSE log streaming.
+  <details>
+  <summary>📸 <strong>Click to expand Web UI Screenshots (Dashboard, Sessions, Console, System)</strong></summary>
+
+  | Live Dashboard | Session History & Power Curve |
+  | :---: | :---: |
+  | ![Live Dashboard](docs/images/ui-dashboard.webp) | ![Session History](docs/images/ui-session.webp) |
+
+  | Live Debug Console | System & Hardware Settings |
+  | :---: | :---: |
+  | ![Live Console](docs/images/ui-consol.webp) | ![System & Hardware](docs/images/ui-system.webp) |
+
+  </details>
 - **Home Assistant Integration**: Follow the dedicated [Home Assistant Integration Guide](docs/HOME_ASSISTANT_INTEGRATION.md) for instant MQTT Auto-Discovery without manual YAML.
 - **MQTT Integration**: Refer to the [Green'Up Link MQTT Guide](docs/GREENUP_LINK_MQTT.md) for published topics, command topics, and JSON payload schemas.
 - **REST API**: Refer to the complete [REST API Documentation](docs/GREENUP_LINK_REST_API.md) to integrate with Home Assistant, Jeedom, Node-RED, or custom scripts.
