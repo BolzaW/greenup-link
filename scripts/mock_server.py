@@ -92,6 +92,78 @@ add_mock_log("SYS", "DEBUG", "Watchdog timer armed (timeout: 5000ms)")
 add_mock_log("SERIAL", "WARN", "⚠️ Retrying frame sync (mock warning)")
 add_mock_log("SYS", "ERROR", "❌ Simulated minor error check (mock error)")
 
+def get_mock_station():
+    return {
+        "vendor": "Legrand",
+        "model": "059001",
+        "serial_number": "LEG123456789",
+        "hardware_version": "01",
+        "firmware_version": "17.77",
+        "production_date": "12/20",
+        "link_version": "0.5.0-mock",
+        "supervision_mode": state.get("supervision_mode", "remote"),
+        "serial_connection": state["serial"],
+        "is_dual": False,
+        "available_connectors": [1],
+        "bluetooth_enabled": state["bluetooth_enabled"],
+        "mac_address": "AA:BB:CC:DD:EE:FF",
+        "capabilities": {
+            "phases": 1,
+            "max_power_kw": 7.4,
+            "max_current_amps": 32,
+            "has_schuko": False,
+            "charging_points": 1,
+            "is_known": True,
+            "has_tic": True,
+        }
+    }
+
+def get_mock_connector():
+    is_charging = state["greenup_state"] in ("C", "D", "E") and not state["charge_paused"]
+    return {
+        "id": 1,
+        "status": {
+            "ocpp": "Charging" if is_charging else ("SuspendedEVSE" if state["charge_paused"] else ("Preparing" if state["greenup_state"] == "B" else "Available")),
+            "iec": state["iec_state"],
+            "raw_code": state["greenup_state"],
+            "vehicle_connected": state["greenup_state"] in ("B", "C", "D", "E"),
+            "charging": is_charging,
+            "paused": state["charge_paused"],
+            "charge_complete": state["charge_complete"],
+            "error_code": state["error_code"],
+            "error_description": "No error" if state["error_code"] == "0000" else "Mock hardware error",
+        },
+        "control": {
+            "setpoint_amps": state["eliot_limit_amps"],
+            "pilot_limit_amps": state["eliot_limit_amps"],
+            "min_allowed_amps": 7,
+            "max_hardware_amps": 32,
+            "charge_authorized": state["charge_authorized"] and not state["charge_paused"],
+            "pilot_voltage": 6 if is_charging else (9 if state["greenup_state"] == "B" else 12),
+        },
+        "meter": {
+            "power_w": state["power"],
+            "energy_kwh": round(state["energy"] / 1000.0, 3),
+            "energy_total_wh": state["energy"],
+            "current_a": state["current"],
+            "voltage_v": state["voltage"],
+            "voltage_source": state.get("voltage_source", "default"),
+            "voltage_ttl_remaining_s": state.get("voltage_ttl_remaining_s", None),
+            "frequency_hz": 50.0,
+        },
+        "grid": {
+            "tic_connected": True,
+            "tic_mode": "standard",
+            "tic_baud_rate": 9600,
+        }
+    }
+
+def get_mock_snapshot():
+    return {
+        "station": get_mock_station(),
+        "connectors": [get_mock_connector()],
+    }
+
 class MockHandler(http.server.BaseHTTPRequestHandler):
     def end_headers(self):
         self.send_header("X-Frame-Options", "DENY")
@@ -100,7 +172,7 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         super().end_headers()
     def log_message(self, format, *args):
         # Mute high frequency polling logs
-        if self.path in ("/api/telemetry", "/api/logs/stream"):
+        if self.path in ("/api/state", "/api/logs/stream"):
             return
         print(f"[{self.command}] {self.path}")
 
@@ -122,23 +194,24 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
         elif url == "/api/auth/status":
             add_mock_log("API", "DEBUG", "🔐 GET /api/auth/status (auth_required: False)")
             self.send_json({"auth_required": False, "authenticated": True})
-        elif url == "/api/telemetry":
+        elif url == "/api/state":
             if state["iec_state"] == "C" and not state["charge_paused"]:
                 state["power"] = state["voltage"] * state["current"]
                 state["energy"] += (state["power"] * 2.0 / 3600.0)
-            self.send_json(state)
-        elif url == "/api/info":
-            add_mock_log("API", "DEBUG", "🔍 GET /api/info")
-            info = {
-                "reference": "059001",
-                "hardware_version": "01",
-                "software_version": "17.77",
-                "serial_number": "LEG123456789",
-                "week_year_production": "12/20",
-                "bluetooth_enabled": state["bluetooth_enabled"],
-                "link_version": "0.3.0-mock",
-            }
-            self.send_json(info)
+            self.send_json(get_mock_snapshot())
+        elif url == "/api/station":
+            add_mock_log("API", "DEBUG", "🔍 GET /api/station")
+            self.send_json(get_mock_station())
+        elif url == "/api/connectors":
+            self.send_json([get_mock_connector()])
+        elif url in ("/api/connectors/1", "/api/connectors/2"):
+            self.send_json(get_mock_connector())
+        elif url in ("/api/connectors/1/status", "/api/connectors/2/status", "/api/status"):
+            self.send_json(get_mock_connector()["status"])
+        elif url in ("/api/connectors/1/meter", "/api/connectors/2/meter", "/api/meter"):
+            self.send_json(get_mock_connector()["meter"])
+        elif url == "/api/mode":
+            self.send_json({"mode": state.get("supervision_mode", "remote"), "can_switch": True})
         elif url == "/api/logs":
             add_mock_log("API", "DEBUG", f"📋 GET /api/logs ({len(mock_logs)} entries)")
             self.send_json(mock_logs)
@@ -346,6 +419,30 @@ class MockHandler(http.server.BaseHTTPRequestHandler):
                 else:
                     add_mock_log("SERIAL_RX", "INFO", "ACK")
             self.send_json({"status": "success", "message": "Command sent"})
+        elif url == "/api/mode":
+            try:
+                data = json.loads(body) if body else {}
+                new_mode = data.get("mode", "remote").lower()
+                if new_mode not in ("local", "remote"):
+                    self.send_error(400, "Invalid mode")
+                    return
+                state["supervision_mode"] = new_mode
+                add_mock_log("API", "INFO", f"⚙️ Supervision mode changed to {new_mode}")
+                self.send_json({"status": "success", "mode": new_mode, "message": f"Switched to {new_mode} mode."})
+            except Exception as e:
+                self.send_error(400, str(e))
+        elif url == "/api/voltage":
+            try:
+                data = json.loads(body) if body else {}
+                v = float(data.get("voltage", 230.0))
+                state["voltage"] = v
+                state["voltage_source"] = "external"
+                state["voltage_ttl_remaining_s"] = 30
+                state["power"] = state["voltage"] * state["current"]
+                add_mock_log("API", "INFO", f"⚡ External voltage injected: {v}V")
+                self.send_json({"status": "success", "message": "External voltage updated"})
+            except Exception as e:
+                self.send_error(400, str(e))
         elif url == "/api/init":
             add_mock_log("API", "INFO", "🔄 Initialization sequence started (mock)")
             self.send_json({"status": "success", "message": "Initialization sequence started"})

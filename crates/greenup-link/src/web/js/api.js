@@ -350,14 +350,14 @@ async function fetchInfo() {
     if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
     try {
         const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
-        const response = await apiFetch(`/api/info${sideQuery}`);
+        const response = await apiFetch(`/api/station${sideQuery}`);
         if (!response.ok) return;
-        const info = await response.json();
+        const station = await response.json();
 
         // Dual charge point banner visibility
         const pointBanner = document.getElementById('pointSelectorBanner');
         const wasDual = window.isDualStation;
-        if (info.is_dual) {
+        if (station.is_dual) {
             window.isDualStation = true;
             if (pointBanner) pointBanner.classList.remove('hidden');
         } else {
@@ -368,35 +368,39 @@ async function fetchInfo() {
             renderLogs();
         }
 
-        if (info.bluetooth_enabled !== null) {
-            btToggle.checked = info.bluetooth_enabled;
-            updateBleStatusIndicator(info.bluetooth_enabled);
+        if (station.bluetooth_enabled !== null && station.bluetooth_enabled !== undefined) {
+            btToggle.checked = station.bluetooth_enabled;
+            updateBleStatusIndicator(station.bluetooth_enabled);
         }
 
+        const modelRef = station.model || station.reference;
+        const hwVer = station.hardware_version;
+        const swVer = station.firmware_version || station.software_version;
         let line1 = [];
-        if (info.reference) line1.push(`Réf: ${info.reference}`);
-        if (info.hardware_version) line1.push(`HW: ${info.hardware_version}`);
-        if (info.software_version) line1.push(`SW: ${info.software_version}`);
+        if (modelRef) line1.push(`Réf: ${modelRef}`);
+        if (hwVer) line1.push(`HW: ${hwVer}`);
+        if (swVer) line1.push(`SW: ${swVer}`);
         boardInfo.innerText = line1.length > 0 ? line1.join(' | ') : t('info.not_available');
 
+        const prodDate = station.production_date || station.week_year_production;
         let line2 = [];
-        if (info.serial_number) line2.push(`SN: ${info.serial_number}`);
-        if (info.week_year_production) line2.push(`Prod: ${info.week_year_production}`);
+        if (station.serial_number) line2.push(`SN: ${station.serial_number}`);
+        if (prodDate) line2.push(`Prod: ${prodDate}`);
         subInfo.innerText = line2.length > 0 ? line2.join(' | ') : '';
 
-        if (info.link_version) {
-            window.linkVersion = info.link_version;
+        if (station.link_version) {
+            window.linkVersion = station.link_version;
             const lbl = document.getElementById('lblLinkVersion');
-            if (lbl) lbl.innerText = `v${info.link_version}`;
+            if (lbl) lbl.innerText = `v${station.link_version}`;
             const cfgVer = document.getElementById('cfgAppVersion');
-            if (cfgVer) cfgVer.innerText = `v${info.link_version}`;
+            if (cfgVer) cfgVer.innerText = `v${station.link_version}`;
         }
 
-        if (info.capabilities && info.capabilities.is_known && info.capabilities.has_tic) {
-            window.stationCapabilities = info.capabilities;
+        if (station.capabilities && station.capabilities.is_known && station.capabilities.has_tic) {
+            window.stationCapabilities = station.capabilities;
             window.stationHasTic = true;
         } else {
-            window.stationCapabilities = info.capabilities || null;
+            window.stationCapabilities = station.capabilities || null;
             // Unknown or missing hardware specs defaults strictly to false (minimum features)
             window.stationHasTic = false;
         }
@@ -404,7 +408,7 @@ async function fetchInfo() {
             applyTicCapabilities(window.stationHasTic);
         }
 
-        window.boardInfoComplete = !!(info.reference && info.software_version && info.serial_number);
+        window.boardInfoComplete = !!(modelRef && swVer && station.serial_number);
 
     } catch (err) {
         console.error("Erreur infos", err);
@@ -527,20 +531,50 @@ function updateUsbStatus(serial) {
 async function fetchTelemetry() {
     if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
     try {
-        const sideQuery = window.currentSide ? `?side=${window.currentSide}` : '';
-        const response = await apiFetch(`/api/telemetry${sideQuery}`);
+        const response = await apiFetch('/api/state');
         if (!response.ok) return;
-        const data = await response.json();
-        window.lastTelemetry = data;
+        const snapshot = await response.json();
+        const station = snapshot.station;
+        const connectors = snapshot.connectors || [];
 
-        if (data.serial) {
-            updateUsbStatus(data.serial);
+        window.lastState = snapshot;
+        window.lastStation = station;
+
+        if (station && station.serial_connection) {
+            updateUsbStatus(station.serial_connection);
         }
 
         // Auto-refresh board info if incomplete once USB communication is confirmed
         if (!window.boardInfoComplete && window.isUsbConnected) {
             fetchInfo();
         }
+
+        const targetSide = window.currentSide || 1;
+        const conn = connectors.find(c => c.id === targetSide) || connectors[0];
+        if (!conn) return;
+
+        window.lastConnector = conn;
+
+        // Adapter object so existing UI helpers & session logic retain seamless access
+        const data = {
+            serial: station ? station.serial_connection : null,
+            voltage: conn.meter.voltage_v,
+            voltage_source: conn.meter.voltage_source,
+            voltage_ttl_remaining_s: conn.meter.voltage_ttl_remaining_s,
+            current: conn.meter.current_a,
+            power: conn.meter.power_w,
+            energy: conn.meter.energy_total_wh,
+            error_code: conn.status.error_code,
+            eliot_limit_amps: conn.control.setpoint_amps,
+            greenup_state: conn.status.raw_code,
+            iec_state: conn.status.iec,
+            charge_authorized: conn.control.charge_authorized,
+            charge_paused: conn.status.paused,
+            charge_complete: conn.status.charge_complete,
+            tic_mode: conn.grid.tic_mode,
+            mode: station ? station.supervision_mode : 'remote',
+        };
+        window.lastTelemetry = data;
 
         if (!window.isUsbConnected) {
             valVoltage.innerText = '--';
@@ -551,43 +585,43 @@ async function fetchTelemetry() {
             valPower.innerText = '--';
             valEnergy.innerText = '--';
         } else {
-            valVoltage.innerText = data.voltage.toFixed(1);
-            if (data.voltage_source === 'external') {
+            valVoltage.innerText = conn.meter.voltage_v.toFixed(1);
+            if (conn.meter.voltage_source === 'external') {
                 valVoltage.className = 'text-3xl font-extrabold text-sky-400 font-mono tracking-tight transition-colors duration-200';
                 if (valVoltageUnit) valVoltageUnit.className = 'text-sky-600 font-semibold transition-colors duration-200';
-                const remaining = data.voltage_ttl_remaining_s != null ? ` (${data.voltage_ttl_remaining_s}s)` : '';
+                const remaining = conn.meter.voltage_ttl_remaining_s != null ? ` (${conn.meter.voltage_ttl_remaining_s}s)` : '';
                 valVoltage.title = (window.t ? t('telemetry.voltage_external_tooltip') : 'Tension réseau mesurée par source externe') + remaining;
             } else {
                 valVoltage.className = 'text-3xl font-extrabold text-white font-mono tracking-tight transition-colors duration-200';
                 if (valVoltageUnit) valVoltageUnit.className = 'text-slate-500 font-semibold transition-colors duration-200';
                 valVoltage.title = window.t ? t('telemetry.voltage_default_tooltip') : 'Tension réseau théorique par défaut (230 V)';
             }
-            valCurrent.innerText = data.current.toFixed(1);
-            valPower.innerText = (data.power).toFixed(0);
-            valEnergy.innerText = (data.energy).toFixed(0);
+            valCurrent.innerText = conn.meter.current_a.toFixed(1);
+            valPower.innerText = (conn.meter.power_w).toFixed(0);
+            valEnergy.innerText = (conn.meter.energy_total_wh).toFixed(0);
         }
 
-        if (data.error_code && data.error_code !== "0000" && data.error_code !== "") {
-            const desc = t('hardware_errors.' + data.error_code);
-            const descText = (desc && desc !== 'hardware_errors.' + data.error_code) ? ` - ${desc}` : '';
-            lblError.innerText = `${t('error.hardware_code')}${data.error_code}${descText}`;
+        if (conn.status.error_code && conn.status.error_code !== "0000" && conn.status.error_code !== "") {
+            const desc = t('hardware_errors.' + conn.status.error_code) || conn.status.error_description;
+            const descText = (desc && desc !== 'hardware_errors.' + conn.status.error_code) ? ` - ${desc}` : '';
+            lblError.innerText = `${t('error.hardware_code')}${conn.status.error_code}${descText}`;
         } else {
             lblError.innerText = "";
         }
 
-        if (data.eliot_limit_amps && !isDraggingSlider && !isActionPending) {
-            slider.value = data.eliot_limit_amps;
-            lblSlider.innerText = data.eliot_limit_amps + " A";
+        if (conn.control.setpoint_amps && !isDraggingSlider && !isActionPending) {
+            slider.value = conn.control.setpoint_amps;
+            lblSlider.innerText = conn.control.setpoint_amps + " A";
         }
 
-        lastReportedState = data.greenup_state;
-        updateLinky(data.tic_mode);
-        updateVisuals(data.greenup_state, data.charge_complete, data.iec_state, data.error_code, data.charge_paused, data.charge_authorized);
+        lastReportedState = conn.status.raw_code;
+        updateLinky(conn.grid.tic_mode);
+        updateVisuals(conn.status.raw_code, conn.status.charge_complete, conn.status.iec, conn.status.error_code, conn.status.paused, conn.control.charge_authorized);
 
-        if (data.mode) {
-            const canSwitch = data.greenup_state === 'A' || data.greenup_state === 'DISCONNECTED';
+        if (station && station.supervision_mode) {
+            const canSwitch = conn.status.raw_code === 'A' || conn.status.raw_code === 'DISCONNECTED';
             if (typeof updateSupervisionModeUi === 'function') {
-                updateSupervisionModeUi(data.mode, canSwitch);
+                updateSupervisionModeUi(station.supervision_mode, canSwitch);
             }
         }
 

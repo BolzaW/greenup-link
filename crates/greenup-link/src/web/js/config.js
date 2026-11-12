@@ -132,7 +132,7 @@ async function loadConfigData() {
     if (!window.isAuthResolved || (window.isAuthRequired && !window.isAuthenticated)) return;
 
     try {
-        // Sync hardware / BLE state from /api/info
+        // Sync hardware / BLE state from /api/station
         if (typeof fetchInfo === 'function') {
             await fetchInfo();
         }
