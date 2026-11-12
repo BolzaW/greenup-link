@@ -78,7 +78,8 @@
     "enable": "ENABLE",
     "disable": "DISABLE",
     "pause": "PAUSE",
-    "resume": "RESUME"
+    "resume": "RESUME",
+    "local_mode_notice": "Passive mode active: station operates autonomously. Charge controls are locked."
   },
   "tic": {
     "standard": "Standard TIC\n(9600 baud)",
@@ -198,7 +199,21 @@
     "tic_not_supported": "TIC feature not available on this wallbox model",
     "tic_unsupported_badge": "Unsupported",
     "ble_status_on": "Bluetooth active on station",
-    "ble_status_off": "Bluetooth disabled on station"
+    "ble_status_off": "Bluetooth disabled on station",
+    "supervision_title": "Supervision Mode",
+    "supervision_desc": "Toggle between active control and passive sniffer monitoring on the serial link",
+    "mode_remote": "Supervised (Remote)",
+    "mode_remote_short": "Supervised",
+    "mode_remote_desc": "Green'Up Link actively controls the station (authorizations, current setpoint, watchdog, TIC).",
+    "mode_local": "Passive (Local / Sniffer)",
+    "mode_local_short": "Passive",
+    "mode_local_desc": "Green'Up Link sends zero commands to the ATmega. It logs and visualizes spontaneous frames without interfering.",
+    "mode_badge_active": "Active",
+    "mode_state_a_required": "Mode switching is only permitted when the station is in State A (standby / disconnected).",
+    "mode_switch_confirm_local": "Warning: switching to Passive (Local) mode will send a Reset command to the ATmega to release the board, then cease all transmissions. Do you want to proceed?",
+    "mode_switch_confirm_remote": "Do you want to re-enable active supervision (Remote mode) and initialize communication with the station?",
+    "mode_switching": "Switching mode...",
+    "mode_switch_success": "Supervision mode updated successfully"
   },
   "dual": {
     "selector_title": "Active Charge Point",

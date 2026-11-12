@@ -40,6 +40,40 @@ fn default_voltage_source() -> String {
     String::from("default")
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum SupervisionMode {
+    #[default]
+    Remote,
+    Local,
+}
+
+impl std::str::FromStr for SupervisionMode {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_lowercase().as_str() {
+            "remote" => Ok(SupervisionMode::Remote),
+            "local" => Ok(SupervisionMode::Local),
+            _ => Err(()),
+        }
+    }
+}
+
+impl SupervisionMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SupervisionMode::Remote => "remote",
+            SupervisionMode::Local => "local",
+        }
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        s.parse().ok()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExternalVoltage {
     pub voltage: f32,
@@ -51,6 +85,8 @@ pub struct ExternalVoltage {
 pub struct Telemetry {
     #[serde(default = "default_side")]
     pub side: u8,
+    #[serde(default)]
+    pub mode: SupervisionMode,
     pub serial: SerialConnection,
     pub voltage: f32,
     #[serde(default = "default_voltage_source")]
@@ -87,6 +123,7 @@ impl Default for Telemetry {
     fn default() -> Self {
         Self {
             side: 1,
+            mode: SupervisionMode::default(),
             serial: SerialConnection::default(),
             voltage: 230.0,
             voltage_source: default_voltage_source(),

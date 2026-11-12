@@ -78,7 +78,8 @@
     "enable": "ACTIVER",
     "disable": "DÉSACTIVER",
     "pause": "PAUSE",
-    "resume": "REPRENDRE"
+    "resume": "REPRENDRE",
+    "local_mode_notice": "Mode Passif actif : la borne est autonome. Les commandes de charge sont verrouillées."
   },
   "tic": {
     "standard": "TIC Standard\n(9600 bauds)",
@@ -198,7 +199,21 @@
     "tic_not_supported": "Fonction TIC non disponible sur ce modèle de borne",
     "tic_unsupported_badge": "Non supporté",
     "ble_status_on": "Bluetooth actif sur la borne",
-    "ble_status_off": "Bluetooth désactivé sur la borne"
+    "ble_status_off": "Bluetooth désactivé sur la borne",
+    "supervision_title": "Mode de supervision",
+    "supervision_desc": "Bascule entre le contrôle actif et l'écoute passive (sniffer) du bus série",
+    "mode_remote": "Supervisé (Distant)",
+    "mode_remote_short": "Supervisé",
+    "mode_remote_desc": "Green'Up Link pilote activement la borne (autorisations, consigne de courant, watchdog, TIC).",
+    "mode_local": "Passif (Local / Sniffer)",
+    "mode_local_short": "Passif",
+    "mode_local_desc": "Green'Up Link n'envoie aucune commande à l'ATmega. Il journalise et affiche les trames spontanées sans interférer.",
+    "mode_badge_active": "Actif",
+    "mode_state_a_required": "La bascule de mode nécessite que la borne soit à l'état A (Libre / Déconnectée).",
+    "mode_switch_confirm_local": "Attention : le passage en mode Passif (Local) envoie une commande Reset à l'ATmega pour libérer la borne, puis cesse tout envoi de trame. Voulez-vous continuer ?",
+    "mode_switch_confirm_remote": "Voulez-vous réactiver la supervision active (mode Distant) et réinitialiser la communication avec la borne ?",
+    "mode_switching": "Changement de mode en cours...",
+    "mode_switch_success": "Mode mis à jour avec succès"
   },
   "dual": {
     "selector_title": "Point de charge actif",

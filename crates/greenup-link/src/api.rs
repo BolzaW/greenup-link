@@ -86,6 +86,7 @@ pub fn build_router(station: SharedStation, api_token: Option<String>) -> Router
         .route("/api/bluetooth", post(set_bluetooth))
         .route("/api/command", post(send_raw_command))
         .route("/api/voltage", post(set_voltage))
+        .route("/api/mode", get(get_mode).post(set_mode))
         .with_state(station)
         .route_layer(axum::middleware::from_fn_with_state(
             token_state.clone(),
@@ -332,6 +333,20 @@ fn check_serial_connected(state: &SharedState) -> Result<(), (StatusCode, Json<s
     Ok(())
 }
 
+fn check_mode_allows_commands(state: &SharedState) -> Result<(), (StatusCode, Json<serde_json::Value>)> {
+    if state.mode() == greenup_driver::telemetry::SupervisionMode::Local {
+        return Err((
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "status": "error",
+                "error": "Station is operating in Local (passive monitor) mode. Serial commands are disabled.",
+                "mode": "local"
+            })),
+        ));
+    }
+    Ok(())
+}
+
 /// POST /api/current/:amps
 async fn set_current(
     State(station): State<SharedStation>,
@@ -339,6 +354,9 @@ async fn set_current(
     Query(query): Query<SideQuery>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
+    if let Err(res) = check_mode_allows_commands(&state) {
+        return res;
+    }
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
@@ -386,6 +404,9 @@ async fn init_sequence(
     Query(query): Query<SideQuery>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side).clone();
+    if let Err(res) = check_mode_allows_commands(&state) {
+        return res;
+    }
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
@@ -406,6 +427,9 @@ async fn reset_board(
     Query(query): Query<SideQuery>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
+    if let Err(res) = check_mode_allows_commands(&state) {
+        return res;
+    }
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
@@ -441,6 +465,9 @@ async fn send_raw_command(
     body: String,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
+    if let Err(res) = check_mode_allows_commands(&state) {
+        return res;
+    }
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
@@ -475,6 +502,9 @@ async fn refresh_tic(
     Query(query): Query<SideQuery>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
+    if let Err(res) = check_mode_allows_commands(&state) {
+        return res;
+    }
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
@@ -549,6 +579,164 @@ async fn set_voltage(
     )
 }
 
+#[derive(serde::Serialize)]
+pub struct ModeResponse {
+    pub mode: String,
+    pub can_switch: bool,
+    pub current_state: String,
+    pub side: u8,
+}
+
+#[derive(serde::Deserialize)]
+pub struct SetModePayload {
+    pub mode: String,
+}
+
+/// GET /api/mode
+async fn get_mode(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
+    let state = station.get_point(query.side);
+    let mode = state.mode().as_str().to_string();
+    let current_state = state
+        .telemetry
+        .lock()
+        .map(|t| t.greenup_state.clone())
+        .unwrap_or_else(|_| "Unknown".to_string());
+    let can_switch = current_state == "A" || current_state == "DISCONNECTED";
+
+    (
+        StatusCode::OK,
+        Json(json!(ModeResponse {
+            mode,
+            can_switch,
+            current_state,
+            side: state.side(),
+        })),
+    )
+}
+
+/// POST /api/mode
+async fn set_mode(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+    Json(payload): Json<SetModePayload>,
+) -> Response {
+    let target_mode = match greenup_driver::telemetry::SupervisionMode::from_str(&payload.mode) {
+        Some(m) => m,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "status": "error",
+                    "error": format!("Invalid mode '{}'. Expected 'remote' or 'local'", payload.mode)
+                })),
+            ).into_response();
+        }
+    };
+
+    let state = station.get_point(query.side);
+    let current_state = state
+        .telemetry
+        .lock()
+        .map(|t| t.greenup_state.clone())
+        .unwrap_or_else(|_| "Unknown".to_string());
+
+    // Safety guard: only allow switching modes if station is in State A or DISCONNECTED
+    if current_state != "A" && current_state != "DISCONNECTED" {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({
+                "status": "error",
+                "error": format!(
+                    "Mode switch is only allowed in State A (standby). Current state is '{}'",
+                    current_state
+                ),
+                "current_state": current_state
+            })),
+        ).into_response();
+    }
+
+    let current_mode = state.mode();
+    if current_mode == target_mode {
+        return (
+            StatusCode::OK,
+            Json(json!({
+                "status": "success",
+                "mode": target_mode.as_str(),
+                "message": format!("Already in {} mode", target_mode.as_str())
+            })),
+        ).into_response();
+    }
+
+    match target_mode {
+        greenup_driver::telemetry::SupervisionMode::Local => {
+            // 1. Send Reset to ATmega so it reboots and clears its internal Pi mode
+            let _ = state.serial_tx.send(Command::Reset).await;
+            // 2. Set mode to Local so no RaspberryPiModeOk will ever be sent
+            state.set_mode(greenup_driver::telemetry::SupervisionMode::Local);
+
+            // If dual-point and no specific side was requested, switch point 2 as well
+            let p2_opt = station.point2.read().unwrap_or_else(|e| e.into_inner()).clone();
+            if query.side.is_none() {
+                if let Some(ref p2) = p2_opt {
+                    let _ = p2.serial_tx.send(Command::Reset).await;
+                    p2.set_mode(greenup_driver::telemetry::SupervisionMode::Local);
+                }
+            }
+
+            logger::log(
+                "API",
+                "🔄 Switched to Local mode: sent Reset to ATmega, passive monitoring active",
+            );
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "status": "success",
+                    "mode": "local",
+                    "message": "Switched to local mode. Station board reset."
+                })),
+            ).into_response()
+        }
+        greenup_driver::telemetry::SupervisionMode::Remote => {
+            // 1. Set mode to Remote
+            state.set_mode(greenup_driver::telemetry::SupervisionMode::Remote);
+
+            // 2. Trigger startup sequence (RaspberryPiModeOk + startup queries)
+            let state_clone = state.clone();
+            tokio::spawn(async move {
+                greenup_driver::trigger_init_sequence(&state_clone).await;
+            });
+
+            // If dual-point and no specific side was requested, switch point 2 as well
+            let p2_opt = station.point2.read().unwrap_or_else(|e| e.into_inner()).clone();
+            if query.side.is_none() {
+                if let Some(ref p2) = p2_opt {
+                    p2.set_mode(greenup_driver::telemetry::SupervisionMode::Remote);
+                    let p2_clone = p2.clone();
+                    tokio::spawn(async move {
+                        greenup_driver::trigger_init_sequence(&p2_clone).await;
+                    });
+                }
+            }
+
+            logger::log(
+                "API",
+                "🔄 Switched to Remote mode: initializing communication with ATmega",
+            );
+            (
+                StatusCode::OK,
+                Json(json!({
+                    "status": "success",
+                    "mode": "remote",
+                    "message": "Switched to remote mode. Communication initialized."
+                })),
+            ).into_response()
+        }
+    }
+}
+
 /// POST /api/bluetooth
 async fn set_bluetooth(
     State(station): State<SharedStation>,
@@ -556,6 +744,9 @@ async fn set_bluetooth(
     Json(payload): Json<BluetoothPayload>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
+    if let Err(res) = check_mode_allows_commands(&state) {
+        return res;
+    }
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
@@ -589,6 +780,9 @@ async fn set_charge_state(
     Json(payload): Json<ChargeActionPayload>,
 ) -> impl IntoResponse {
     let state = station.get_point(query.side);
+    if let Err(res) = check_mode_allows_commands(&state) {
+        return res;
+    }
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
@@ -777,6 +971,109 @@ mod tests {
         }
         let response = refresh_tic(State(station.clone()), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_mode_endpoints_and_guards() {
+        use std::sync::Arc;
+        use tokio::sync::mpsc;
+        use greenup_driver::state::{AppState, StationManager};
+        use greenup_driver::telemetry::{SerialStatus, SupervisionMode};
+
+        let (tx, mut rx) = mpsc::channel(10);
+        let point1 = Arc::new(AppState::new(tx));
+        let station = Arc::new(StationManager::new(point1.clone(), None));
+
+        {
+            let mut tel = point1.telemetry.lock().unwrap();
+            tel.serial.status = SerialStatus::UsbConnected;
+            tel.greenup_state = "A".to_string();
+        }
+
+        // 1. Initial state: mode is Remote
+        assert_eq!(point1.mode(), SupervisionMode::Remote);
+
+        // GET /api/mode returns remote
+        let res = get_mode(State(station.clone()), Query(SideQuery { side: None })).await.into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // 2. Invalid mode name -> 400 Bad Request
+        let res = set_mode(
+            State(station.clone()),
+            Query(SideQuery { side: None }),
+            Json(SetModePayload { mode: "unknown".to_string() }),
+        ).await;
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+        // 3. Mode switch when NOT in State A (e.g. State C) -> 409 Conflict
+        {
+            let mut tel = point1.telemetry.lock().unwrap();
+            tel.greenup_state = "C".to_string();
+        }
+        let res = set_mode(
+            State(station.clone()),
+            Query(SideQuery { side: None }),
+            Json(SetModePayload { mode: "local".to_string() }),
+        ).await;
+        assert_eq!(res.status(), StatusCode::CONFLICT);
+
+        // 4. Mode switch when back in State A -> 200 OK, transitions to Local and sends Reset
+        {
+            let mut tel = point1.telemetry.lock().unwrap();
+            tel.greenup_state = "A".to_string();
+        }
+        let res = set_mode(
+            State(station.clone()),
+            Query(SideQuery { side: None }),
+            Json(SetModePayload { mode: "local".to_string() }),
+        ).await;
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(point1.mode(), SupervisionMode::Local);
+
+        // Verify that a Reset command was sent to serial_tx on transition to Local
+        let cmd = rx.try_recv().expect("Reset command should have been sent to ATmega");
+        assert_eq!(cmd, greenup_protocol::Command::Reset);
+
+        // 5. In Local mode, command APIs must return 403 Forbidden
+        let res_charge = set_charge_state(
+            State(station.clone()),
+            Query(SideQuery { side: None }),
+            Json(ChargeActionPayload { action: "enable".to_string() }),
+        ).await.into_response();
+        assert_eq!(res_charge.status(), StatusCode::FORBIDDEN);
+
+        let res_current = set_current(
+            State(station.clone()),
+            axum::extract::Path(16),
+            Query(SideQuery { side: None }),
+        ).await.into_response();
+        assert_eq!(res_current.status(), StatusCode::FORBIDDEN);
+
+        let res_raw = send_raw_command(
+            State(station.clone()),
+            Query(SideQuery { side: None }),
+            "RESET".to_string(),
+        ).await.into_response();
+        assert_eq!(res_raw.status(), StatusCode::FORBIDDEN);
+
+        // 6. In Local mode, set_voltage must still succeed (200 OK)
+        let res_voltage = set_voltage(
+            State(station.clone()),
+            Json(SetVoltagePayload {
+                voltage: 235.0,
+                ttl_seconds: Some(60),
+            }),
+        ).await.into_response();
+        assert_eq!(res_voltage.status(), StatusCode::OK);
+
+        // 7. Switch back to Remote mode in State A -> 200 OK
+        let res = set_mode(
+            State(station.clone()),
+            Query(SideQuery { side: None }),
+            Json(SetModePayload { mode: "remote".to_string() }),
+        ).await;
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(point1.mode(), SupervisionMode::Remote);
     }
 }
 
