@@ -406,7 +406,7 @@ dependencies = [
 
 [[package]]
 name = "greenup-driver"
-version = "0.5.0-dev"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "greenup-protocol",
@@ -418,7 +418,7 @@ dependencies = [
 
 [[package]]
 name = "greenup-everest"
-version = "0.5.0-dev"
+version = "1.0.0"
 dependencies = [
  "async-trait",
  "greenup-driver",
@@ -431,7 +431,7 @@ dependencies = [
 
 [[package]]
 name = "greenup-link"
-version = "0.5.0-dev"
+version = "1.0.0"
 dependencies = [
  "axum",
  "chrono",
@@ -449,7 +449,7 @@ dependencies = [
 
 [[package]]
 name = "greenup-protocol"
-version = "0.5.0-dev"
+version = "1.0.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -457,7 +457,7 @@ dependencies = [
 
 [[package]]
 name = "greenup-simulator"
-version = "0.5.0-dev"
+version = "1.0.0"
 dependencies = [
  "chrono",
  "clap",
