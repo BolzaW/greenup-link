@@ -1,164 +1,82 @@
-# Legrand Bluetooth Low Energy (BLE) Protocol (Green'up Power Board) — Complete Reference
-
-> **Firmware Reference:** Microchip / Atmel **ATmega2560** running official Legrand firmware (`V01.19.02`, `V01.18.04`, `V01.17.77`).  
-> **Physical Interface:** `USART0` (`Serial` in firmware, Pins `PE0`/RXD0 [pin 2] and `PE1`/TXD0 [pin 3]) at **115200 bauds, 8 data bits, no parity, 1 stop bit (8N1)**.  
-> **Hardware Transceiver:** **u-blox NINA-B112** (Bluetooth Low Energy 4.2 / 5.0) operating in Serial Port Service (SPS) / Data Mode.  
-> **Communication Paradigm:** Strictly **Half-Duplex Master-Slave Request-Response (Polling / Pull)**.  
->
-> *Note on Dual-Interface Separation:* The ATmega2560 features two completely separated serial communications:
-> 1. `USART1` (`Serial1` on `PD2`/`PD3`): The **ASCII Text Supervisory Protocol** used by the KitCom / Raspberry Pi (see [`LEGRAND_SERIAL_PROTOCOL.md`](./LEGRAND_SERIAL_PROTOCOL.md)).
-> 2. `USART0` (`Serial` on `PE0`/`PE1`): The **Binary Framed RPC Protocol** documented here, dedicated exclusively to the u-blox BLE module and the Legrand "EV Charge" smartphone application.
+# Legrand Bluetooth Low Energy (BLE) Protocol
 
 > [!NOTE]
-> ### ✅ Hardware Validated Milestone (Live Physical Testing)
-> The core binary framing, CRC-16 Modbus checksum algorithm, and serial turnaround mechanics documented below have been **physically validated on live charging station hardware** (Legrand Green'up Premium at `54:F8:2A:57:DD:71` running ATmega2560 firmware `V01.19.02` with u-blox NINA-B112 transceiver running `u-connectXpress 5.0.0-011`).
-> - **Live Handshake Confirmation:** The keepalive probe (`CodesFonction.Special` `0x03`, `Ping` `0x01`) responded in real-time with `01 03 01 FF FF F4 49` (ACK payload `0xFF`, CRC verified mathematically).
-> - **Register Map Synchronization:** All command opcodes and payload structures have been cross-verified against official Android / Xamarin assemblies (`Exakis.Legrand.GreenUp.dll`) and correlated with the ATmega2560 internal jump table (`0x146A6`).
+> **Green'up Link Architecture & Scope:**  
+> Green'up Link connects directly to the charging station's physical UART interface (`USART1`, via internal USB) rather than using Bluetooth Low Energy. The physical serial bus is faster, supports unsolicited asynchronous push events (real-time telemetry and state changes), and provides full bidirectional supervision without wireless range or pairing constraints.  
+> This document describes the functional supervision, telemetry, and control subset of the binary BLE protocol for informational purposes and community projects targeting wireless monitoring.  
+> *(Low-level hardware routines, bootloader entry, and factory calibration procedures are intentionally not documented to prevent accidental hardware tampering or bricking).*
 
 ---
 
-## 🚦 Architectural Overview & Fundamental Behavior
+## 1. Overview & Architecture
 
-Unlike the Raspberry Pi supervisory port (`Serial1`) which pushes unsolicited asynchronous text events (`State:B\r`, `CCI:016\r`, `FCS:1\r`, session tickets), the Bluetooth interface on `USART0` is **completely passive**:
+Legrand Green'up Premium charging stations incorporate an internal **u-blox NINA-B112** transceiver (Bluetooth Low Energy 4.2 / 5.0) wired to the ATmega2560 mainboard via an internal serial link operating at **115200 bauds, 8 data bits, no parity, 1 stop bit (8N1)**.
 
-1. **No Spontaneous Frames (Strict Polling):**
-   The main loop dispatcher (`manage_bluetooth()` at `0x14528` in Flash) only executes when incoming bytes are available (`Serial.available() > 0`). If no request is received from the smartphone, the ATmega **never sends unsolicited data**.
-2. **Noise Immunity & Integrity Check (Mandatory CRC-16):**
-   Because the transceiver operates inside an electrical enclosure subject to 32 A inductive switching noise, every single packet (both inbound and outbound) is strictly validated by an industrial **CRC-16-IBM / Modbus** checksum. Any frame with an invalid checksum or malformed header is instantly purged from SRAM without side-effects.
-3. **Internal RAM Convergence:**
-   Although the wire protocols are totally incompatible (ASCII text vs. binary frames), the Bluetooth handlers read and mutate the **exact same internal state variables** in SRAM as the supervisor commands:
-   - `0x0300`: `g_current_state` (finite-state machine 'A'..'Z')
-   - `0x0DAF`: `g_autorisation_charge` (charge authorization flag, set by `DOK` or BLE Cmd `0x27`)
-   - `0x0D47`: `g_socket_lock_state` (T2S socket locking solenoid)
-   - `0x0C23`–`0x0C32`: Active energy counters (kWh / TIC Linky totalizers)
+### Communication Paradigm
+Unlike the supervisory serial port (`USART1`), which pushes unsolicited asynchronous text events (`State:B`, `CCI:16.02`, `CC:24`), the Bluetooth interface is **strictly passive**:
+- **Half-Duplex Master-Slave (Polling / Pull):** The station never sends unsolicited data over Bluetooth. It only responds when queried by an authorized client (such as the official Legrand mobile application).
+- **Industrial Integrity Guard (CRC-16):** Every packet (both requests and responses) is protected by a standard **CRC-16-IBM / Modbus** checksum. Packets with invalid checksums or malformed framing are discarded immediately.
+- **State Convergence:** Commands received over Bluetooth update the exact same underlying finite-state machine and current setpoint registers as commands received over the physical serial bus.
 
 ---
 
-## 🛰️ Modem Setup: u-blox NINA AT Sequence & Hardware Control
+## 2. BLE GATT Interface & Services
 
-During board initialization and upon receiving `BTOK` on `USART1` (`0x19EB6`–`0x1A2CE` in Flash), the ATmega controls the power and reset lines before configuring the u-blox NINA BLE transceiver via standard Hayes `AT+` commands:
+The u-blox NINA transceiver operates in **Serial Port Service (SPS)** Data Mode and exposes the following standard GATT services:
 
-### 1. Hardware Pin Control
-* **Pin 34 (D34 / `0x1F15A`):** NINA Power Enable. Driven HIGH to power the module, driven LOW by `BTNOK` (`0x14518`–`0x14524`) to completely shut down the transceiver.
-* **Pin 35 (D35 / `0x19EEA`–`0x19F02`):** NINA Hardware Reset. Pulled LOW (100 ms) then HIGH (100 ms) to trigger a clean hardware reboot.
+### 2.1 u-blox Serial Port Service (SPS)
+- **Service UUID:** `2456e1b9-26e2-8f83-e744-f34f01e9d701`
+- **FIFO Data Characteristic:** `2456e1b9-26e2-8f83-e744-f34f01e9d703`
+  - **Properties:** `WRITE WITHOUT RESPONSE`, `WRITE`, `NOTIFY`
+  - **Downstream (Client $\rightarrow$ Station):** Commands are sent by writing binary frames directly to this characteristic using **Write Without Response** (`response=False`).
+  - **Upstream (Station $\rightarrow$ Client):** Responses from the station are returned asynchronously as **GATT Notifications**.
+  - **Requirement:** The central client **must subscribe to notifications** on this characteristic before transmitting any request frames.
+- **Credits Characteristic:** `2456e1b9-26e2-8f83-e744-f34f01e9d704`
+  - By default, the module operates in **Connection Without Credits (Transparent Mode)**. Data flows without software flow control overhead.
 
-### 2. AT Configuration Sequence (in exact execution order)
-| Step | Command Sent to u-blox | Purpose & Exact Parameters |
-| :---: | :--- | :--- |
-| 1 | `AT+UBTLN="Green'up-XXXXXX"\r` | Sets the broadcast BLE Local Name, derived dynamically from the board's serial number stored in EEPROM (`0x02E7`..`0x02ED`). |
-| 2 | `AT+UMRS=115200,2,8,1,1,1\r` | Sets UART parameters: `115200` bauds, flow control `2` (CTS/RTS disabled), `8` data bits, `1` stop bit, parity `1` (None), `1` (apply immediately). |
-| 3 | `AT+UMSM=1\r` | Sets default startup mode to **Data Mode (Serial Port Service / SPS)**. |
-| 4 | `AT&W0\r` | Saves the entire configuration into the NINA non-volatile flash profile 0. |
-| 5 | `AT+UMLA=1\r` | Reads the factory Bluetooth MAC address of the NINA chip. |
-| 6 | `AT+CPWROFF\r` | Soft-reboots the NINA transceiver so that Profile 0 takes effect, booting straight into transparent SPS Data Mode. |
-
-Once the NINA transceiver reboots in Data Mode, all bytes exchanged over `USART0` bypass the Hayes AT parser and are streamed directly across the BLE GATT Serial Port Service.
-
----
-
-## 📶 BLE GATT Architecture (u-blox SPS Specification UBX-16011192)
-
-The u-blox NINA transceiver exposes the following standardized GATT services and characteristics:
-
-### 1. u-blox Serial Port Service (SPS) — Service `2456e1b9-26e2-8f83-e744-f34f01e9d701`
-* **FIFO Data Characteristic (`2456e1b9-26e2-8f83-e744-f34f01e9d703`):**
-  - **Properties:** `READ`, `WRITE WITHOUT RESPONSE`, `WRITE`, `NOTIFY`.
-  - **Downstream (Central $\rightarrow$ Station):** Written via **GATT Write Commands (`response=False`)**. Writes are emitted directly onto the ATmega `USART0` RX pin (`PE0`).
-  - **Upstream (Station $\rightarrow$ Central):** Packets output by the ATmega on `USART0` TX pin (`PE1`) are pushed to the Central as **GATT Notifications**. The Central MUST subscribe to notifications on this characteristic before transmitting.
-* **Credits Characteristic (`2456e1b9-26e2-8f83-e744-f34f01e9d704`):**
-  - **Properties:** `WRITE WITHOUT RESPONSE`, `WRITE`, `NOTIFY`.
-  - **Transparent Mode (Default / Recommended):** If the client never writes to this characteristic, the module operates in **Connection Without Credits**. Data is relayed with zero handshake overhead.
-  - **Credit-Based Flow Control Mode:** If used, the Central must strictly follow section 4.3.1 of `UBX-16011192`: enable notifications on both FIFO and Credits *before* writing initial credits, then wait for the peripheral's credit notification. Writing credits without enabling notifications causes packet lockups.
-
-### 2. Device Information Service — Service `0000180a-0000-1000-8000-00805f9b34fb`
-Standard readable descriptors giving transceiver identity:
-- `00002a24-0000-1000-8000-00805f9b34fb`: Model Number (e.g. `NINA-B112`)
-- `00002a26-0000-1000-8000-00805f9b34fb`: Firmware Revision (e.g. `u-connectXpress v...`)
-- `00002a28-0000-1000-8000-00805f9b34fb`: Software Revision
-- `00002a29-0000-1000-8000-00805f9b34fb`: Manufacturer Name (`u-blox`)
+### 2.2 Standard Device Information Service
+- **Service UUID:** `0000180a-0000-1000-8000-00805f9b34fb`
+  - Model Number (`00002a24-...`): `NINA-B112`
+  - Manufacturer (`00002a29-...`): `u-blox`
 
 ---
 
-## 🔁 Raw USART0 Echo Diagnostic (`0x16AC0`–`0x16B36`)
+## 3. Packet Framing & Checksum Specification
 
-As a diagnostic mechanism embedded in the firmware dispatcher, if the ATmega receives incoming bytes that **do not start with the `0x01` SOH delimiter**, it collects them into an SRAM buffer (up to 49 octets or 101 ms timeout) and **echoes them back byte-for-byte** via `Serial.write()`:
+Every binary frame follows a structured multi-byte envelope:
 
-```
-Central (BLE Write)  -->  NINA-B112  -->  ATmega2560 RX0 (PE0)
-                                                |
-                                    [Byte 0 != 0x01 ?]
-                                                |
-                                        (Echo Loop 0x16B1E)
-                                                |
-Central (BLE Notify) <--  NINA-B112  <--  ATmega2560 TX0 (PE1)
-```
-
-Sending an arbitrary ASCII string like `PING\r\n` provides immediate physical validation that the internal `USART0` serial bus is alive and communicating at 115200 bauds.
-
----
-
-## 📦 Packet Framing & CRC-16 Specification
-
-Every binary frame (request and response) follows a strict multi-byte envelope:
-
-```
+```text
 +--------+--------+----------------+--------------------------+--------+----------+----------+
 | Byte 0 | Byte 1 |     Byte 2     | Bytes 3 .. (Len - 4)     | Byte L-2| Byte L-1 |  Byte L  |
 |  SOH   |  Type  | Opcode/Subcmd  | Payload Data (0..N bytes)|  EOP   |  CRC_HI  |  CRC_LO  |
-| (0x01) | (1 o)  |     (1 o)      |         (Variable)       | (0xFF) |  (1 o)   |  (1 o)   |
+| (0x01) | (1 B)  |     (1 B)      |         (Variable)       | (0xFF) |  (1 B)   |  (1 B)   |
 +--------+--------+----------------+--------------------------+--------+----------+----------+
 ```
 
-### 1. Frame Envelope Details
+### 3.1 Field Definitions
 
-* **Byte 0 — SOH (`0x01` / `DebutTrame`):** Start of Header. Any packet starting with an octet other than `0x01` is rejected immediately (`0x16AC0`), and input bytes are echoed back on `USART0` as raw diagnostic.
-* **Byte 1 — Service / Packet Type (`CodeFonction`):**
-  - `0x03` : **Special Functions (`CodesFonction.Special`)**:
-    - Sub-Opcode `0x01` (`CodeSpecialRegistre.Ping`): Harmless keepalive handshake.
-    - Sub-Opcode `0x02` (`CodeSpecialRegistre.Reset`): Software reset of the charging station.
-    - Sub-Opcode `0x03` (`CodeSpecialRegistre.Decommissioning`): Factory reset / unpair smartphone.
-  - `0x04` : **Runtime Application Telemetry & Read (`CodesFonction.Read`)**: Standard register querying (EV Charge app).
-  - `0x05` : **Register Configuration & Write (`CodesFonction.Write`)**: Writing setpoints, schedules, and mode parameters.
-* **Byte 2 — Opcode / Command Identifier (`CodesRegistre` or `CodeSpecialRegistre`):**
-  Identifies the specific RPC method (e.g., `0x01` for Ping when Type=0x03; `0x01` for Serial Number, `0x11` for Charge Status, `0x15` for Operational State, `0x23` for LancerMiseAJour when Type=0x04).
-* **Bytes 3 .. $L-3$ — Payload Data (`Data`):**
-  Optional command arguments (in request) or telemetry register values (in response). Can be empty (0 bytes).
-* **Byte $L-2$ — EOP (`0xFF` / `FinTrame`):**
-  End of Packet delimiter. Placed **before** the CRC bytes.
-* **Bytes $L-1$ & $L$ — CRC-16 Checksum (Big-Endian):**
-  16-bit Modbus CRC calculated over all preceding bytes (`Byte 0` up to `Byte L-2`, including `0xFF`).
-  Formatted in **Big-Endian** (Most Significant Byte `CRC_HI` first, then Least Significant Byte `CRC_LO`).
-
-> [!IMPORTANT]
-> ### ⚙️ Hardware Reception Mechanism (ATmega2560 `manage_bluetooth` at `0x14600`–`0x14676`)
-> Disassembly of the ATmega firmware reveals the exact frame boundary detection logic:
-> 1. In incoming bytes streaming through `Serial.read()`, byte $N$ is appended to the SRAM buffer at `Y + 0x33 + N`.
-> 2. The firmware inspects `buffer[N - 2]`:
->    ```avr
->    0x14628: ldi r30, 0x32
->    0x1462C: add r30, r28 ; adc r31, r29  ; Z = Y + 0x32
->    0x14630: add r30, r4  ; adc r31, r5   ; Z += r4 (N - 1) -> buffer[N - 2]
->    0x14634: ld  r24, Z
->    0x14638: cpi r24, 0xFF                ; Was the byte 2 steps ago 0xFF?
->    0x1463A: breq 0x14646                 ; If YES -> Packet complete, trigger CRC check!
->    ```
-> 3. Once `buffer[N - 2] == 0xFF`, the microcontroller halts reception, computes CRC on the preceding $N-1$ octets (all bytes including `0xFF`) via `0x030FA`, performs a 2-byte XOR swap on the received CRC bytes (`0x1466A`–`0x1466E`), and verifies match.
-> 4. If a frame mistakenly places `0xFF` at the very end of the packet, `buffer[N - 2]` will never evaluate to `0xFF` upon completion, leading to an **infinite wait / timeout**.
+| Field | Length | Value | Description |
+| :--- | :---: | :---: | :--- |
+| **SOH** | 1 byte | `0x01` | **Start of Header**: All valid frames must begin with `0x01`. Frames with any other starting byte trigger the diagnostic echo mechanism. |
+| **Type** | 1 byte | Enum | **Service Type / Function Code**: <br>• `0x03`: Special & System Management functions (Ping / Handshake) <br>• `0x04`: Runtime Telemetry, Status & Control registers (`CodesRegistre`) <br>• `0x05`: Low-level system & factory calibration (undocumented, see Section 6) |
+| **Opcode** | 1 byte | Enum | **Register / Subcommand Identifier**: Specifies the target register or function. |
+| **Payload** | $0..N$ bytes | Variable | Optional arguments (in requests / writes) or register values (in responses). Empty for simple read queries. |
+| **EOP** | 1 byte | `0xFF` | **End of Packet**: Delimiter placed immediately before the CRC bytes. |
+| **CRC-16** | 2 bytes | 16-bit | **Checksum**: 16-bit Modbus CRC computed over all preceding bytes (`Byte 0` to `Byte L-2`, including `0xFF`). Transmitted in **Big-Endian** (`CRC_HI` then `CRC_LO`). |
 
 ---
 
-### 2. Checksum Algorithm (CRC-16 Modbus / IBM)
+### 3.2 Checksum Algorithm (CRC-16 Modbus / IBM)
 
-The integrity function at [`0x030FA`](file:///c:/Users/rapha/Desktop/Maj%20borne%20legrand/retro_ingenierie/legrand/hex/FirmwareBoardA-V01;19;02.hex#L784) implements standard CRC-16-IBM / Modbus:
+- **Polynomial:** `0xA001` (reversed `0x8005`, $x^{16} + x^{15} + x^2 + 1$)
+- **Initial Value:** `0xFFFF`
+- **Bit Order:** Reflected (LSB first)
+- **Serialization:** Big-Endian byte order (`CRC_HI`, `CRC_LO`)
 
-* **Polynomial:** `0xA001` (reversed `0x8005`, $x^{16} + x^{15} + x^2 + 1$)
-* **Initial Value:** `0xFFFF`
-* **Input / Output:** Reflected (LSB first)
-* **Serialization:** Big-Endian byte order (`crc.to_bytes(2, "big")` / C# `crc.ToString("X4")` -> `HexStringToByteArray`)
-
-#### Reference Implementation (Python)
+#### Reference Python Implementation
 ```python
 def calc_ble_crc16(data: bytes) -> int:
+    """Computes standard CRC-16-IBM/Modbus across the provided byte sequence."""
     crc = 0xFFFF
     for byte in data:
         crc ^= byte
@@ -170,8 +88,8 @@ def calc_ble_crc16(data: bytes) -> int:
     return crc
 
 
-def build_frame(service_type: int, opcode: int, payload: bytes = b"") -> bytes:
-    """Builds a valid Legrand Green'up Bluetooth frame."""
+def build_ble_frame(service_type: int, opcode: int, payload: bytes = b"") -> bytes:
+    """Builds a fully-formed Legrand Green'up Bluetooth frame."""
     body = bytes([0x01, service_type, opcode]) + payload + bytes([0xFF])
     crc = calc_ble_crc16(body)
     return body + crc.to_bytes(2, "big")
@@ -179,189 +97,206 @@ def build_frame(service_type: int, opcode: int, payload: bytes = b"") -> bytes:
 
 ---
 
-## 📱 Service Type 0x04: Runtime Telemetry & Supervision (CodesRegistre)
+### 3.3 Diagnostic Echo Mechanism
 
-When `Byte 1 == 0x04` (`CodesFonction.Read`), the central centralizes all supervisory requests to the ATmega2560.
-The ATmega internal jump table (`__tablejump_elpm__` at `0x22590`, dispatching from table words at `0x146A6`) indexes commands from `0x01` to `0x45` (1 to 69).
+If the station receives incoming bytes that **do not start with `0x01`** (such as modem AT feedback or unsolicited strings like `+UUBTLC` emitted by u-blox NINA upon connection), it automatically echoes them back byte-for-byte.
 
-The exact register IDs and payload types correspond directly to the official Legrand C# assembly specification (`Exakis.Legrand.GreenUp.Domain.BluetoothCommand.Base.CodesRegistre`):
-
-### 1. Station Identification & Hardware Metadata
-
-| Opcode | Register Name (`CodesRegistre`) | Jump Target | Data Type | Description & Payload Format |
-| :---: | :--- | :---: | :---: | :--- |
-| `0x01` (1) | `NumeroSerie` | `0x148F8` | `long` / ASCII | **Serial Number**: 4-byte / 8-byte integer or ASCII serial number string of the station. |
-| `0x02` (2) | `ReferenceBorne` | `0x14A2C` | `uint16` / Enum | **Commercial Reference Code**: 16-bit integer mapped to `ReferenceBorne` (e.g., `59001` = 7.4 kW Mono standard, `59002` = 22 kW Tri, `58001` = 7.4 kW 6mA DC). |
-| `0x03` (3) | `NumeroTracabilite` | `0x14C02` | `struct` | **Manufacturing Traceability**: Factory manufacturing batch and traceability identifiers (`FirstNumber`, `SecondNumber`). |
-| `0x04` (4) | `VersionFirmware` | `0x14C26` | `byte[3]` | **Firmware Version**: 3 bytes `[Major, Minor, Build]` (e.g. `[1, 19, 2]` represents `v1.19.02`). |
-| `0x05` (5) | `VersionHardware` | `0x14CA0` | `byte[3]` | **Hardware Version**: 3 bytes representing the physical electronic board revision. |
-| `0x06` (6) | `PresenceKitCom` | `0x14F8C` / `0x13944` | `bool` | **KitCom Presence Flag (Inexploitable / Stub)**: Toujours à `0x00` en dur (`std Y+4, r1`). Fonction abandonnée / non finalisée par Legrand côté BLE. Déconnectée de la présence réelle `g_kit_com_present` (`0x0DB0`) sur le port série `USART1`. |
-| `0x07` (7) | `AutoModePossibilite` | `0x14F8C` / `0x13944` | `uint8` | **Automatic Capabilities (Stub)**: Même stub codé en dur à `0x00`. |
-| `0x08` (8) | `GestionConsigne` | `0x14D14` | `uint8` | **Gestion Consigne**: Paramètres de modulation de puissance. |
-| `0x09` (9) | `NomBorne` | `0x148AE` | `string` | **Station Friendly Name**: UTF-8 user-assigned string (e.g., `"Legrand"`). |
-| `0x0A` (10) | `Horloge` | `0x14D48` | `byte[7]` | **Real-Time Clock (RTC)**: Internal clock timestamp (Year, Month, Day, DayOfWeek, Hours, Minutes, Seconds). |
-| `0x0F` (15) | `ChargingPointSide` | `0x15806` | `uint8` | **Point Side**: `0` = Left connector, `1` = Right connector (for dual-socket stations). |
-| `0x30` (48) | `MacAdresse` | `0x15760` | `byte[6]` | **Transceiver MAC Address**: Factory Bluetooth MAC address of the u-blox NINA module. |
-| `0x32` (50) | `HardwareId` | `0x15806` | `byte[]` | **Hardware GUID / Chip ID**: Unique factory silicon hardware ID. |
+Robust BLE clients should:
+1. Drain/flush the GATT receive queue for 200–300 ms after establishing the BLE connection before sending the first packet.
+2. Ignore any received notification whose payload is strictly identical to the transmitted request.
 
 ---
 
-### 2. Operational State, Charging Status & Diagnostics
+## 4. Special & Handshake Functions (`Type 0x03`)
 
-| Opcode | Register Name (`CodesRegistre`) | Jump Target | Data Type | Description & Payload Format |
+Service Type `0x03` handles link keepalive and protocol handshakes:
+
+| Opcode | Name | Request Payload | Response Payload | Description |
 | :---: | :--- | :---: | :---: | :--- |
-| `0x11` (17) | `EtatCharge` | `0x14E12` | `uint8` | **Charge Status (`ChargeStatus`)**: Current charging state: <br>• `0`: `NonConnecte` (unplugged) <br>• `1`: `BrancheEnAttente_StartStop` <br>• `2`: `BrancheEnAttente_Externe` (waiting supervisor `DOK`) <br>• `3`: `BrancheEnAttente_VE` (vehicle plugged, ready) <br>• `4`: `EnCharge` (contactor closed, active power delivery) <br>• `5`: `ChargeTerminee` (vehicle full, charging complete) <br>• `6`: `Off` (station disabled) <br>• `16`: `ErreurResetable` (voltage/frequency fault) <br>• `17`: `ErreurNonResetable` (emergency stop/welded contactor) <br>• `255`: `Rebooting` |
-| `0x12` (18) | `ErreurCodification` | `0x15806` | `uint8` | **Hardware Fault Diagnosis (`ErreurCodification`)**: <br>• `0`: No error <br>• `1`: Socket locking fault <br>• `2`: Socket unlocking fault <br>• `3`: CP pilot wire short-circuit <br>• `4`: CP short on station side <br>• `5`/`6`: Domestic contactor opening/closing fault <br>• `7`/`8`: EV contactor opening/closing fault <br>• `9`: Missing vehicle diode <br>• `10`: EV plug overcurrent <br>• `11`: Domestic plug overcurrent <br>• `12`: Power outage / mains blackout <br>• `255`: Waiting firmware update |
-| `0x14` (20) | `InfoDernierCharge` | `0x14F82` | `struct` | **Last Session Charge Report (`RapportCharge`)**: Detailed energy metrics: Peak hours (`HP_NombreHeure`, `HP_NombreMinutes`, `HP_Consommation`), Off-peak hours (`HC_NombreHeure`, `HC_NombreMinutes`, `HC_Consommation`), total energy in Wh, CO2 avoided. |
-| `0x15` (21) | `EtatBorne` | `0x14F94` | `uint8` | **Station Operational Switch (`EtatBorne`)**: `0` = Inactive / Standby, `1` = Active / Ready. |
+| `0x01` | `Ping` | *(None)* | `0xFF` (ACK) | **Keepalive Probe / Handshake**: Confirms link responsiveness and active session. Returns `0xFF` on success. |
+
+> [!NOTE]
+> Additional subcommands under Service `0x03` handling bootloader arming and OTA flashing signatures are intentionally omitted from this document for safety.
 
 ---
 
-### 3. Charging Control, Setpoints & Scheduling
+## 5. Runtime Telemetry & Control Registers (`Type 0x04`)
 
-| Opcode | Register Name (`CodesRegistre`) | Jump Target | Data Type | Description & Payload Format |
-| :---: | :--- | :---: | :---: | :--- |
-| `0x16` (22) | `CourantCharge` | `0x14FB2` | `byte[]` | **Charging Current Limitation**: Setpoint current limit assigned to the vehicle (in Amperes, e.g. `10`, `14`, `16`, `20`, `25`, `32`). Supports both single setpoint read and list of authorized steps. |
-| `0x17` (23) | `ModeCharge` | `0x14FE6` | `uint8` | **Charge Mode Configuration (`ModeCharge`)**: <br>• `0`: `Permanent` (charge starts immediately upon connection) <br>• `2`: `Planned` (charge restricted to active scheduling windows) <br>• `16`: `Auto_HP_HC` (synchronization with dry-contact off-peak input) <br>• `17`: `Auto_Linky` (dynamic modulation via TIC tele-information demodulator) |
-| `0x18` (24) | `ValeurPlanning` | `0x150EC` | `struct` | **Charge Scheduling Configuration (`BornePlanning`)**: Active timer profiles: days of week, start hour/quarter-hour, end hour/quarter-hour, max current limit during window. |
-| `0x19` (25) | `Charge` | `0x15806` | `bool` | **Remote Start / Stop Charge Command**: Start or stop charging remotely via app. |
-| `0x20` (32) | `DerogationCharge` | `0x150FC` | `bool` | **Temporary Charging Override**: Temporarily bypasses off-peak or planning constraints for immediate single-session charging. |
-| `0x23` (35) | `LancerMiseAJour` | `0x1532A` / `0x13CDC` | `byte[1]` | **Trigger Firmware Update (Internal)**: Commande interne réservée au processus officiel de mise à jour constructeur. Non supportée dans ce pilote opérationnel de supervision. |
-| `0x24` (36) | `ReseauKitComUtilise` | `0x14F8C` | `uint8` | **Active Network Interface (`NetworkType`)**: `0` = None, `1` = RJ45 Ethernet, `2` = WiFi, `3` = Both, `4` = Configure Later. |
-| `0x27` (39) | `CourantSessionDeCharge`| `0x1539C` | `uint16` | **Active Session Current**: Real-time current delivered to the EV during the ongoing charging cycle. |
-| `0x29` (41) | `DecalageModePermanent`| `0x15806` | `struct` | **Permanent Mode Offset**: Time offset parameters for scheduled permanent charging. |
+When `Type == 0x04`, the client communicates with the station's primary register map (`CodesRegistre`):
+- **Read Query:** Transmit frame with empty payload: `[0x01, 0x04, Opcode, 0xFF, CRC_HI, CRC_LO]`. The station replies with the register value in the payload.
+- **Write / Setpoint:** Transmit frame with argument payload: `[0x01, 0x04, Opcode, Value..., 0xFF, CRC_HI, CRC_LO]`.
+
+### 5.1 Station Identity & Hardware Metadata
+
+| Opcode | Register Name | Data Type | Description & Format |
+| :---: | :--- | :---: | :--- |
+| `0x01` | `NumeroSerie` | `uint32` (BE) | **Serial Number**: Big-endian integer (e.g. `0x003039` = 12345 representing `"012345"`). |
+| `0x02` | `ReferenceBorne` | `uint16` (BE) | **Catalogue Reference**: 16-bit integer corresponding to the Legrand model (e.g. `58001` = 7.4 kW Single-phase with 6mA DC protection). |
+| `0x03` | `NumeroTracabilite` | `byte[8]` | **Manufacturing Traceability**: Factory production and batch identifiers. |
+| `0x04` | `VersionFirmware` | `byte[3]` | **Power Board Firmware**: 3 bytes `[Major, Minor, Build]` (e.g. `[1, 19, 2]` represents `V01.19.02`). |
+| `0x05` | `VersionHardware` | `byte[3]` | **Hardware Revision**: 3 bytes representing the electronic board revision (e.g. `[2, 1, 1]` represents `V02.01.01`). |
+| `0x06` | `PresenceKitCom` | `uint8` | **KitCom Presence Flag**: Reserved legacy stub (returns `0x00` in firmware). |
+| `0x09` | `NomBorne` | `string` | **User Friendly Name**: ASCII/UTF-8 string (up to 10 characters, e.g. `"Legrand"`). |
+| `0x0A` | `Horloge` | `byte[7]` | **Internal RTC**: `[Year, Month, Day, DayOfWeek, Hour, Minute, Second]`. |
+| `0x0F` | `ChargingPointSide`| `uint8` | **Socket Side**: `0` = Left connector, `1` = Right connector (on dual-socket wallboxes). |
+| `0x30` | `MacAdresse` | `byte[6]` | **Bluetooth MAC Address**: 6-byte hardware address of the u-blox transceiver. |
+| `0x32` | `HardwareId` | `byte[]` | **Hardware GUID / Chip ID**: Unique factory silicon hardware ID. |
 
 ---
 
-### 4. Verified Live Hardware Packet Traces
+### 5.2 Operating States & Fault Diagnostics
 
-The following transactions have been captured and validated on physical hardware:
+| Opcode | Register Name | Data Type | Description & Values |
+| :---: | :--- | :---: | :--- |
+| `0x11` | `EtatCharge` | `uint8` | **High-Level Charging Status**: <br>• `0`: `NonConnecte` (Standby, no vehicle connected) <br>• `1`: `BrancheEnAttente_StartStop` (Cable plugged, waiting for start trigger) <br>• `2`: `BrancheEnAttente_Externe` (Waiting for supervisor authorization or schedule window) <br>• `3`: `BrancheEnAttente_VE` (Ready, waiting for vehicle demand) <br>• `4`: `EnCharge` (Contactor closed, active power delivered) <br>• `5`: `ChargeTerminee` (Vehicle battery full, current idle) <br>• `6`: `Off` (Station locked / disabled) <br>• `16`: `ErreurResetable` (Temporary mains voltage or frequency error) <br>• `17`: `ErreurNonResetable` (Hardware fault / contactor interlock error) |
+| `0x12` | `ErreurCodification`| `uint8` | **Hardware Diagnostic Code**: <br>• `0`: No error <br>• `1`: Socket locking fault <br>• `2`: Socket unlocking fault <br>• `3`: Control Pilot short-circuit <br>• `4`: Control Pilot short on station side <br>• `5`/`6`: Domestic contactor fault <br>• `7`/`8`: EV contactor fault <br>• `9`: Missing vehicle diode <br>• `10`: Type 2 overcurrent <br>• `11`: Domestic Schuko overcurrent <br>• `12`: Mains power outage |
+| `0x14` | `InfoDernierCharge` | `struct` | **Last Session Summary**: Peak-hours duration & energy (Wh), off-peak duration & energy (Wh), total energy delivered, and avoided CO2. |
+| `0x15` | `EtatBorne` | `uint8` | **Operational State**: `0` = Inactive / Standby, `1` = Active / Ready. |
 
-#### A. Keepalive Handshake (`Type 0x03`, `Opcode 0x01` — `CodesFonction.Special.Ping`)
-* **Request (Central $\rightarrow$ Station):**
+---
+
+### 5.3 Charging Control, Setpoints & Scheduling
+
+| Opcode | Register Name | Data Type | Description & Values |
+| :---: | :--- | :---: | :--- |
+| `0x16` | `CourantCharge` | `byte[]` / `uint8` | **Charging Current Limitation**: Supported current ratings array when read; sets target charging limit when written (e.g. `0x10` for 16A, `0x20` for 32A). |
+| `0x17` | `ModeCharge` | `uint8` | **Charging Mode Configuration**: <br>• `0`: `Permanent` (Charging starts immediately upon connection) <br>• `2`: `Planned` (Charging restricted to active calendar windows) <br>• `16`: `Auto_HP_HC` (Synchronized with external dry-contact off-peak signal) <br>• `17`: `Auto_Linky` (Dynamically modulated via Enedis Linky TIC tele-information) |
+| `0x18` | `ValeurPlanning` | `struct` | **Weekly Schedule Profiles**: Programmed charging windows (days of week, start hour/minute, end hour/minute, current rating). |
+| `0x19` | `Charge` | `bool` | **Remote Start / Stop Command**: `1` = Authorize/start charge, `0` = Stop charge. |
+| `0x20` | `DerogationCharge` | `bool` | **Temporary Charging Override**: `1` = Temporarily bypass schedule for immediate charge, `0` = Follow normal schedule. |
+| `0x27` | `CourantSessionDeCharge`| `uint16` | **Active Session Current**: Real-time current delivered to the EV during active charge (in tenths of an Ampere). |
+| `0x29` | `DecalageModePermanent`| `struct` | **Permanent Mode Offset**: Time offset parameters for scheduled permanent charging. |
+
+---
+
+## 6. Low-Level System & Maintenance Commands (`Type 0x05`)
+
+Service Type `0x05` (along with certain low-level subcommands under Type `0x03` and Opcode `0x23` under Type `0x04`) is reserved internally by the charging station for:
+- Factory calibration (ADC shunt offsets and gain calibration).
+- Production-mode arming and EEPROM manufacturing data initialization (hardware serial number, production date, commercial catalogue reference).
+- Direct bootloader entry and low-level MCU firmware flashing routines.
+
+To prevent accidental misconfiguration, loss of factory calibration, or bricking of the ATmega microcontroller, **these low-level commands are not documented here**. Standard third-party supervision and charging management applications should exclusively use Service Types `0x03` (Ping keepalive) and `0x04` (Runtime telemetry and control registers).
+
+---
+
+## 7. Verified Wire Packet Traces
+
+The following transactions illustrate validated requests and responses with exact CRC-16 checksums:
+
+### 1. Keepalive Ping (`Type 0x03`, `Opcode 0x01`)
+- **Request (Client $\rightarrow$ Station):**
   ```hex
   01 03 01 FF 08 B0
   ```
-  - `0x01` : SOH (`DebutTrame`)
-  - `0x03` : Service `Special`
-  - `0x01` : Sub-command `Ping`
-  - `0xFF` : EOP delimiter
-  - `0x08 0xB0` : CRC-16 Modbus (Big-Endian)
-* **Response (Station $\rightarrow$ Central):**
+- **Response (Station $\rightarrow$ Client):**
   ```hex
   01 03 01 FF FF F4 49
   ```
-  - Non-destructive immediate ACK (`Payload: FF`, CRC: `0xF449`). Handshake validated!
-
-#### B. Numéro de Série (`Type 0x04`, `Opcode 0x01` — `NumeroSerie`)
-* **Request:** `01 04 01 FF C9 01`
-* **Response:** `01 04 01 00 3B 50 FF 09 3A`
-  - Payload: `0x003B50` (Big-Endian) = `15184` (Serial Number `"015184"`)
-
-#### C. Référence Commerciale (`Type 0x04`, `Opcode 0x02` — `ReferenceBorne`)
-* **Request:** `01 04 02 FF 39 01`
-* **Response:** `01 04 02 E2 91 FF 54 7C`
-  - Payload: `0xE291` (Big-Endian) = `58001` (Green'up Premium 7.4 kW Monophasé 32A avec diff. 6mA DC)
-
-#### D. Version Firmware Carte Mère (`Type 0x04`, `Opcode 0x04` — `VersionFirmware`)
-* **Request:** `01 04 04 FF 99 02`
-* **Response:** `01 04 04 01 11 4E FF 9D DF`
-  - Payload: `[0x01, 0x11, 0x4E]` = `v1.17.78` (`0x11` = 17, `0x4E` = 78)
-
-#### E. Révision Hardware (`Type 0x04`, `Opcode 0x05` — `VersionHardware`)
-* **Request:** `01 04 05 FF 09 03`
-* **Response:** `01 04 05 02 01 01 FF EC D7`
-  - Payload: `[0x02, 0x01, 0x01]` = `v2.01.01`
-
-#### F. Présence Carte KitCom (`Type 0x04`, `Opcode 0x06` — `PresenceKitCom`)
-* **Request:** `01 04 06 FF F9 03`
-* **Response:** `01 04 06 00 FF B1 B8`
-  - Payload: `0x00`
-
-> [!WARNING]
-> **Valeur inexploitable — Registre codé en dur à `0x00` (Fonction non développée entièrement par Legrand) :**  
-> L'analyse approfondie du désassemblage du firmware ATmega2560 (`0x13944` en `v1.17`, `0x14F8C` en `v1.19`) montre que ce gestionnaire n'accède à aucune variable en mémoire vive :
-> ```avr
-> std Y+4, r1    ; r1 = __zero_reg__ (0x00)
-> ldi r16, 0x03  ; Taille trame
-> ldi r17, 0x00
-> rcall 0x13430  ; Envoi trame + CRC
-> ```
-> Cette valeur **reste systématiquement à zéro quoi qu'il arrive**, même lorsqu'un superviseur Raspberry Pi ou un KitCom officiel est connecté et en cours de session active sur le port série `USART1` (où la commande `RaspberryPiModeOK\r` arme bien `g_kit_com_present = 1` en SRAM `0x0DB0` et répond `KitCom:1` à `KitCom?\r`).  
-> Côté BLE, la configuration réseau n'a jamais été finalisée par Legrand (l'application mobile utilise ce `0` pour masquer les écrans de configuration Wi-Fi/Ethernet). Ne jamais utiliser cet opcode pour déduire la présence d'un superviseur ou d'une carte réseau.
-
-#### G. Nom de la Borne (`Type 0x04`, `Opcode 0x09` — `NomBorne`)
-* **Request:** `01 04 09 FF 09 06`
-* **Response:** `01 04 09 4C 65 67 72 61 6E 64 00 00 00 FF 68 81`
-  - Payload: `4C 65 67 72 61 6E 64 00 00 00` (ASCII `"Legrand"`)
-
-#### H. Statut de Charge (`Type 0x04`, `Opcode 0x11` — `EtatCharge`)
-* **Request:** `01 04 11 FF 09 0C`
-* **Response:** `01 04 11 00 FF B5 08`
-  - Payload: `0x00` = `NonConnecte` (Véhicule débranché)
-
-#### I. État Opérationnel Automate (`Type 0x04`, `Opcode 0x15` — `EtatBorne`)
-* **Request:** `01 04 15 FF C9 0E`
-* **Response:** `01 04 15 01 FF E4 48`
-  - Payload: `0x01` = `Actif` / Opérationnel
-
-#### J. Courants de Charge Autorisés (`Type 0x04`, `Opcode 0x16` — `CourantCharge`)
-* **Request:** `01 04 16 FF 39 0E`
-* **Response:** `01 04 16 10 14 19 20 20 FF D7 1C`
-  - Payload: `[0x10, 0x14, 0x19, 0x20, 0x20]` = Calibres autorisés `[16A, 20A, 25A, 32A, 32A]`
-
-#### K. Mode de Charge Actif (`Type 0x04`, `Opcode 0x17` — `ModeCharge`)
-* **Request:** `01 04 17 FF A9 0F`
-* **Response:** `01 04 17 00 FF B4 E8`
-  - Payload: `0x00` = `Permanent` (Charge immédiate à l'enfichage)
-
-#### L. Diagnostic Erreurs Matérielles (`Type 0x04`, `Opcode 0x12` — `ErreurCodification`)
-* **Request:** `01 04 12 FF F9 0C`
-* **Response:** `01 04 12 00 FF B5 F8`
-  - Payload: `0x00` = Aucune erreur
-
-#### M. Procédures de Maintenance Interne (`Opcode 0x23`)
-Les opcodes liés au basculement en mode maintenance constructeur ne font pas partie de l'interface opérationnelle de supervision et ne sont pas documentés ici.
-
-#### N. Handling the ATmega Raw USART0 Echo Loop (`0x16AC0`)
-If the ATmega USART0 receives any leading byte that is not `0x01` (e.g. modem unsolicited notifications like `+UUBTLC` emitted by u-blox NINA upon BLE connection, or during MCU reboot), it falls into the `0x16AC0` loop and echoes incoming bytes back byte-for-byte.
-Robust supervisory clients must:
-1. Purge/drain the GATT receive queue for 200–300 ms after establishing the BLE connection before sending the first command.
-2. Explicitly reject any received frame whose bytes are strictly identical to the transmitted request (`if rx_frame == tx_frame: ignore`).
+  - Returns `0xFF` ACK payload with valid CRC.
 
 ---
 
-## ⚡ Service Type 0x03: Firmware Update Services (Notice)
-
-Le Service Type `0x03` est réservé aux procédures de téléversement et de mise à jour de firmware par l'application mobile officielle Legrand :
-* `0x01` : Interrogation de conformité du chargeur d'amorçage.
-* `0x02` : Déclenchement de la procédure d'arrêt sécurisé avant mise à jour.
-* `0x03` : Contrôle de signature d'autorisation constructeur.
-
-> [!NOTE]
-> Le projet `greenup-link` ayant pour objectif exclusif la supervision énergétique et le pilotage de charge (EVCC / Home Assistant), les procédures de bas niveau de flashage matériel sont intentionnellement hors du périmètre de ce pilote opérationnel.
-
----
-
-## 🏭 Service Type 0x05: Factory Calibration & Manufacturing (Notice)
-
-Le Service Type `0x05` regroupe les fonctions industrielles réservées à la ligne de fabrication Legrand (calibrage des shunts de mesure de courant, gravure des identifiants d'usine en EEPROM). Ces registres sont verrouillés en production (`g_production_mode`) et n'ont pas de finalité dans le pilotage opérationnel d'une borne installée.
+### 2. Read Serial Number (`Type 0x04`, `Opcode 0x01`)
+- **Request:**
+  ```hex
+  01 04 01 FF C9 01
+  ```
+- **Response (Serial `012345` / `0x003039`):**
+  ```hex
+  01 04 01 00 30 39 FF 65 9B
+  ```
+  - Payload: `0x003039` (Big-Endian) = `12345`
 
 ---
 
-## ⚖️ Technical Comparison: Supervisor (`Serial1`) vs. Bluetooth (`Serial`)
+### 3. Read Catalogue Reference (`Type 0x04`, `Opcode 0x02`)
+- **Request:**
+  ```hex
+  01 04 02 FF 39 01
+  ```
+- **Response (Reference `058001` / `0xE291`):**
+  ```hex
+  01 04 02 E2 91 FF 54 7C
+  ```
+  - Payload: `0xE291` (Big-Endian) = `58001` (Green'up Premium 7.4 kW single-phase)
 
-| Feature | Supervisor Port (`Serial1`) | Bluetooth Port (`Serial`) |
+---
+
+### 4. Read Firmware Version (`Type 0x04`, `Opcode 0x04`)
+- **Request:**
+  ```hex
+  01 04 04 FF 99 02
+  ```
+- **Response (`V01.17.78`):**
+  ```hex
+  01 04 04 01 11 4E FF 9D DF
+  ```
+  - Payload: `[0x01, 0x11, 0x4E]` = `[1, 17, 78]` $\rightarrow$ `V01.17.78`
+
+---
+
+### 5. Read Station Friendly Name (`Type 0x04`, `Opcode 0x09`)
+- **Request:**
+  ```hex
+  01 04 09 FF 09 06
+  ```
+- **Response (`"Legrand"`):**
+  ```hex
+  01 04 09 4C 65 67 72 61 6E 64 00 00 00 FF 68 81
+  ```
+  - Payload: ASCII `"Legrand\0\0\0"`
+
+---
+
+### 6. Read Charging Status (`Type 0x04`, `Opcode 0x11`)
+- **Request:**
+  ```hex
+  01 04 11 FF 09 0C
+  ```
+- **Response (Unplugged / Standby):**
+  ```hex
+  01 04 11 00 FF B5 08
+  ```
+  - Payload: `0x00` = `NonConnecte` (Unplugged)
+
+---
+
+### 7. Read Operating State (`Type 0x04`, `Opcode 0x15`)
+- **Request:**
+  ```hex
+  01 04 15 FF C9 0E
+  ```
+- **Response (Active / Ready):**
+  ```hex
+  01 04 15 01 FF E4 48
+  ```
+  - Payload: `0x01` = `Actif`
+
+---
+
+### 8. Read Allowed Current Steps (`Type 0x04`, `Opcode 0x16`)
+- **Request:**
+  ```hex
+  01 04 16 FF 39 0E
+  ```
+- **Response (`[16A, 20A, 25A, 32A, 32A]`):**
+  ```hex
+  01 04 16 10 14 19 20 20 FF D7 1C
+  ```
+  - Payload: Array of current ratings in Amperes.
+
+---
+
+## 8. Summary Comparison: Serial (`USART1`) vs Bluetooth (`USART0`)
+
+| Feature | Physical Serial (`USART1`) | Bluetooth Low Energy (`USART0`) |
 | :--- | :--- | :--- |
-| **Physical UART** | `USART1` (Pins `PD2`/RXD1, `PD3`/TXD1) | `USART0` (Pins `PE0`/RXD0, `PE1`/TXD0) |
-| **Baud Rate** | 115200 bauds 8N1 | 115200 bauds 8N1 |
-| **Wire Protocol** | **ASCII text in clear** | **Structured Binary Framed RPC** |
-| **Frame Delimiter** | Carriage Return (`\r`, ASCII `0x0D`) | Header `0x01` ... Tail `0xFF` |
-| **Error Checking** | None (Raw text) | **CRC-16-IBM / Modbus (`0xA001`)** |
-| **Message Paradigm** | **Asynchronous Push (Event-Driven)** | **Half-Duplex Pull (Strict Polling)** |
-| **Spontaneous Events** | Yes (`State:X\r`, `CCI:...`, `WT:...`) | **No (Never transmits spontaneously)** |
-| **FSM State Query** | String command: `State?\r` | Binary packet: `[0x01, 0x04, 0x15, CRC, 0xFF]` |
-| **Set Current Limit** | String command: `CC:16\r` | Binary packet: `[0x01, 0x04, 0x04, 0x10, CRC, 0xFF]` |
-| **Start / Stop Charge** | String command: `DOK\r` / `DNOK\r` | Binary packet: `[0x01, 0x04, 0x27, <0/1>, CRC, 0xFF]` |
-| **Emergency Unlock** | String command: `Unlock\r` | Binary packet: `[0x01, 0x04, 0x44, CRC, 0xFF]` |
-| **Firmware Update** | Handshake constructeur + avrdude | Procédure officielle OTA (Type 0x03) |
+| **Physical Interface** | Internal USB cable (`USART1`) | u-blox NINA-B112 BLE module (`USART0`) |
+| **Baud Rate** | 115200 bauds (8N1) | 115200 bauds (8N1) |
+| **Framing** | Human-readable ASCII (`\r\n`) | Structured Binary (`0x01` ... `0xFF` + CRC-16) |
+| **Integrity Check** | None (Direct physical wire) | Mandatory CRC-16-IBM / Modbus (`0xA001`) |
+| **Paradigm** | **Asynchronous Push & Pull** | **Strict Polling (Pull Only)** |
+| **Spontaneous Events**| Yes (`State:X`, `CCI:XX`, tickets) | **None** (Silent unless queried) |
+| **Range / Medium** | Wired (Local Raspberry Pi / host) | Wireless 2.4 GHz (Smartphone proximity) |
+| **Green'up Link Use** | **Primary active supervision port** | Documented for reference / external tools |

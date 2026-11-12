@@ -21,11 +21,12 @@
 
 Il communique avec la carte de puissance de la borne via un câble USB interne et expose :
 - Une **interface Web locale** épurée et réactive avec visualiseur animé, contrôle de charge (7A à 32A), statut Linky TIC et console live intégrée (flux de logs temps réel SSE).
-- Une **API REST** complète et documentée, idéale pour l'intégration domotique (Home Assistant, Jeedom, Node-RED, etc.).
+- Une **API REST** complète et documentée (voir la [Documentation de l'API REST](docs/GREENUP_LINK_REST_API.md)), idéale pour l'intégration domotique (Home Assistant, Jeedom, Node-RED, etc.).
 - Un **historique des sessions de charge** avec enregistrement automatique haute fidélité (échantillonnage adaptatif au format CSV et résumé TXT), visualiseur graphique de courbe de puissance et export direct en un clic (CSV, TXT, ZIP) depuis l'interface Web ou l'API REST.
 - Une **gestion complète des logs** avec fichiers journaliers tournants (`greenup_YYYY-MM-DD.log`), rétention automatique de 7 jours et modification à chaud des niveaux (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`).
 - Le **support expérimental des bornes à double point de charge** avec auto-détection dynamique du second port USB et contrôle indépendant des deux côtés (*théorique, non testé sur matériel réel* — voir la [Matrice de compatibilité matériel](docs/COMPATIBLE_HARDWARE.md)).
-- Une compatibilité totale avec **EVCC** pour la charge solaire dynamique monosite ou multisite (voir le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md)).
+- Un client **MQTT natif** avec **Auto-Discovery Home Assistant** : intégration plug-and-play immédiate des capteurs, interrupteurs, curseurs de courant et Dashboard Énergie sans aucune configuration YAML manuelle (voir le [Guide d'intégration Home Assistant](docs/HOME_ASSISTANT_INTEGRATION.md) et le [Guide MQTT](docs/GREENUP_LINK_MQTT.md)).
+- Une compatibilité totale avec **EVCC** via MQTT ou API REST pour la charge solaire dynamique monosite ou multisite (voir le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md)).
 
 *(Expérimental / Démonstrateur)* : Un module `greenup-everest` autonome est également proposé à titre de démonstrateur expérimental pour interfacer la borne avec le framework open-source EVerest via MQTT (il ne constitue pas le cœur du projet ; voir également le projet [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
 
@@ -33,24 +34,24 @@ Il communique avec la carte de puissance de la borne via un câble USB interne e
 > **Applications mobiles & Interface Bluetooth :**
 > Green'Up Link ne remplace **pas** les applications mobiles officielles Legrand (**EV Charge Light** ou la nouvelle génération **EV Charge** sortie début 2026), qui communiquent directement avec la borne en Bluetooth. Si vous utilisez l'une de ces applications mobiles et ne savez pas si votre borne est équipée du kit de communication, c'est que vous ne le possédez très probablement pas : le kit de communication IP (référence 059056) est en effet un accessoire vendu en option.
 > 
-> Un travail de rétro-ingénierie du protocole Bluetooth est en cours d'exploration en tâche de fond, mais il n'est pour l'instant pas suffisamment mûr pour être exploitable.
+> Un travail complet de rétro-ingénierie du protocole Bluetooth a été réalisé (voir la [Documentation du protocole Bluetooth](docs/LEGRAND_BLE_PROTOCOL.md)). Toutefois, ce protocole n'est pour l'instant pas exploité par Green'Up Link car la liaison série USB physique interne s'avère nettement plus polyvalente et fiable pour la supervision domotique permanente. Cette documentation est fournie à titre indicatif et pourra servir à d'autres projets communautaires.
 
 ## 🤔 Pourquoi ce projet ?
 
-Les bornes de recharge Legrand Green'Up Premium bénéficient d'une conception matérielle remarquable : la qualité de fabrication industrielle, la robustesse des composants, la fiabilité de l'électronique de puissance et le niveau de sécurité matérielle sont exemplaires. C'est un excellent hardware que j'apprécie tout particulièrement au quotidien.
+Les bornes de recharge Legrand Green'Up Premium bénéficient d'une conception matérielle soignée : la qualité de fabrication industrielle, la robustesse du boîtier et le niveau de sécurité matérielle semblent solides et fiables pour un usage quotidien. C'est un bon matériel qui fonctionne bien.
 
 En revanche, le contraste avec la partie logicielle d'origine est criant. Le logiciel constructeur fourni avec le kit de communication ("KitCom") date d'une autre époque : il s'avère lourd, peu réactif et difficile à interfacer avec des solutions domotiques modernes. De plus, il repose sur un environnement vieillissant (Raspbian 9 "Stretch", Apache Tomcat 9 et un runtime Java non maintenus accumulant de nombreuses vulnérabilités connues).
 
-Green'Up Link est né de l'envie d'offrir à ce matériel de premier choix la couche logicielle moderne, légère, sécurisée et ouverte qu'il mérite : un unique binaire écrit en Rust, ultra-performant, sans runtime lourd, vous redonnant la pleine maîtrise locale de votre borne.
+Green'Up Link est né de l'envie d'offrir à ce bon matériel la couche logicielle moderne, légère, sécurisée et ouverte qu'il mérite : un unique binaire écrit en Rust, ultra-performant, sans runtime lourd, vous redonnant la pleine maîtrise locale de votre borne.
 
 ## ⚠️ Limitations actuelles
 
 Le projet est en évolution continue :
 - **Périmètre du logiciel** : Green'Up Link ne remplace que le kit de communication (la couche logicielle exécutée sur le Raspberry Pi). La borne conserve l'intégralité de son intelligence native, de ses sécurités électriques et de son fonctionnement autonome via sa carte de puissance interne ATmega2560.
-- **Matériel testé** : Je ne peux tester et valider le logiciel que sur mon propre matériel : référence **058001** (1 prise Type 2, 7.4 kW monophasé, sans prise domestique).
-- **Bornes à double point de charge** : L'architecture logicielle complète (double worker série, détection dynamique, routage Side?, sessions séparées) a été implémentée d'après les spécifications Java Legrand rétro-ingéniérées. Ne possédant pas de borne 2 points de charge, cette fonctionnalité n'a pas pu être testée sur du matériel réel et reste donc **théorique** (avis aux testeurs !).
+- **Matériel testé** : Validé sur la borne physique de l'auteur : référence **058001** (1 prise Type 2, 7.4 kW monophasé, sans prise domestique).
 - **Compatibilité Type 2** : Toutes les bornes de la gamme Green'up Premium devraient fonctionner de manière nominale sur leur prise Type 2.
-- **Prise domestique (Schuko) et Triphasé** : Non prises en charge pour l'instant (manque de connaissances, de logs de communication série et de matériel de test pour investiguer ces configurations).
+- **Bornes à double point de charge** : Pleinement implémenté dans le logiciel (double worker série, détection dynamique des ports USB, sessions indépendantes), mais reste **expérimental et non testé sur le terrain** faute de matériel (avis aux testeurs et retours de bugs !).
+- **Prise domestique (Schuko) et Triphasé** : Théoriquement fonctionnel dans Green'Up Link sur la base des spécifications du firmware, mais reste **expérimental et non testé sur du matériel réel** faute de disposer de ces modèles. N'hésitez pas à remonter vos retours ou problèmes !
 - **Charge directe uniquement** : Pas de gestion de plages horaires intégrées (confiez la programmation horaire à Home Assistant ou EVCC).
 - **Ne gère pas** : Lecteur de badges RFID, communication Modbus, protocole OCPP.
 
@@ -64,6 +65,7 @@ Le projet est en évolution continue :
   - `FirmwareBoardA-V01;18;10.hex` (Testé et validé)
   - `FirmwareBoardA-V01;17;27.hex` (Testé et validé)
   - `FirmwareBoardA-V01;18;04.hex` (Théoriquement compatible)
+  - `FirmwareBoardA-V01;19;02.hex` (Théoriquement compatible)
 
 > [!NOTE]
 > **À propos des images système Legrand :** Il est possible qu'il existe d'autres versions d'images d'usine Legrand plus récentes dont les spécifications exactes ne sont pas connues. Legrand ne prévoyant aucun mécanisme de migration d'OS (seule la suite applicative et quelques paquets Debian sont mis à jour via le mécanisme de mise à jour Legrand), certaines versions d'images pourraient présenter des incompatibilités avec le binaire fourni. Le cas échéant, ouvrez un ticket avec les informations de votre système (`uname -a`, `ldd --version`) : une nouvelle chaîne de compilation adaptée pourra être mise en place.
@@ -94,6 +96,10 @@ Pour le détail de l'environnement, consultez le [Guide d'environnement de compi
 ---
 
 ## ⚙️ Installation sur la borne (Raspberry Pi)
+
+> [!TIP]
+> **Recommandation d'OS pour un usage pérenne :**  
+> Même si faire tourner Green'Up Link directement sur l'image d'usine Legrand est totalement supporté et encouragé pour tester ou faire un essai temporaire (sans toucher à la carte SD constructeur), **l'installation sur une image propre, récente et vierge de Raspberry Pi OS 64-bit Lite (sur une nouvelle carte microSD) est vivement recommandée pour une utilisation pérenne au quotidien**. Cela vous garantit un noyau Linux maintenu, des correctifs de sécurité modernes et les performances optimales du 64-bit.
 
 > **AVERTISSEMENT :** Faites une sauvegarde complète de la carte SD d'origine Legrand avant toute manipulation.
 >
@@ -204,10 +210,12 @@ Le script d'installation configure l'ensemble du système automatiquement :
   ```
 
 ### 6. Utilisation
-- **Interface Web** : Ouvrez `http://<ip_borne>:8080` dans votre navigateur.
-- **API REST** : Consultez la [Documentation de l'API REST](docs/GREENUP_LINK_REST_API.md) pour l'intégration avec Home Assistant, Jeedom, Node-RED, etc.
+- **Interface Web** : Ouvrez `http://<ip_borne>:8080` dans votre navigateur. Visualiseur en direct, contrôles de charge (7A à 32A), statut Linky TIC et console live intégrée.
+- **Intégration Home Assistant** : Consultez le [Guide d'intégration Home Assistant](docs/HOME_ASSISTANT_INTEGRATION.md) pour profiter de l'Auto-Discovery MQTT natif sans configuration YAML.
+- **Intégration MQTT** : Consultez le [Guide MQTT](docs/GREENUP_LINK_MQTT.md) pour les topics publiés, topics de commande et schémas JSON.
+- **API REST** : Consultez la [Documentation de l'API REST](docs/GREENUP_LINK_REST_API.md) pour l'intégration avec Home Assistant, Jeedom, Node-RED ou vos propres scripts.
+- **Intégration EVCC** : Consultez le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md) pour la charge solaire dynamique via MQTT ou HTTP REST.
 - **Client CLI interactif** : Utilisez `scripts/cli-greenup-link.ps1` sous PowerShell Windows pour piloter ou tester la borne.
-- **Intégration EVCC** : Consultez le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md) pour la charge solaire dynamique.
 
 ### 7. Rollback & Désinstallation (Restauration de la stack Legrand)
 
@@ -254,7 +262,7 @@ Consultez le [Guide du kit de communication alternatif DIY](docs/KIT_COMMUNICATI
 <details>
 <summary><strong>2. Green'Up Link remplace-t-il les applications mobiles Legrand (EV Charge / EV Charge Light) ?</strong></summary>
 
-**Non.** Les applications mobiles Legrand communiquent directement en Bluetooth avec la carte de puissance de la borne. Green'Up Link remplace la couche réseau IP (Ethernet / Wi-Fi). Si vous pilotez actuellement votre borne uniquement depuis votre smartphone en Bluetooth, vous n'avez très probablement pas de kit IP installé : il vous faudra une carte Raspberry Pi (officielle ou DIY) pour utiliser Green'Up Link. La rétro-ingénierie du protocole Bluetooth natif est en cours d'exploration en tâche de fond.
+**Non.** Les applications mobiles Legrand communiquent directement en Bluetooth avec la carte de puissance de la borne. Green'Up Link remplace la couche réseau IP (Ethernet / Wi-Fi). Si vous pilotez actuellement votre borne uniquement depuis votre smartphone en Bluetooth, vous n'avez très probablement pas de kit IP installé : il vous faudra une carte Raspberry Pi (officielle ou DIY) pour utiliser Green'Up Link. Un travail complet de rétro-ingénierie du protocole Bluetooth a été réalisé (voir la [Documentation du protocole Bluetooth](docs/LEGRAND_BLE_PROTOCOL.md)), mais Green'Up Link privilégie la liaison série USB pour une supervision locale continue, réactive et pérenne.
 </details>
 
 <details>
@@ -280,33 +288,37 @@ Il restaure les scripts de démarrage Legrand, retire les neutralisations des sc
 <details>
 <summary><strong>5. Ma borne est en triphasé ou dispose d'une prise domestique Schuko, est-elle supportée ?</strong></summary>
 
-**La borne fonctionne nominalement en mode autonome local.** Même sur une borne triphasée ou équipée d'une prise domestique Schuko, la borne continue d'assurer les recharges normalement en local (géré de manière autonome par la carte de puissance ATmega2560 sans pilotage à distance).
-
-En revanche, c'est le **pilotage à distance via l'interface Web et l'API** (lecture de la télémétrie triphasée, commutation ou consignes spécifiques pour la prise Schuko) qui n'est pas encore pris en charge par manque de traces et de matériel de test. Si vous possédez l'un de ces modèles, n'hésitez pas à participer aux tests pour capturer des logs série (voir [Appel à testeurs](#-appel-à-testeurs--contributions)).
+**Oui, le support est théoriquement implémenté dans Green'Up Link, mais il reste expérimental et non testé sur du matériel physique.**  
+La borne fonctionne toujours nominalement en mode autonome local (gérée par sa carte de puissance interne ATmega2560). Green'Up Link intègre désormais la logique de gestion de la prise domestique Schuko et la télémétrie triphasée à partir des spécifications du firmware, mais l'auteur ne possède pas ces modèles pour valider physiquement les échanges.  
+Si vous disposez d'un modèle triphasé ou avec prise Schuko, n'hésitez pas à tester et à remonter vos observations et logs série (voir [Appel à testeurs](#-appel-à-testeurs--contributions)).
 </details>
 
 <details>
 <summary><strong>6. Comment intégrer Green'Up Link dans Home Assistant ou EVCC ?</strong></summary>
 
-- **EVCC :** Suivez le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md) pour la charge dynamique sur surplus solaire.
-- **Home Assistant :** Vous pouvez intégrer la borne dès aujourd'hui via l'[API REST](docs/GREENUP_LINK_REST_API.md) (capteurs REST et switchs de commande). Une intégration native MQTT avec découverte automatique (Auto-Discovery) Home Assistant est également prévue sur la feuille de route.
+- **Home Assistant :** Consultez le [Guide d'intégration Home Assistant](docs/HOME_ASSISTANT_INTEGRATION.md) pour profiter de l'Auto-Discovery MQTT natif sans aucune configuration YAML (ou utilisez l'[API REST](docs/GREENUP_LINK_REST_API.md)).
+- **EVCC :** Consultez le [Guide d'intégration EVCC](docs/EVCC_INTEGRATION.md) pour la charge solaire dynamique via MQTT ou HTTP REST.
 </details>
 
 <details>
 <summary><strong>7. Pourquoi remplacer le logiciel officiel Legrand ?</strong></summary>
 
-Le matériel de la borne Green'Up Premium est d'excellente facture, mais sa suite logicielle d'origine accuse le poids des années : basée sur Debian 9 Stretch, Apache Tomcat 9 et un runtime Java ancien, elle manque d'ergonomie, n'est plus maintenue et reste fermée aux outils domotiques récents. Green'Up Link propose une alternative moderne, légère, ultra-réactive et sécurisée écrite en Rust sans dépendance externe pour tirer le plein potentiel de votre borne.
+Le matériel de la borne Green'Up Premium est soigné et fiable, mais sa suite logicielle d'origine accuse le poids des années : basée sur Debian 9 Stretch, Apache Tomcat 9 et un runtime Java ancien, elle manque d'ergonomie, n'est plus maintenue et reste fermée aux outils domotiques récents. Green'Up Link propose une alternative moderne, légère, ultra-réactive et sécurisée écrite en Rust sans dépendance externe pour tirer le plein potentiel de votre borne.
 </details>
 
 ---
 
 ## 🚀 Fonctionnalités futures
 
-Les fonctionnalités envisagées (sans calendrier contractuel) :
-- **Intégration MQTT native** avec **Home Assistant Auto-Discovery** (création automatique des entités : capteurs de télémétrie, interrupteurs et curseur de consigne de charge).
-- Firmware custom ATmega avec télémétrie et capacités étendues.
-- Prise en charge du protocole OCPP.
-- Extension aux autres variantes de la gamme (prise domestique Schuko, bornes triphasées).
+> [!NOTE]
+> Aucune des fonctionnalités listées ci-dessous n'est garantie, promise ou liée à un calendrier précis. Leur éventuel développement dépendra de plusieurs critères, notamment du temps libre disponible, de la faisabilité technique et de la cohérence globale par rapport à l'architecture du logiciel.  
+> Pour autant, les retours de la communauté sont toujours les bienvenus : n'hésitez pas à proposer vos idées ou suggestions via les tickets GitHub, elles seront étudiées au cas par cas !
+
+Pistes et idées d'exploration pour les versions futures :
+- **Support natif d'OCPP 1.6-J** : Interface WebSocket JSON directe pour connecter la borne à un superviseur centralisé (CSMS type SteVe, MaEVe, CitrineOS) sans passerelle externe.
+- **Rapports d'énergie & Suivi financier automatisés** : Bilans périodiques de consommation et calcul des coûts de recharge basés sur la grille tarifaire Linky HP/HC, exportables en PDF/CSV.
+- **Gestionnaire solaire autonome intégré** : Moteur interne de délestage et surplus solaire branché directement sur les données d'un onduleur ou compteur Linky, pour ceux qui ne souhaitent pas déployer EVCC.
+- **Recherches exploratoires sur la carte de puissance** : Études et rétro-ingénierie avancée autour des capacités du microcontrôleur ATmega2560.
 
 ---
 

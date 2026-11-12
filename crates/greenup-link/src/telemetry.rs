@@ -153,7 +153,7 @@ impl Telemetry {
     pub fn update_iec_state(&mut self) {
         if self.greenup_state == "U" || self.greenup_state == "V" {
             self.iec_state = Some("F".to_string());
-        } else if matches!(self.greenup_state.as_str(), "R" | "S" | "T" | "X") {
+        } else if matches!(self.greenup_state.as_str(), "R" | "S" | "T" | "X" | "DISCONNECTED") {
             self.iec_state = Some("E".to_string());
         } else if let Some(false) = self.t2c_enabled {
             match self.cp_voltage {
@@ -164,7 +164,7 @@ impl Telemetry {
             }
         } else {
             match self.greenup_state.as_str() {
-                "A" | "L" | "DISCONNECTED" => self.iec_state = Some("A".to_string()),
+                "A" | "L" | "Y" | "Z" => self.iec_state = Some("A".to_string()),
                 "B" | "C" | "F" | "I" | "J" | "K" | "M" | "N" | "O" | "P" | "W" => {
                     self.iec_state = Some("B".to_string())
                 }
@@ -323,16 +323,16 @@ impl Telemetry {
             explicit_iec.clone()
         } else {
             match raw_code.as_str() {
-                "A" | "L" | "DISCONNECTED" => "A".to_string(),
+                "A" | "L" | "Y" | "Z" => "A".to_string(),
                 "B" | "C" | "F" | "I" | "J" | "K" | "M" | "N" | "O" | "P" | "W" => "B".to_string(),
                 "D" | "E" | "G" | "H" => "C".to_string(),
-                "R" | "S" | "T" | "X" => "E".to_string(),
+                "R" | "S" | "T" | "X" | "DISCONNECTED" => "E".to_string(),
                 "U" | "V" => "F".to_string(),
                 other => other.to_string(),
             }
         };
 
-        let vehicle_connected = !matches!(raw_code.as_str(), "A" | "L" | "DISCONNECTED" | "Y" | "Z" | "") && iec != "A";
+        let vehicle_connected = !matches!(raw_code.as_str(), "A" | "L" | "DISCONNECTED" | "Y" | "Z" | "") && iec != "A" && iec != "E" && iec != "F";
         let is_charging = (matches!(raw_code.as_str(), "D" | "E" | "G" | "H") || iec == "C") && !self.charge_paused;
 
         let ocpp = if self.serial.status != SerialStatus::UsbConnected || self.serial.sniffer_mode {
@@ -347,6 +347,8 @@ impl Telemetry {
             } else {
                 OcppChargePointStatus::Available
             }
+        } else if matches!(raw_code.as_str(), "DISCONNECTED" | "Y" | "Z") {
+            OcppChargePointStatus::Unavailable
         } else if has_error || iec == "E" || iec == "F" {
             OcppChargePointStatus::Faulted
         } else if self.charge_paused || matches!(raw_code.as_str(), "J" | "K" | "M" | "N" | "O" | "P") {
@@ -586,5 +588,28 @@ mod tests {
         assert!(!conn.grid.tic_connected);
         assert_eq!(conn.grid.tic_mode, "none");
         assert_eq!(conn.grid.tic_baud_rate, None);
+
+        // 7. Sleep (State Y) & Production (State Z) -> IEC A, OCPP Unavailable
+        tel.greenup_state = "Y".to_string();
+        tel.update_iec_state();
+        let conn_y = tel.to_connector_data(&info);
+        assert_eq!(conn_y.status.iec, "A");
+        assert_eq!(conn_y.status.ocpp, OcppChargePointStatus::Unavailable);
+        assert!(!conn_y.status.vehicle_connected);
+
+        tel.greenup_state = "Z".to_string();
+        tel.update_iec_state();
+        let conn_z = tel.to_connector_data(&info);
+        assert_eq!(conn_z.status.iec, "A");
+        assert_eq!(conn_z.status.ocpp, OcppChargePointStatus::Unavailable);
+        assert!(!conn_z.status.vehicle_connected);
+
+        // 8. Disconnected driver state -> IEC E, OCPP Unavailable
+        tel.greenup_state = "DISCONNECTED".to_string();
+        tel.update_iec_state();
+        let conn_disc = tel.to_connector_data(&info);
+        assert_eq!(conn_disc.status.iec, "E");
+        assert_eq!(conn_disc.status.ocpp, OcppChargePointStatus::Unavailable);
+        assert!(!conn_disc.status.vehicle_connected);
     }
 }

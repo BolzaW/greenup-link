@@ -36,7 +36,7 @@ fn raw_state_to_iec(raw: &greenup_driver::AtmegaRawState) -> String {
     let state = raw.state.as_deref().unwrap_or("A");
     if state == "U" || state == "V" {
         "F".to_string()
-    } else if matches!(state, "R" | "S" | "T" | "X") {
+    } else if matches!(state, "R" | "S" | "T" | "X" | "DISCONNECTED") {
         "E".to_string()
     } else if raw.t2c == Some(false) {
         match raw.cp {
@@ -47,7 +47,7 @@ fn raw_state_to_iec(raw: &greenup_driver::AtmegaRawState) -> String {
         }
     } else {
         match state {
-            "A" | "L" | "DISCONNECTED" => "A".to_string(),
+            "A" | "L" | "Y" | "Z" => "A".to_string(),
             "B" | "C" | "F" | "I" | "J" | "K" | "M" | "N" | "O" | "P" | "W" => "B".to_string(),
             "D" | "E" | "G" | "H" => "C".to_string(),
             _ => "A".to_string(),
