@@ -65,6 +65,13 @@ watchdog_timeout_secs = 60
 # - true  : Sniffer mode — passive RX-only monitoring, zero TX commands are ever sent to the ATmega.
 sniffer_mode = false
 
+# Duration (in seconds) during which external `disable` commands (REST API & MQTT)
+# are ignored after a physical button forced charge (`local_override`) is triggered:
+# - > 0 : Grace period in seconds (Default: 30). Allows external managers (e.g. HA/EVCC) time to switch mode.
+# - -1  : Ignore `disable` commands until the end of the charge / unplug / physical button stop.
+# - 0   : Never ignore `disable` commands (`local_override` remains informational only).
+local_override_disable_lock_secs = 30
+
 [mqtt]
 # Enable or disable the MQTT client:
 # - false : (Default) MQTT client is not started.
@@ -166,9 +173,19 @@ impl Default for SerialConfig {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct StationConfig {
     pub sniffer_mode: bool,
+    pub local_override_disable_lock_secs: i64,
+}
+
+impl Default for StationConfig {
+    fn default() -> Self {
+        Self {
+            sniffer_mode: false,
+            local_override_disable_lock_secs: 30,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -356,12 +373,22 @@ impl AppConfig {
                         _ => {}
                     }
                 } else if current_section == "station" {
-                    if key.as_str() == "sniffer_mode" {
-                        match val.trim().to_lowercase().as_str() {
-                            "true" | "1" | "yes" => config.station.sniffer_mode = true,
-                            "false" | "0" | "no" => config.station.sniffer_mode = false,
-                            _ => {}
+                    match key.as_str() {
+                        "sniffer_mode" => {
+                            match val.trim().to_lowercase().as_str() {
+                                "true" | "1" | "yes" => config.station.sniffer_mode = true,
+                                "false" | "0" | "no" => config.station.sniffer_mode = false,
+                                _ => {}
+                            }
                         }
+                        "local_override_disable_lock_secs" => {
+                            if let Ok(secs) = val.trim().parse::<i64>() {
+                                if secs >= -1 {
+                                    config.station.local_override_disable_lock_secs = secs;
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 } else if current_section == "mqtt" {
                     match key.as_str() {
@@ -603,5 +630,55 @@ mod tests {
         "#;
         let cfg2 = AppConfig::parse_toml(toml_logging);
         assert_eq!(cfg2.storage.log_level.as_deref(), Some("warn"));
+    }
+
+    #[test]
+    fn test_local_override_disable_lock_secs_parsing() {
+        let default_cfg = AppConfig::default();
+        assert_eq!(default_cfg.station.local_override_disable_lock_secs, 30);
+
+        let toml_inf = r#"
+        [station]
+        local_override_disable_lock_secs = -1
+        "#;
+        assert_eq!(
+            AppConfig::parse_toml(toml_inf)
+                .station
+                .local_override_disable_lock_secs,
+            -1
+        );
+
+        let toml_zero = r#"
+        [station]
+        local_override_disable_lock_secs = 0
+        "#;
+        assert_eq!(
+            AppConfig::parse_toml(toml_zero)
+                .station
+                .local_override_disable_lock_secs,
+            0
+        );
+
+        let toml_custom = r#"
+        [station]
+        local_override_disable_lock_secs = 45
+        "#;
+        assert_eq!(
+            AppConfig::parse_toml(toml_custom)
+                .station
+                .local_override_disable_lock_secs,
+            45
+        );
+
+        let toml_invalid = r#"
+        [station]
+        local_override_disable_lock_secs = -5
+        "#;
+        assert_eq!(
+            AppConfig::parse_toml(toml_invalid)
+                .station
+                .local_override_disable_lock_secs,
+            30
+        );
     }
 }

@@ -306,6 +306,10 @@ pub fn generate_telemetry_topics(
             conn.status.charge_complete.to_string(),
         ));
         topics.push((
+            format!("{}/status/local_override", prefix),
+            conn.status.local_override.to_string(),
+        ));
+        topics.push((
             format!("{}/status/error_code", prefix),
             conn.status.error_code.clone(),
         ));
@@ -649,6 +653,22 @@ pub fn generate_ha_discovery_payloads(
         });
         configs.push((t, p.to_string()));
 
+        // Local Override (Physical Button Forced Charge) Binary Sensor
+        let t = format!("homeassistant/binary_sensor/greenup_{}/point_{}_local_override/config", clean_serial, id);
+        let p = serde_json::json!({
+            "name": format!("{} Local Override", point_label),
+            "unique_id": format!("{}_point_{}_local_override", clean_serial, id),
+            "state_topic": format!("{}/status/local_override", prefix),
+            "payload_on": "true",
+            "payload_off": "false",
+            "icon": "mdi:gesture-tap-button",
+            "availability_topic": availability_topic,
+            "payload_available": "online",
+            "payload_not_available": "offline",
+            "device": device_obj,
+        });
+        configs.push((t, p.to_string()));
+
         // Session Active Binary Sensor
         let t = format!("homeassistant/binary_sensor/greenup_{}/point_{}_session_active/config", clean_serial, id);
         let p = serde_json::json!({
@@ -758,6 +778,22 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
                     let _ = point.serial_tx.send(Command::SetDerogation(true)).await;
                 }
                 "disable" | "off" | "0" | "false" => {
+                    if let Some(remaining) = point.is_disable_locked_by_local_override() {
+                        let lock_desc = if remaining < 0 {
+                            "locked until end of charge".to_string()
+                        } else {
+                            format!("{}s remaining", remaining)
+                        };
+                        logger::log(
+                            "MQTT",
+                            &format!(
+                                "🛡️ Point {}: Charge disable ignored via MQTT (local_override active: {})",
+                                side, lock_desc
+                            ),
+                        );
+                        return;
+                    }
+                    point.clear_local_override();
                     logger::log("MQTT", &format!("🛑 Point {}: Charge disable requested via MQTT", side));
                     let _ = point.serial_tx.send(Command::SetExternalSignal(true)).await;
                     let _ = point.serial_tx.send(Command::SetDerogation(false)).await;
@@ -1242,6 +1278,7 @@ mod tests {
                         charging: false,
                         paused: false,
                         charge_complete: false,
+                        local_override: false,
                         error_code: String::new(),
                         error_description: None,
                     },
@@ -1251,6 +1288,7 @@ mod tests {
                         min_allowed_amps: 7,
                         max_hardware_amps: 32,
                         charge_authorized: true,
+                        local_override: false,
                         pilot_voltage: None,
                     },
                     meter: ConnectorMeter {
@@ -1282,6 +1320,7 @@ mod tests {
         assert_eq!(topic_map.get("greenup/station/voltage_v").map(String::as_str), Some("230.0"));
 
         assert_eq!(topic_map.get("greenup/connector/1/status/state").map(String::as_str), Some("A"));
+        assert_eq!(topic_map.get("greenup/connector/1/status/local_override").map(String::as_str), Some("false"));
         assert_eq!(topic_map.get("greenup/connector/1/status/ocpp_status").map(String::as_str), Some("Available"));
         assert_eq!(topic_map.get("greenup/connector/1/meter/energy_total_kwh").map(String::as_str), Some("12.345"));
         assert_eq!(topic_map.get("greenup/connector/1/control/setpoint_amps").map(String::as_str), Some("16"));
@@ -1318,6 +1357,7 @@ mod tests {
                         charging: false,
                         paused: false,
                         charge_complete: false,
+                        local_override: false,
                         error_code: String::new(),
                         error_description: None,
                     },
@@ -1327,6 +1367,7 @@ mod tests {
                         min_allowed_amps: 7,
                         max_hardware_amps: 32,
                         charge_authorized: true,
+                        local_override: false,
                         pilot_voltage: None,
                     },
                     meter: ConnectorMeter {
@@ -1361,6 +1402,11 @@ mod tests {
         let switch_cfg = configs.iter().find(|(topic, _)| topic.contains("point_1_charge")).expect("Point 1 charge switch missing");
         assert!(switch_cfg.0.starts_with("homeassistant/switch/greenup_059001A123/"));
         assert!(switch_cfg.1.contains("\"command_topic\":\"greenup/connector/1/control/charge/set\""));
+
+        // Verify local_override binary sensor config
+        let override_cfg = configs.iter().find(|(topic, _)| topic.contains("point_1_local_override")).expect("Point 1 local_override binary sensor missing");
+        assert!(override_cfg.0.starts_with("homeassistant/binary_sensor/greenup_059001A123/"));
+        assert!(override_cfg.1.contains("\"state_topic\":\"greenup/connector/1/status/local_override\""));
 
         // Verify current setpoint number config
         let number_cfg = configs.iter().find(|(topic, _)| topic.contains("point_1_setpoint")).expect("Point 1 setpoint number missing");
@@ -1398,6 +1444,7 @@ mod tests {
                         charging: false,
                         paused: false,
                         charge_complete: false,
+                        local_override: false,
                         error_code: String::new(),
                         error_description: None,
                     },
@@ -1407,6 +1454,7 @@ mod tests {
                         min_allowed_amps: 7,
                         max_hardware_amps: 32,
                         charge_authorized: true,
+                        local_override: false,
                         pilot_voltage: None,
                     },
                     meter: ConnectorMeter {

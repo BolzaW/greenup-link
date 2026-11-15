@@ -102,6 +102,7 @@ All published telemetry topics have `retain: true` enabled.
 | `<base>/connector/<id>/status/charging` | `true` / `false` | Active power delivery in progress |
 | `<base>/connector/<id>/status/paused` | `true` / `false` | Charge paused via software button |
 | `<base>/connector/<id>/status/charge_complete` | `true` / `false` | Battery full / charging ended by EV |
+| `<base>/connector/<id>/status/local_override` | `true` / `false` | Forced charge triggered locally via the station's physical button (`EM:XX1`) |
 | `<base>/connector/<id>/status/error_code` | `0000` | ATmega hardware fault code |
 
 #### Electrical Metering (`.../meter/...`)

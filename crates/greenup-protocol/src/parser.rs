@@ -109,9 +109,9 @@ pub enum ProtocolEvent {
     /// `CAU:0` / `CAU:1` – Emergency stop interlock state.
     EmergencyStop(bool),
 
-    // --- 6. Modbus RS485 & Energy Metering ---
-    /// `EM:<pulses>` – Cumulative active energy pulse counter.
-    EnergyMeterPulses(u32),
+    // --- 6. Modbus RS485 & Energy Management ---
+    /// `EM:<mask>` – Energy Management / derogation status mask (e.g. `EM:XX1`, `EM:XX0`).
+    EnergyManagementMask(String),
     /// `ModbusAddr:<val>` – Station Modbus slave address or `ok*`.
     ModbusAddress(String),
     /// `ModbusEMA:<val>` – External Energy Meter Modbus address or `ok*`.
@@ -419,10 +419,11 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         }
     }
 
-    // 6. Modbus RS485 & Energy Metering
+    // 6. Modbus RS485 & Energy Management
     if let Some(val) = trimmed.strip_prefix("EM:") {
-        if let Ok(pulses) = val.trim().parse::<u32>() {
-            return ProtocolEvent::EnergyMeterPulses(pulses);
+        let mask = val.trim();
+        if !mask.is_empty() {
+            return ProtocolEvent::EnergyManagementMask(mask.to_string());
         }
     }
     if let Some(val) = trimmed.strip_prefix("ModbusAddr:") {
@@ -656,8 +657,12 @@ mod tests {
         assert_eq!(parse_line("SNOK:ok*"), ProtocolEvent::SleepState(false));
         assert_eq!(parse_line("CAU:0"), ProtocolEvent::EmergencyStop(false));
         assert_eq!(
-            parse_line("EM:4520"),
-            ProtocolEvent::EnergyMeterPulses(4520)
+            parse_line("EM:XX1"),
+            ProtocolEvent::EnergyManagementMask("XX1".into())
+        );
+        assert_eq!(
+            parse_line("EM:XX0"),
+            ProtocolEvent::EnergyManagementMask("XX0".into())
         );
         assert_eq!(
             parse_line("ModbusAddr:1"),

@@ -64,6 +64,12 @@ pub struct Telemetry {
     pub fm2_state: Option<bool>,
     #[serde(skip)]
     pub d_state: Option<bool>,
+    #[serde(skip)]
+    pub em_mask: Option<String>,
+    #[serde(default)]
+    pub local_override: bool,
+    #[serde(skip)]
+    pub local_override_started_at: Option<std::time::Instant>,
     pub charge_authorized: bool,
     pub charge_paused: bool,
     pub greenup_state: String,
@@ -95,6 +101,9 @@ impl Default for Telemetry {
             t2c_enabled: None,
             fm2_state: None,
             d_state: None,
+            em_mask: None,
+            local_override: false,
+            local_override_started_at: None,
             charge_authorized: false,
             charge_paused: false,
             iec_state: None,
@@ -174,10 +183,28 @@ impl Telemetry {
         }
     }
 
-    /// Recomputes `charge_authorized` from `t2c_enabled`, `fm2_state`, and `d_state`.
+    /// Recomputes `local_override` and `charge_authorized` from the raw ATmega matrix
+    /// (`greenup_state`, `em_mask`, `d_state`, `fm2_state`, `t2c_enabled`, `charge_paused`).
     pub fn update_charge_status(&mut self) {
+        let em_third = self.em_mask.as_deref().and_then(|m| m.chars().nth(2));
+        let em_derogation = em_third == Some('1');
+        let em_cleared = em_third == Some('0');
+
+        let is_connected_for_override = matches!(
+            self.greenup_state.as_str(),
+            "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "N" | "O" | "P"
+        );
+
+        if !is_connected_for_override || self.charge_paused || em_cleared {
+            self.local_override = false;
+            self.local_override_started_at = None;
+        } else if em_derogation && !self.local_override {
+            self.local_override = true;
+            self.local_override_started_at = Some(std::time::Instant::now());
+        }
+
         let is_blocked_by_fm2 = self.fm2_state.unwrap_or(false);
-        let is_forced_by_d = self.d_state.unwrap_or(false);
+        let is_forced_by_d = self.d_state.unwrap_or(false) || self.local_override;
         let is_t2c_authorized = self.t2c_enabled.unwrap_or(true);
 
         self.charge_authorized = is_t2c_authorized && (!is_blocked_by_fm2 || is_forced_by_d);
@@ -227,6 +254,8 @@ pub struct ConnectorStatus {
     pub charging: bool,
     pub paused: bool,
     pub charge_complete: bool,
+    #[serde(default)]
+    pub local_override: bool,
     pub error_code: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_description: Option<String>,
@@ -240,6 +269,8 @@ pub struct ConnectorControl {
     pub min_allowed_amps: u32,
     pub max_hardware_amps: u32,
     pub charge_authorized: bool,
+    #[serde(default)]
+    pub local_override: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pilot_voltage: Option<u32>,
 }
@@ -379,6 +410,7 @@ impl Telemetry {
             charging: is_charging,
             paused: self.charge_paused,
             charge_complete: self.charge_complete,
+            local_override: self.local_override,
             error_code,
             error_description,
         };
@@ -392,6 +424,7 @@ impl Telemetry {
             min_allowed_amps: 7,
             max_hardware_amps: max_hardware,
             charge_authorized: self.charge_authorized && !self.charge_paused,
+            local_override: self.local_override,
             pilot_voltage: self.cp_voltage,
         };
 
@@ -611,5 +644,49 @@ mod tests {
         assert_eq!(conn_disc.status.iec, "E");
         assert_eq!(conn_disc.status.ocpp, OcppChargePointStatus::Unavailable);
         assert!(!conn_disc.status.vehicle_connected);
+    }
+
+    #[test]
+    fn test_local_override_matrix_evaluation() {
+        let mut tel = Telemetry::default();
+        tel.serial.status = SerialStatus::UsbConnected;
+
+        // 1. Vehicle connected in State B, software disabled (FM2=true, D=false)
+        tel.greenup_state = "B".to_string();
+        tel.fm2_state = Some(true);
+        tel.d_state = Some(false);
+        tel.update_charge_status();
+        assert!(!tel.local_override);
+        assert!(!tel.charge_authorized);
+
+        // 2. Physical long press emits EM:XX1 -> local_override becomes true, charge_authorized becomes true
+        tel.em_mask = Some("XX1".to_string());
+        tel.update_charge_status();
+        assert!(tel.local_override);
+        assert!(tel.local_override_started_at.is_some());
+        assert!(tel.charge_authorized);
+
+        // 3. Transitions to State:C and State:D while EM:XX1 remains -> stays active
+        tel.greenup_state = "D".to_string();
+        tel.update_charge_status();
+        assert!(tel.local_override);
+        assert!(tel.charge_authorized);
+
+        // 4. EM:XX0 clears local_override
+        tel.em_mask = Some("XX0".to_string());
+        tel.update_charge_status();
+        assert!(!tel.local_override);
+        assert!(tel.local_override_started_at.is_none());
+        assert!(!tel.charge_authorized);
+
+        // 5. Re-trigger EM:XX1, then physical button pause (State:M) clears it
+        tel.greenup_state = "D".to_string();
+        tel.em_mask = Some("XX1".to_string());
+        tel.update_charge_status();
+        assert!(tel.local_override);
+
+        tel.greenup_state = "M".to_string();
+        tel.update_charge_status();
+        assert!(!tel.local_override);
     }
 }
