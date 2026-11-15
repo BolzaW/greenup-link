@@ -1136,7 +1136,7 @@ mod tests {
             info2.serial_number = "DUAL2".to_string();
             let mut tel2 = point2.telemetry.lock().unwrap();
             tel2.serial.status = SerialStatus::UsbConnected;
-            tel2.greenup_state = "C".to_string();
+            tel2.greenup_state = "D".to_string();
             tel2.current = 16.0;
             tel2.power = 3680.0;
             tel2.voltage = 230.0;
