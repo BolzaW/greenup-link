@@ -307,7 +307,7 @@ Green'Up Link distinguishes two fundamentally different interruption mechanisms:
 
 ---
 
-### 5.8 Current Setpoints: Protocol Formatting, Safety Clamping & `CCEl` vs `CC`
+### 5.8 Current Setpoints: Protocol Formatting, Safety Clamping & `CC` vs `CCEl` (EEPROM Wear)
 
 When modulating charging current limits via `POST /api/current/:amps` or MQTT:
 
@@ -322,10 +322,10 @@ The ATmega enforces a hardware minimum Control Pilot PWM floor depending on the 
 - **Overcurrent Trip (`E:0010`) & Reboot (`State:X`)**: If measured phase current reaches or exceeds $1.2 \times \text{CC}$ for 8 consecutive seconds, the station trips with **`E:0010`** (`State:R`), opens the contactor, and triggers a watchdog reboot (`State:X`) after 5 seconds. Consequently, setpoints below 6 A in single-phase (since $7.2\text{ A} \ge 1.2 \times 6\text{ A}$) or at/below 11 A in three-phase (since $13.2\text{ A} \ge 1.2 \times 11\text{ A}$) trigger `E:0010`.
 - **Operational Safety Floors**: To keep clear of the hardware PWM floor and measurement tolerances, Green'Up Link clamps setpoints to a minimum of **7 A** on single-phase stations and **13 A** on three-phase stations.
 
-#### 3. Modulating via `CCEl` & Non-Limiting Idle Restore (`CCEl:32`)
+#### 3. Modulating via `CC` (RAM-only) & Enforcing `CCEl:32` (EEPROM Protection)
 The Legrand ATmega power board evaluates multiple concurrent current limiting registers:
-- `CC`: Active consolidated limit applied to the Control Pilot PWM. Setting `CC:<val>` updates the volatile supervisor register (`CCCo`), which is **not** reset on vehicle plug/unplug.
-- `CCEl`: Non-volatile Eco-Logic / Eliot supervisory limit written directly to EEPROM.
+- `CC`: Active consolidated limit applied to the Control Pilot PWM. Sending `CC:<val>` updates the volatile supervisor register (`g_supervisor_cc_1238` / `CCCo`) **purely in RAM** (zero EEPROM writes). In active states (`C`, `D`, `E`, `I`), the ATmega immediately recalculates the PWM using the minimum across all constraints and echoes `CC:<effective>`.
+- `CCEl`: Non-volatile Eco-Logic / Eliot supervisory limit (`g_calendar_cc_1235`) persisted to EEPROM via `EEPROM.put()` (`EERef::update()`, read-before-write).
 - `CCTIC`: Autonomous grid load-shedding limit dynamically calculated from the TIC interface.
 - `CCCa`: Physical cable rating detected via the Proximity Pilot (PP) resistor (e.g. 13 A, 20 A, 32 A).
 - Hardware DIP switches: Boot-time station maximum (`CCS`: 16 A, 20 A, 25 A, or 32 A).
@@ -333,10 +333,10 @@ The Legrand ATmega power board evaluates multiple concurrent current limiting re
 The ATmega determines the effective pilot current dynamically by computing the **minimum** across all active constraints:
 $$\text{Effective Limit} = \min(\text{CCS}, \text{CCCa}, \text{CCEl}, \text{CCCo}, \text{CCTIC})$$
 
-**Why Green'Up Link exclusively modulates `CCEl`:**
-- Green'Up Link never sends `CC:<val>`, leaving `CCCo` at its boot-time `CCS` default so it never introduces an unintended ceiling.
-- Writing `CCEl` persists the supervisory setpoint in EEPROM while preserving hardware cable and TIC load-shedding limits.
-- **Non-Limiting Restore (`CCEl:32`)**: Because `CCEl` is stored in EEPROM, Green'Up Link automatically resets `CCEl:32` upon transitioning to idle or end-of-session states (`State:A`, `State:L`, or fault/sleep termination) whenever `CCEl` differs from `32`. This guarantees the station is never left permanently throttled if Green'Up Link is later uninstalled or operated standalone.
+**Why Green'Up Link exclusively modulates `CC` (`CCCo`) instead of `CCEl`:**
+- **EEPROM Wear Prevention (Critical)**: Disassembly of the ATmega2560 firmware confirms that `CCEl:<val>` writes to a fixed EEPROM cell via `EEPROM.put()` whenever the value changes. Dynamic solar/load-management controllers (e.g. EVCC) adjust the current setpoint every 10–30 seconds; continuously toggling `CCEl` would quickly exhaust the ATmega2560's ~100,000-cycle EEPROM endurance within months. Modulating `CC:<val>` updates RAM only (**0 EEPROM writes**).
+- **Safe Uninstallation & Reboot Behaviour**: Because `CCCo` is volatile in RAM and automatically reset to `CCS` (DIP switch limit) on reboot or `FM:x` mode changes, removing Green'Up Link can never leave the station permanently throttled. Green'Up Link also resets `CC:32` upon returning to idle/end-of-session states (`State:A`, `State:L`, or fault/sleep termination).
+- **Non-Limiting `CCEl:32` Enforcement**: To guarantee an old EEPROM value (e.g. from a previous installation) never silently caps charging, Green'Up Link monitors `CCEl` after initialization and automatically enforces `CCEl:32` (with retry cooldown) whenever `CCEl != 32`. Once at `32`, no further `CCEl` commands or EEPROM writes occur.
 
 ---
 

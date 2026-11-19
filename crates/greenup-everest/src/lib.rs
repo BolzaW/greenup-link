@@ -168,7 +168,7 @@ impl EverestAdapter {
             amps = MAX_CURRENT_AMPS;
         }
 
-        if let Ok(cmd) = Command::set_current_limit(amps) {
+        if let Ok(cmd) = Command::set_direct_current_limit(amps) {
             self.driver
                 .send_command(cmd)
                 .await

@@ -816,11 +816,11 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
             logger::debug(
                 "MQTT",
                 &format!(
-                    "⚡ Current limit modification on Side {} → {}A (sending CCEl:{:02})",
+                    "⚡ Current limit modification on Side {} → {}A (sending CC:{:02})",
                     side, validated_amps, validated_amps
                 ),
             );
-            let _ = point.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await;
+            let _ = point.serial_tx.send(Command::SetDirectCurrentLimit(validated_amps)).await;
         }
         MqttCommand::SetVoltage { side, voltage, ttl_seconds } => {
             if voltage < 100.0 || voltage > 300.0 {

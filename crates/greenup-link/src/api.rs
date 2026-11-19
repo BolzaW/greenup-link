@@ -510,11 +510,11 @@ async fn set_current(
     logger::debug(
         "API",
         &format!(
-            "⚡ Current limit modification → {}A (sending CCEl:{:02})",
+            "⚡ Current limit modification → {}A (sending CC:{:02})",
             validated_amps, validated_amps
         ),
     );
-    if state.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await.is_ok() {
+    if state.serial_tx.send(Command::SetDirectCurrentLimit(validated_amps)).await.is_ok() {
         (
             StatusCode::OK,
             Json(json!({
@@ -1475,37 +1475,37 @@ mod tests {
         let res_high = set_current(State(station.clone()), axum::extract::Path(33.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_high.status(), StatusCode::BAD_REQUEST);
 
-        // 3. Valid current limit in State A -> 200 OK, sends ONLY SetCurrentLimit(24)
+        // 3. Valid current limit in State A -> 200 OK, sends ONLY SetDirectCurrentLimit(24) (CC:24)
         let res = set_current(State(station.clone()), axum::extract::Path(24.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(24));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(24));
         assert!(rx.try_recv().is_err());
 
-        // 4. Valid current limit in State C -> sends ONLY SetCurrentLimit(16)
+        // 4. Valid current limit in State C -> sends ONLY SetDirectCurrentLimit(16) (CC:16)
         {
             let mut tel = point1.telemetry.lock().unwrap();
             tel.greenup_state = "C".to_string();
         }
         let res = set_current(State(station.clone()), axum::extract::Path(16.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(16));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(16));
         assert!(rx.try_recv().is_err());
 
         // 5. Decimal inputs with round()
         // 16.7 -> rounded to 17
         let res_round_up = set_current(State(station.clone()), axum::extract::Path(16.7), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_round_up.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(17));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(17));
 
         // 16.2 -> rounded to 16
         let res_round_down = set_current(State(station.clone()), axum::extract::Path(16.2), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_round_down.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(16));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(16));
 
         // Bounds testing with decimals: 6.6 -> rounds to 7 (valid)
         let res_bound_ok = set_current(State(station.clone()), axum::extract::Path(6.6), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_bound_ok.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(7));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(7));
 
         // 6.4 -> rounds to 6 (out of bounds -> 400)
         let res_bound_nok = set_current(State(station.clone()), axum::extract::Path(6.4), Query(SideQuery { side: None })).await.into_response();

@@ -45,7 +45,7 @@ Three standard authentication methods are supported simultaneously against the s
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `POST` | `/api/charge` | Control charge state, authorization, sockets, overrides, unlock, and sleep (`enable`, `disable`, `authorize`, `suspend`, `start_session`, `stop_session`, etc.) |
-| `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`, 7A to 32A) |
+| `POST` | `/api/current/:amps` | Current limit (`CC:XX`, RAM-only, 7A to 32A) |
 | `POST` | `/api/voltage` | Inject external grid voltage (`{"voltage": 230.0}`) |
 | `POST` | `/api/init` | Relaunch startup sequence |
 | `POST` | `/api/reset` | ATmega board hardware restart (`Reset`) |
@@ -410,8 +410,8 @@ Three standard authentication methods are supported simultaneously against the s
 - **Method**: `POST`
 - **Query Parameter**: `side` (optional, `1` or `2`)
 - **URL Parameter**: `:amps` (numeric, integer or decimal between **7** and **32**; decimal numbers such as `16.7` are automatically rounded to the nearest integer, e.g. `17`).
-- **Description**: Sets the current limit target. When the station is in `State:A` (vehicle unplugged), Green'Up Link sends both `CCEl:XX` and `CC:XX` to keep the ATmega limits synchronized while idle. In all other operating states (`B`, `C`, etc.), only `CCEl:XX` is sent, allowing the ATmega to dynamically consolidate internal hardware limits (`CC = min(DIP, CCCa, CCEl, CCTIC)`).
-- **Security**: The API rejects any value outside `[7, 32]` with a `400` error. While the ATmega board can technically accept values above 32A, they have not been tested in real conditions to avoid hardware risks. Using `CCEl` (Eliot limit) instead of directly forcing `CC` in active states is a deliberate safety choice: it allows the ATmega to keep its internal safeguards active, computing the final safe limit (`CC`) based on other hardware factors. Finally, note that below 6A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8A.
+- **Description**: Sets the current limit target via `CC:XX` (volatile supervisor register in RAM). In active charging states (`C`, `D`, `E`, `I`), the ATmega immediately recalculates the Control Pilot PWM using `min(CCS, CCCa, CCEl, CC, CCTIC)`.
+- **Security & EEPROM Protection**: The API rejects any value outside `[7, 32]` with a `400` error (7A floor in single-phase, 13A floor in three-phase to avoid hardware PWM `E:0010` trips). Using `CC:XX` instead of `CCEl:XX` is a deliberate hardware-protection choice: `CCEl:XX` writes to EEPROM on every value change, which would wear out the ATmega2560's ~100,000-cycle EEPROM under frequent solar modulation (e.g. EVCC). `CC:XX` is 100% RAM-based (zero EEPROM wear) while preserving all ATmega safeguards (`CCCa`, `CCTIC`, `CCS`), and `greenup-link` separately ensures `CCEl` remains non-limiting at `32A`.
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Current limit set to 16A" }

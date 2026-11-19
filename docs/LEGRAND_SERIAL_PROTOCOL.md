@@ -69,11 +69,11 @@ Commands to query and modulate charging limits across hardware, supervisor, clou
 | Command (TX) | Expected Reply Prefix (RX) | Explanation |
 | :--- | :--- | :--- |
 | `CC?` | `CC:<val>` | Queries the final consolidated charging limit currently applied to the vehicle (in Amperes). |
-| `CC:<val>` | `CC:<val>` | **Direct Current Override (Volatile)**: Sets the volatile supervisor setpoint in RAM (2-digit format `XX` recommended, e.g., `CC:16`). Recalculates PWM immediately if charging is active (emits `CC:<val>`). Frequently reset to `CCS` during re-arming or mode transitions. |
+| `CC:<val>` | `CC:<val>` | **Direct Supervisor Current Limit (Volatile RAM)**: Sets the volatile supervisor setpoint in RAM (2-digit format `XX` required, e.g., `CC:16`), with **zero EEPROM wear**. Recalculates PWM immediately if charging is active (`C`/`D`/`E`/`I`, emits `CC:<effective>`). Reset to `CCS` on reboot or `FM:x` mode changes. Recommended method for dynamic power modulation. |
 | `CCS?` | `CCS:<val>` | **Station / Socket Current Limit**: Queries the station maximum current limit (initialized at boot from DIP switches 3 & 4: 16A, 20A, 25A, or 32A). |
 | `CCS:<val>` | `CCS:<val>` | Sets the station maximum current limit. |
 | `CCEl?` | `CCEl:<val>` | Queries the Eco-Logic / Eliot Current limit. |
-| `CCEl:<val>` | `CCEl:<val>` | **Eco-Logic / Eliot Current Limit (Persistent EEPROM)**: Writes the current limit directly into non-volatile EEPROM (e.g., `CCEl:16`). Never overwritten by background routines. Recommended method for dynamic power modulation. |
+| `CCEl:<val>` | `CCEl:<val>` | **Eco-Logic / Eliot Current Limit (Persistent EEPROM)**: Writes the current limit into non-volatile EEPROM via `EEPROM.put` (`EERef::update`, e.g., `CCEl:16`). Never overwritten by background routines, but **avoid for dynamic modulation** due to ATmega2560 EEPROM wear (~100,000 cycles). |
 | `CCCo?` | `CCCo:<val>` | Queries the volatile supervisor setpoint register (the value written by `CC:<val>` or Modbus load-shedding). |
 | `CCTIC?` | `CCTIC:<val>` | Queries the dynamic current cap calculated from the Enedis Linky TIC input. Returns `CCS` when TIC is absent or outside an active session. |
 | `CCSL1?` .. `CCSL4?`| `CCSL1:` .. `CCSL4:` | **Sub-Line / Cluster Current Levels**: Queries the 4 current step levels in descending order (`CCSL1` = maximum/`CCS`, `CCSL4` = minimum). |

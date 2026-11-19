@@ -10,11 +10,11 @@ Green'up Link features a built-in, fully autonomous **MQTT 3.1.1 client** design
 - **Unified Authentication**: Uses the existing `http.api_token` as the MQTT password (with optional configurable `username`).
 - **Atomic Unitary Topics (`Report-by-Exception`)**: Every electrical, state, and control metric is published on its own dedicated topic as a raw scalar value (e.g. `greenup/connector/1/meter/active_power_w` -> `7360.0`). Topics are updated instantly on state changes and fully refreshed every 60 seconds with `retain: true`.
 - **Home Assistant MQTT Auto-Discovery**: Automatically exposes the charging station and all active connectors to Home Assistant as a clean device with sensors, switches, numbers, and binary sensors. Zero manual YAML configuration required in Home Assistant!
-- **Remote Control Topics (`.../set`)**: Enable/disable charging, suspend/authorize (`CAU`), simulate Start/Stop button (`SB`), toggle sockets (`T2C`/`2PC`), unlock, sleep, adjust current setpoints (`CCEl`), and inject external grid voltage via MQTT.
+- **Remote Control Topics (`.../set`)**: Enable/disable charging, suspend/authorize (`CAU`), simulate Start/Stop button (`SB`), toggle sockets (`T2C`/`2PC`), unlock, sleep, adjust current setpoints (`CC:XX`, RAM-only), and inject external grid voltage via MQTT.
 - **Hardware Protection & Safety**:
   - Respects **Sniffer Mode**: all TX control commands are rejected if passive monitoring is enabled.
-  - State A Synchronization: automatically keeps `CCEl` and `CC` synchronized when in `State:A`, and never overrides ATmega minimum current logic in other states.
-  - Range validation on current (7–32A) and voltage (100–300V).
+  - EEPROM Wear Protection: dynamic current modulation uses volatile `CC:XX` in RAM (zero EEPROM writes), while `CCEl` is enforced at `32A` so it never silently caps charging.
+  - Range validation on current (7–32A, or 13–32A in three-phase) and voltage (100–300V).
 
 ---
 
@@ -173,9 +173,9 @@ Publishing to these topics allows external systems to pilot the charging station
 
 - **Payload**: numeric string between `7` and `32` (e.g. `16`, `16.7`, `24`). Decimal numbers are automatically rounded to the nearest integer.
 - **Behavior**:
-  - If the station is in `State:A` (Available / Free), greenup-link synchronizes both `CCEl:XX` and `CC:XX` to ensure the internal ATmega registers are synchronized before a car plugs in.
-  - In all other states, only `CCEl:XX` is sent, allowing the ATmega to dynamically apply the lowest limit between CCEl, TIC, and circuit breakers.
-  - Rejects commands outside 7–32A.
+  - Sends `CC:XX` (volatile supervisor register in RAM) so frequent solar/load-balancing updates never wear out the ATmega2560 EEPROM (~100,000-cycle limit on `CCEl:XX`).
+  - In active charging states (`C`, `D`, `E`, `I`), the ATmega immediately applies `min(CCS, CCCa, CCEl, CC, CCTIC)` to the PWM; outside those states, the value takes effect as soon as charging starts.
+  - Rejects commands outside 7–32A (or 13–32A on three-phase stations).
 
 ### 4.4 External Grid Voltage Injection
 

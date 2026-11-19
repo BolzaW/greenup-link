@@ -34,6 +34,7 @@ struct SyncCursor {
     last_ticket_count: u64,
     last_cph: Option<String>,
     auto_tic_triggered: bool,
+    last_cc_el_reset_attempt: Option<std::time::Instant>,
 }
 
 /// High-level supervisor state for a single charge point (Side 1 or Side 2).
@@ -202,7 +203,7 @@ impl AppState {
             // 3. Update Telemetry, State transitions, Power/Energy, and Sessions
             let mut should_clear_raw_em_derogation = false;
             let mut should_clear_raw_fcs = false;
-            let mut should_reset_cc_el_to_max = false;
+            let mut should_reset_cc_to_max = false;
             {
                 let mut tel = self.telemetry.lock().unwrap_or_else(|e| e.into_inner());
                 tel.side = side;
@@ -334,7 +335,7 @@ impl AppState {
                             tel.local_override = false;
                             tel.local_override_started_at = None;
                             should_clear_raw_em_derogation = true;
-                            should_reset_cc_el_to_max = true;
+                            should_reset_cc_to_max = true;
                         } else if state_val == "A" {
                             tel.current = 0.0;
                             tel.power = 0.0;
@@ -345,7 +346,7 @@ impl AppState {
                             tel.local_override = false;
                             tel.local_override_started_at = None;
                             should_clear_raw_em_derogation = true;
-                            should_reset_cc_el_to_max = true;
+                            should_reset_cc_to_max = true;
 
                             if crate::session::is_active_for_side(side) {
                                 crate::session::on_state_change_for_side(side, state_val, &tel);
@@ -417,20 +418,47 @@ impl AppState {
                 }
             }
 
-            if should_reset_cc_el_to_max
+            // Reset RAM-only direct current limit (CC:32) on idle / end-of-session
+            if should_reset_cc_to_max
                 && !usb.sniffer_mode
                 && usb.status == SerialStatus::UsbConnected
-                && raw.cc_el.is_some_and(|v| v != 32)
+                && raw.cc.is_some_and(|v| v != 32)
             {
                 logger::debug(
                     "SERIAL",
                     &format!(
-                        "⚡ Side {}: Idle / end-of-session state reached with CCEl={}A → resetting CCEl:32",
+                        "⚡ Side {}: Idle / end-of-session state reached with CC={}A → resetting CC:32",
                         side,
-                        raw.cc_el.unwrap_or(0)
+                        raw.cc.unwrap_or(0)
                     ),
                 );
-                let _ = self.serial_tx.try_send(Command::SetCurrentLimit(32));
+                let _ = self.serial_tx.try_send(Command::SetDirectCurrentLimit(32));
+            }
+
+            // Ensure EEPROM-backed CCEl stays non-limiting at 32A (retry with 5s cooldown until confirmed)
+            if raw.cc_el == Some(32) {
+                cursor.last_cc_el_reset_attempt = None;
+            } else if !usb.sniffer_mode
+                && usb.status == SerialStatus::UsbConnected
+                && usb.init_completed
+                && raw.cc_el.is_some_and(|v| v != 32)
+            {
+                let should_retry = cursor
+                    .last_cc_el_reset_attempt
+                    .is_none_or(|t| t.elapsed() >= std::time::Duration::from_secs(5));
+                if should_retry {
+                    logger::debug(
+                        "SERIAL",
+                        &format!(
+                            "🛡️ Side {}: CCEl={}A != 32A → enforcing CCEl:32 (non-limiting EEPROM baseline)",
+                            side,
+                            raw.cc_el.unwrap_or(0)
+                        ),
+                    );
+                    if self.serial_tx.try_send(Command::SetCurrentLimit(32)).is_ok() {
+                        cursor.last_cc_el_reset_attempt = Some(std::time::Instant::now());
+                    }
+                }
             }
 
             // 4. High-level automatic TIC detection & safe CAU? check after driver init completes
@@ -1439,5 +1467,39 @@ mod tests {
         assert_eq!(ChargeAction::from_mqtt_str("ON"), Some(ChargeAction::Enable));
         assert_eq!(ChargeAction::from_mqtt_str("OFF"), Some(ChargeAction::Disable));
         drop(rx);
+    }
+
+    #[tokio::test]
+    async fn test_cc_el_32_enforcement_and_cc_idle_reset() {
+        let (tx, mut rx) = mpsc::channel(32);
+        let state = Arc::new(AppState::new(tx));
+
+        // 1. After init completes with CCEl=16A, CCEl:32 is requested once
+        state.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            usb.init_completed = true;
+            raw.state = Some("D".to_string());
+            raw.cc_el = Some(16);
+        });
+        state.sync_from_driver();
+        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(32));
+        assert!(rx.try_recv().is_err());
+
+        // 2. Subsequent snapshot while still CCEl=16A within 5s cooldown does NOT spam
+        state.driver.update_raw(|raw| {
+            raw.cci = Some(10.0);
+        });
+        state.sync_from_driver();
+        assert!(rx.try_recv().is_err());
+
+        // 3. Once CCEl=32A is confirmed, entering State:A with CC=16A resets CC:32 (RAM-only)
+        state.driver.update_raw(|raw| {
+            raw.cc_el = Some(32);
+            raw.cc = Some(16);
+            raw.state = Some("A".to_string());
+        });
+        state.sync_from_driver();
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(32));
+        assert!(rx.try_recv().is_err());
     }
 }

@@ -132,7 +132,7 @@ pub enum Command {
     // --- 3. Current & Power Modulation ---
     /// `CC?` – Queries consolidated active charging limit enforced on the vehicle.
     GetCurrentLimit,
-    /// `CC:XX` – Direct current override on the vehicle CP PWM.
+    /// `CC:XX` – Direct supervisor current limit (`g_supervisor_cc_1238`, RAM-only, 0 EEPROM wear; primary method used by Green'Up Link).
     SetDirectCurrentLimit(u8),
     /// `CCS?` – Queries Supervisor Current limit (`CCS:`).
     GetSupervisorCurrentLimit,
@@ -140,7 +140,7 @@ pub enum Command {
     SetSupervisorCurrentLimit(u8),
     /// `CCEl?` – Queries Cloud Eliot Current limit (`CCEl:`).
     GetEliotCurrentLimit,
-    /// `CCEl:XX` – Sets Cloud Eliot Current limit (primary method used by Green'Up Link).
+    /// `CCEl:XX` – Sets Cloud Eliot Current limit (persisted in EEPROM via `EEPROM.put`; avoid for dynamic modulation).
     SetCurrentLimit(u8),
     /// `CCCo?` – Queries internal Consolidated Current setpoint (`CCCo:`).
     GetConsolidatedCurrentLimit,
