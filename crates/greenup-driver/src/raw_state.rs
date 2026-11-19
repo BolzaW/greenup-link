@@ -55,8 +55,8 @@ impl Default for UsbLinkState {
 ///
 /// Every field directly reflects the raw value reported by the ATmega over the serial
 /// interface without high-level business assumptions. Fields remain `None` until the
-/// ATmega explicitly transmits the corresponding frame.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+/// ATmega explicitly transmits the corresponding frame (except `em`, initialized to `"XXX"`).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AtmegaRawState {
     // --- 1. System Identification & Boot Handshake ---
     pub kit_com: Option<bool>,
@@ -133,6 +133,101 @@ pub struct AtmegaRawState {
     // --- 9. Modbus Settings ---
     pub modbus_ema: Option<String>,
     pub modbus_dlma: Option<String>,
+}
+
+impl Default for AtmegaRawState {
+    fn default() -> Self {
+        Self {
+            kit_com: None,
+            initialized: None,
+            software_version: None,
+            hardware_version: None,
+            serial_number: None,
+            reference: None,
+            week_year_production: None,
+            side_raw: None,
+            side: None,
+            dip1: None,
+            dip2: None,
+            dip3: None,
+            dip4: None,
+            state: None,
+            error: None,
+            cp: None,
+            pp: None,
+            cc_ca: None,
+            cci: None,
+            cci_l2: None,
+            cci_l3: None,
+            cci_updates_count: 0,
+            fcs: None,
+            dom: None,
+            sb: None,
+            cph: None,
+            cc: None,
+            ccs: None,
+            cc_el: None,
+            cc_co: None,
+            cc_tic: None,
+            cc_sl1: None,
+            cc_sl2: None,
+            cc_sl3: None,
+            cc_sl4: None,
+            cc_bles: None,
+            cc_blesh: None,
+            t2c: None,
+            dom_2pc: None,
+            t2f: None,
+            dom_2pf: None,
+            pa: None,
+            pafc: None,
+            d: None,
+            dec: None,
+            fm: None,
+            fm2: None,
+            em: Some("XXX".to_string()),
+            cau: None,
+            ocpp_status: None,
+            bt: None,
+            mac_adr: None,
+            tic_tm: None,
+            tic_test_b: None,
+            wt: None,
+            wt_updates_count: 0,
+            modbus_ema: None,
+            modbus_dlma: None,
+        }
+    }
+}
+
+/// Merges a 3-character `EM:<mask>` frame (`0`, `1`, or `X` don't-care) into an
+/// existing 3-character mask, preserving known digits on positions marked `X`.
+pub fn merge_em_mask(existing: Option<&str>, incoming: &str) -> String {
+    let mut chars = ['X'; 3];
+    if let Some(prev) = existing {
+        for (i, ch) in prev.chars().take(3).enumerate() {
+            chars[i] = ch;
+        }
+    }
+    for (i, ch) in incoming.chars().take(3).enumerate() {
+        if ch != 'X' && ch != 'x' {
+            chars[i] = ch;
+        }
+    }
+    chars.into_iter().collect()
+}
+
+/// Resets the 3rd digit (derogation bit) of an `EM:<mask>` string to `'X'`
+/// while preserving the Contact 2 (digit 1) and Contact 1 (digit 2) bits.
+pub fn clear_em_derogation_bit(existing: Option<&str>) -> String {
+    let mut chars = ['X'; 3];
+    if let Some(prev) = existing {
+        for (i, ch) in prev.chars().take(3).enumerate() {
+            chars[i] = ch;
+        }
+    }
+    chars[2] = 'X';
+    chars.into_iter().collect()
 }
 
 impl AtmegaRawState {
@@ -335,7 +430,7 @@ impl AtmegaRawState {
                 true
             }
             ProtocolEvent::EnergyManagementMask(mask) => {
-                self.em = Some(mask.clone());
+                self.em = Some(merge_em_mask(self.em.as_deref(), mask));
                 true
             }
             ProtocolEvent::EmergencyStop(b) => {
@@ -475,5 +570,29 @@ mod tests {
         assert_eq!(json_val["atmega"]["modbus_ema"], "2");
         assert_eq!(json_val["atmega"]["modbus_dlma"], "3");
         assert_eq!(json_val["usb"]["status"], "usb_disconnected");
+    }
+
+    #[test]
+    fn test_em_mask_initialization_and_merging() {
+        let mut raw = AtmegaRawState::default();
+        assert_eq!(raw.em.as_deref(), Some("XXX"));
+
+        raw.apply_event(&parse_line("EM:1XX"));
+        assert_eq!(raw.em.as_deref(), Some("1XX"));
+
+        raw.apply_event(&parse_line("EM:X0X"));
+        assert_eq!(raw.em.as_deref(), Some("10X"));
+
+        raw.apply_event(&parse_line("EM:XX1"));
+        assert_eq!(raw.em.as_deref(), Some("101"));
+
+        raw.apply_event(&parse_line("EM:0XX"));
+        assert_eq!(raw.em.as_deref(), Some("001"));
+
+        raw.apply_event(&parse_line("EM:XX0"));
+        assert_eq!(raw.em.as_deref(), Some("000"));
+
+        assert_eq!(clear_em_derogation_bit(Some("011")), "01X");
+        assert_eq!(clear_em_derogation_bit(None), "XXX");
     }
 }

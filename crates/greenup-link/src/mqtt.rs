@@ -795,8 +795,8 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
                     }
                     point.clear_local_override();
                     logger::log("MQTT", &format!("🛑 Point {}: Charge disable requested via MQTT", side));
-                    let _ = point.serial_tx.send(Command::SetExternalSignal(true)).await;
                     let _ = point.serial_tx.send(Command::SetDerogation(false)).await;
+                    let _ = point.serial_tx.send(Command::SetExternalSignal(true)).await;
                 }
                 "pause" => {
                     logger::log("MQTT", &format!("⏸ Point {}: Charge pause requested via MQTT", side));

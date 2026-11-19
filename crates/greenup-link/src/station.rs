@@ -199,6 +199,7 @@ impl AppState {
             }
 
             // 3. Update Telemetry, State transitions, Power/Energy, and Sessions
+            let mut should_clear_raw_em_derogation = false;
             {
                 let mut tel = self.telemetry.lock().unwrap_or_else(|e| e.into_inner());
                 tel.side = side;
@@ -301,6 +302,12 @@ impl AppState {
                             tel.current = 0.0;
                             tel.power = 0.0;
                             tel.last_power_update = None;
+                            tel.em_mask = Some(greenup_driver::raw_state::clear_em_derogation_bit(
+                                tel.em_mask.as_deref(),
+                            ));
+                            tel.local_override = false;
+                            tel.local_override_started_at = None;
+                            should_clear_raw_em_derogation = true;
                         } else if crate::session::is_immediate_termination_state(state_val) {
                             if crate::session::is_active_for_side(side) {
                                 let reason = match state_val.as_str() {
@@ -314,10 +321,22 @@ impl AppState {
                             tel.energy = 0.0;
                             tel.last_power_update = None;
                             tel.charge_complete = false;
+                            tel.em_mask = Some(greenup_driver::raw_state::clear_em_derogation_bit(
+                                tel.em_mask.as_deref(),
+                            ));
+                            tel.local_override = false;
+                            tel.local_override_started_at = None;
+                            should_clear_raw_em_derogation = true;
                         } else if state_val == "A" {
                             tel.current = 0.0;
                             tel.power = 0.0;
                             tel.last_power_update = None;
+                            tel.em_mask = Some(greenup_driver::raw_state::clear_em_derogation_bit(
+                                tel.em_mask.as_deref(),
+                            ));
+                            tel.local_override = false;
+                            tel.local_override_started_at = None;
+                            should_clear_raw_em_derogation = true;
 
                             if crate::session::is_active_for_side(side) {
                                 crate::session::on_state_change_for_side(side, state_val, &tel);
@@ -367,6 +386,15 @@ impl AppState {
                     if let Some(ref ticket) = raw.wt {
                         crate::session::record_ticket_for_side(side, ticket);
                     }
+                }
+            }
+
+            if should_clear_raw_em_derogation {
+                let cleared_em = greenup_driver::raw_state::clear_em_derogation_bit(raw.em.as_deref());
+                if raw.em.as_deref() != Some(cleared_em.as_str()) {
+                    self.driver.update_raw(|r| {
+                        r.em = Some(cleared_em);
+                    });
                 }
             }
 
@@ -472,13 +500,17 @@ impl AppState {
 
     /// Clears `local_override` when an authorized software `disable` is executed.
     pub fn clear_local_override(&self) {
-        if self.driver.get_raw_state().em.is_some() {
+        let current_em = self.driver.get_raw_state().em;
+        let cleared_em = greenup_driver::raw_state::clear_em_derogation_bit(current_em.as_deref());
+        if current_em.as_deref() != Some(cleared_em.as_str()) {
             self.driver.update_raw(|raw| {
-                raw.em = None;
+                raw.em = Some(cleared_em);
             });
         }
         if let Ok(mut tel) = self.telemetry.lock() {
-            tel.em_mask = None;
+            tel.em_mask = Some(greenup_driver::raw_state::clear_em_derogation_bit(
+                tel.em_mask.as_deref(),
+            ));
             tel.local_override = false;
             tel.local_override_started_at = None;
             tel.update_charge_status();

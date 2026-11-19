@@ -816,9 +816,9 @@ async fn set_charge_state(
                 );
             }
             state.clear_local_override();
-            logger::log("API", "🛑 Charge disable requested (FM2:1 + DNOK)");
-            let _ = state.serial_tx.send(Command::SetExternalSignal(true)).await;
-            if state.serial_tx.send(Command::SetDerogation(false)).await.is_ok() {
+            logger::log("API", "🛑 Charge disable requested (DNOK + FM2:1)");
+            let _ = state.serial_tx.send(Command::SetDerogation(false)).await;
+            if state.serial_tx.send(Command::SetExternalSignal(true)).await.is_ok() {
                 (StatusCode::OK, Json(json!({"status": "success"})))
             } else {
                 (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
@@ -1419,11 +1419,11 @@ mod tests {
         assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(false));
         assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(true));
 
-        // 4. Action disable -> sends SetExternalSignal(true), SetDerogation(false)
+        // 4. Action disable -> sends SetDerogation(false), SetExternalSignal(true)
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "disable".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
         assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
 
         // 5. Action pause -> sends SetStartButton(false)
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "pause".to_string() })).await.into_response();
@@ -1456,8 +1456,8 @@ mod tests {
         point1.set_local_override_disable_lock_secs(0);
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "disable".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
         assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
         assert!(!point1.to_connector_data().status.local_override);
     }
 

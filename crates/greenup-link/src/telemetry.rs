@@ -190,12 +190,12 @@ impl Telemetry {
         let em_derogation = em_third == Some('1');
         let em_cleared = em_third == Some('0');
 
-        let is_connected_for_override = matches!(
+        let is_override_eligible_state = matches!(
             self.greenup_state.as_str(),
-            "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "N" | "O" | "P"
+            "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "N" | "O" | "P"
         );
 
-        if !is_connected_for_override || self.charge_paused || em_cleared {
+        if !is_override_eligible_state || self.charge_paused || em_cleared {
             self.local_override = false;
             self.local_override_started_at = None;
         } else if em_derogation && !self.local_override {
@@ -692,5 +692,28 @@ mod tests {
         tel.greenup_state = "M".to_string();
         tel.update_charge_status();
         assert!(!tel.local_override);
+
+        // 6. Long press in State:A (before plug-in) with merged 3-digit mask ("011")
+        let mut tel_pre = Telemetry::default();
+        tel_pre.serial.status = SerialStatus::UsbConnected;
+        tel_pre.greenup_state = "A".to_string();
+        tel_pre.fm2_state = Some(true);
+        tel_pre.em_mask = Some("011".to_string());
+        tel_pre.update_charge_status();
+        assert!(tel_pre.local_override);
+        assert!(tel_pre.charge_authorized);
+
+        // Plugging in (A -> B -> D) preserves local_override
+        tel_pre.greenup_state = "B".to_string();
+        tel_pre.update_charge_status();
+        assert!(tel_pre.local_override);
+        tel_pre.greenup_state = "D".to_string();
+        tel_pre.update_charge_status();
+        assert!(tel_pre.local_override);
+
+        // Clearing via merged mask "010" resets local_override
+        tel_pre.em_mask = Some("010".to_string());
+        tel_pre.update_charge_status();
+        assert!(!tel_pre.local_override);
     }
 }
