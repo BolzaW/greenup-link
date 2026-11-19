@@ -794,6 +794,10 @@ async fn set_charge_state(
                 "lock_remaining_secs": remaining_secs
             })),
         ),
+        crate::station::ChargeActionOutcome::NotSupportedWhileTicActive => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "not supported while TIC active"})),
+        ),
         crate::station::ChargeActionOutcome::SerialError => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": "Serial error"})),
@@ -1440,13 +1444,26 @@ mod tests {
         assert_eq!(json_val["local_override"], true);
         assert!(rx.try_recv().is_err());
 
-        // 8. Setting lock to 0 allows disable and clears local_override
+        // 9. Setting lock to 0 allows disable and clears local_override
         point1.set_local_override_disable_lock_secs(0);
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "disable".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(false));
         assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
         assert!(!point1.to_connector_data().status.local_override);
+
+        // 10. CAU actions (suspend / authorize) are rejected with 400 when TIC is active
+        point1.driver.update_raw(|raw| {
+            raw.tic_test_b = Some("9600".to_string());
+        });
+        for cau_action in ["suspend", "authorize"] {
+            let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: cau_action.to_string() })).await.into_response();
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST, "action {}", cau_action);
+            let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+            let json_val: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json_val["error"], "not supported while TIC active");
+            assert!(rx.try_recv().is_err());
+        }
     }
 
     #[tokio::test]

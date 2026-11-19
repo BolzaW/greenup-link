@@ -37,13 +37,14 @@ function updateChargerLeds(mode) {
     }
 }
 
-function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, charge_paused, charge_authorized) {
+function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, session_stopped, charge_authorized, active_socket) {
     if (greenup_state === window.lastVisualState &&
         iec_state === window.lastIecState &&
         isChargeComplete === window.lastChargeComplete &&
         isActionPending === window.lastActionPending &&
-        charge_paused === window.lastChargePaused &&
-        charge_authorized === window.lastChargeAuthorized) {
+        session_stopped === window.lastSessionStopped &&
+        charge_authorized === window.lastChargeAuthorized &&
+        active_socket === window.lastActiveSocket) {
         return;
     }
     window.lastActionPending = isActionPending;
@@ -51,8 +52,9 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     window.lastVisualState = greenup_state;
     window.lastIecState = iec_state;
     window.lastChargeComplete = isChargeComplete;
-    window.lastChargePaused = charge_paused;
+    window.lastSessionStopped = session_stopped;
     window.lastChargeAuthorized = charge_authorized;
+    window.lastActiveSocket = active_socket;
 
     // Reset base styles (use setAttribute for SVG elements whose className is SVGAnimatedString)
     chargerBox.className = 'w-16 h-24 md:w-20 md:h-28 rounded-2xl bg-slate-950 border-2 border-slate-800 flex flex-col items-center justify-center relative z-10 transition-all duration-500 shadow-2xl';
@@ -64,7 +66,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
     const animWire2 = document.getElementById('animWire2');
     if (animWire1) { animWire1.classList.add('opacity-0'); animWire1.classList.remove('anim-flow'); animWire1.setAttribute('stroke', '#10b981'); }
     if (animWire2) { animWire2.classList.add('opacity-0'); animWire2.classList.remove('anim-flow'); animWire2.setAttribute('stroke', '#10b981'); }
-    const isSchukoState = greenup_state === 'F' || greenup_state === 'G' || greenup_state === 'H' || greenup_state === 'O';
+    const isSchukoState = active_socket === 'domestic' || greenup_state === 'F' || greenup_state === 'G' || greenup_state === 'H' || greenup_state === 'O' || greenup_state === 'P';
     if (cableLabel) {
         cableLabel.innerText = isSchukoState ? 'Schuko' : 'Type 2';
         cableLabel.classList.add('opacity-0');
@@ -191,7 +193,7 @@ function updateVisuals(greenup_state, isChargeComplete, iec_state, error_code, c
         carIcon.style.fill = '#10b981';
     }
 
-    updateControlButtons(charge_authorized, charge_paused);
+    updateControlButtons(charge_authorized, session_stopped);
 
     lblState.innerText = stateLabel;
 }

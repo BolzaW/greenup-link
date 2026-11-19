@@ -98,9 +98,10 @@ All published telemetry topics have `retain: true` enabled.
 | `<base>/connector/<id>/status/state` | `A`, `B`, `C`, `E`, `F` | IEC 61851-1 operating state |
 | `<base>/connector/<id>/status/ocpp_status` | `Charging`, `Available`, ... | Standard OCPP 1.6-J ChargePointStatus |
 | `<base>/connector/<id>/status/raw_code` | `D`, `A`, `B`, `J`, ... | Raw Legrand internal state machine letter |
+| `<base>/connector/<id>/status/active_socket` | `none`, `t2s`, `domestic` | Active physical socket (`t2s`, `domestic`, or `none`) |
 | `<base>/connector/<id>/status/vehicle_connected` | `true` / `false` | Vehicle plugged into the socket |
 | `<base>/connector/<id>/status/charging` | `true` / `false` | Active power delivery in progress |
-| `<base>/connector/<id>/status/paused` | `true` / `false` | Charge suspended via `CAUNOK` (`CAU:0`) |
+| `<base>/connector/<id>/status/session_stopped` | `true` / `false` | Session stopped via Stop button / `SBNOK` (`State:M` or `State:P`) |
 | `<base>/connector/<id>/status/charge_complete` | `true` / `false` | Battery full / charging ended by EV |
 | `<base>/connector/<id>/status/local_override` | `true` / `false` | Forced charge triggered locally via the station's physical button (`EM:XX1`) |
 | `<base>/connector/<id>/status/error_code` | `0000` | ATmega hardware fault code |
@@ -153,12 +154,12 @@ Publishing to these topics allows external systems to pilot the charging station
 
 | Payload | ATmega Command(s) | Behavior |
 | :--- | :--- | :--- |
-| `enable`, `ON`, `1`, `true` | `FM2:0` + `DOK` | Universal supervisor enable (overrides HP/contact conditioning; keeps `T2C` untouched) |
-| `disable`, `OFF`, `0`, `false` | `DNOK` + `FM2:1` | Universal supervisor disable (`State:W` $\rightarrow$ `State:B`, respects `local_override` lock) |
-| `authorize` | `CAUOK` | Restores charge authorization (`CAU:1`, `status/paused` = `false`) |
-| `suspend` | `CAUNOK` | Cleanly suspends charge (`State:W` $\rightarrow$ `State:B`/`J`/`F`), keeps cable locked & session open (`status/paused` = `true`) |
-| `start_session` | `SBOK` | Simulates Start button press (exits `State:M`/`P`, re-locks T2S, opens new session) |
-| `stop_session` | `SBNOK` | Simulates Stop button press (`State:W`, closes session `WT/CT`, unlocks T2S, parks in `State:M`/`P`) |
+| `enable`, `ON`, `1`, `true` | `FM2:0` + `DOK` *(+ `T2COK`/`2PCOK`/`CAUOK` if blocked)* | Universal adaptive supervisor enable (clears any blocking gate) |
+| `disable`, `OFF`, `0`, `false` | `DNOK` + `FM2:1` *(+ `T2FNOK`/`2PFNOK` if forced)* | Universal adaptive supervisor disable (`State:W` $\rightarrow$ `State:B`, respects `local_override` lock) |
+| `authorize` | `CAUOK` | Restores charge authorization (`CAU:1`) *(rejected if TIC is active)* |
+| `suspend` | `CAUNOK` | Cleanly suspends charge (`State:W` $\rightarrow$ `State:B`/`J`/`F`), keeps cable locked & session open *(rejected if TIC is active)* |
+| `start_session` | `SBOK` | Simulates Start button press (exits `State:M`/`P`, re-locks T2S, opens new session, `status/session_stopped` = `false`) |
+| `stop_session` | `SBNOK` | Simulates Stop button press (`State:W`, closes session `WT/CT`, unlocks T2S, parks in `State:M`/`P`, `status/session_stopped` = `true`) |
 | `enable_type2` / `disable_type2` | `T2COK` / `T2CNOK` | Enables or disables the Type 2 socket (aborts/unlocks T2S and freezes detection in `State:A`) |
 | `enable_domestic` / `disable_domestic` | `2PCOK` / `2PCNOK` | Enables or disables the auxiliary domestic Schuko (2P+T) socket |
 | `force_type2` / `unforce_type2` | `T2FOK` / `T2FNOK` | Forces or unforces immediate Type 2 charging (bypasses schedules, `CAU`, `FM2`) |

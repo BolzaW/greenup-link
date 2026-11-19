@@ -304,6 +304,8 @@ Green'Up Link distinguishes two fundamentally different interruption mechanisms:
 > Unlike `FM2:1` and `CAUNOK`, the `SBNOK` stop state is **not persistent across physical connection events**.  
 > If the station is stopped in `State:M` via `SBNOK`, and the user **unplugs and replugs the charging cable into the vehicle**, the ATmega automatically resets `SB` back to `1` and starts a new session!  
 > For this reason, `suspend`/`authorize` (`CAUNOK`/`CAUOK`) is used for in-session pauses, `enable`/`disable` (`FM2`/`D`) is the authoritative supervisor control, and `stop_session`/`start_session` (`SBNOK`/`SBOK`) simulates the physical front button.
+>
+> **TIC Compatibility**: `CAU` (`suspend`/`authorize`) is **not compatible** with a connected and active TIC interface in `FM:2` and is rejected by the API (`not supported while TIC active`). The Web UI Pause/Resume button maps to `stop_session`/`start_session` (`SBNOK`/`SBOK`), and `status.session_stopped` is `true` in `State:M` and `State:P` (replacing legacy `paused`). `status.active_socket` reports `"none"`, `"t2s"`, or `"domestic"`.
 
 ---
 

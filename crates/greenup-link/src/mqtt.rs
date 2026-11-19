@@ -280,6 +280,10 @@ pub fn generate_telemetry_topics(
             conn.status.raw_code.clone(),
         ));
         topics.push((
+            format!("{}/status/active_socket", prefix),
+            conn.status.active_socket.clone(),
+        ));
+        topics.push((
             format!("{}/status/vehicle_connected", prefix),
             conn.status.vehicle_connected.to_string(),
         ));
@@ -288,8 +292,8 @@ pub fn generate_telemetry_topics(
             conn.status.charging.to_string(),
         ));
         topics.push((
-            format!("{}/status/paused", prefix),
-            conn.status.paused.to_string(),
+            format!("{}/status/session_stopped", prefix),
+            conn.status.session_stopped.to_string(),
         ));
         topics.push((
             format!("{}/status/charge_complete", prefix),
@@ -1178,9 +1182,10 @@ mod tests {
                         ocpp: OcppChargePointStatus::Available,
                         iec: "A".to_string(),
                         raw_code: "A".to_string(),
+                        active_socket: "none".to_string(),
                         vehicle_connected: false,
                         charging: false,
-                        paused: false,
+                        session_stopped: false,
                         charge_complete: false,
                         local_override: false,
                         error_code: String::new(),
@@ -1258,9 +1263,10 @@ mod tests {
                         ocpp: OcppChargePointStatus::Available,
                         iec: "A".to_string(),
                         raw_code: "A".to_string(),
+                        active_socket: "none".to_string(),
                         vehicle_connected: false,
                         charging: false,
-                        paused: false,
+                        session_stopped: false,
                         charge_complete: false,
                         local_override: false,
                         error_code: String::new(),
@@ -1346,9 +1352,10 @@ mod tests {
                         ocpp: OcppChargePointStatus::Available,
                         iec: "A".to_string(),
                         raw_code: "A".to_string(),
+                        active_socket: "none".to_string(),
                         vehicle_connected: false,
                         charging: false,
-                        paused: false,
+                        session_stopped: false,
                         charge_complete: false,
                         local_override: false,
                         error_code: String::new(),

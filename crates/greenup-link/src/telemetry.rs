@@ -61,6 +61,16 @@ pub struct Telemetry {
     #[serde(skip)]
     pub t2c_enabled: Option<bool>,
     #[serde(skip)]
+    pub dom_2pc_enabled: Option<bool>,
+    #[serde(skip)]
+    pub t2f_forced: Option<bool>,
+    #[serde(skip)]
+    pub dom_2pf_forced: Option<bool>,
+    #[serde(skip)]
+    pub cau_authorized: Option<bool>,
+    #[serde(skip)]
+    pub tic_active: bool,
+    #[serde(skip)]
     pub fm2_state: Option<bool>,
     #[serde(skip)]
     pub d_state: Option<bool>,
@@ -71,7 +81,6 @@ pub struct Telemetry {
     #[serde(skip)]
     pub local_override_started_at: Option<std::time::Instant>,
     pub charge_authorized: bool,
-    pub charge_paused: bool,
     pub greenup_state: String,
     pub iec_state: Option<String>,
     pub charge_complete: bool,
@@ -99,13 +108,17 @@ impl Default for Telemetry {
             eliot_limit_amps: None,
             cp_voltage: None,
             t2c_enabled: None,
+            dom_2pc_enabled: None,
+            t2f_forced: None,
+            dom_2pf_forced: None,
+            cau_authorized: None,
+            tic_active: false,
             fm2_state: None,
             d_state: None,
             em_mask: None,
             local_override: false,
             local_override_started_at: None,
             charge_authorized: false,
-            charge_paused: false,
             iec_state: None,
             charge_complete: false,
             tic_mode: String::new(),
@@ -184,9 +197,12 @@ impl Telemetry {
     }
 
     /// Recomputes `local_override` and `charge_authorized` from the raw ATmega matrix
-    /// (`greenup_state`, `em_mask`, `d_state`, `fm2_state`, `t2c_enabled`, `charge_paused`).
+    /// (`greenup_state`, `em_mask`, `d_state`, `fm2_state`, `t2c_enabled`, `dom_2pc_enabled`,
+    /// `t2f_forced`, `dom_2pf_forced`, `cau_authorized`, `tic_active`).
     pub fn update_charge_status(&mut self) {
+        let em_second = self.em_mask.as_deref().and_then(|m| m.chars().nth(1));
         let em_third = self.em_mask.as_deref().and_then(|m| m.chars().nth(2));
+        let em_hc_active = em_second == Some('1');
         let em_derogation = em_third == Some('1');
         let em_cleared = em_third == Some('0');
 
@@ -195,7 +211,7 @@ impl Telemetry {
             "A" | "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "N" | "O" | "P"
         );
 
-        if !is_override_eligible_state || self.charge_paused || em_cleared {
+        if !is_override_eligible_state || em_cleared {
             self.local_override = false;
             self.local_override_started_at = None;
         } else if em_derogation && !self.local_override {
@@ -203,11 +219,31 @@ impl Telemetry {
             self.local_override_started_at = Some(std::time::Instant::now());
         }
 
-        let is_blocked_by_fm2 = self.fm2_state.unwrap_or(false);
-        let is_forced_by_d = self.d_state.unwrap_or(false) || self.local_override;
-        let is_t2c_authorized = self.t2c_enabled.unwrap_or(true);
+        let is_domestic = matches!(
+            self.greenup_state.as_str(),
+            "F" | "G" | "H" | "O" | "P"
+        );
+        let forced = if is_domestic {
+            self.dom_2pf_forced == Some(true)
+        } else {
+            self.t2f_forced == Some(true)
+        };
 
-        self.charge_authorized = is_t2c_authorized && (!is_blocked_by_fm2 || is_forced_by_d);
+        if forced {
+            self.charge_authorized = true;
+        } else {
+            let socket_enabled = if is_domestic {
+                self.dom_2pc_enabled.unwrap_or(true)
+            } else {
+                self.t2c_enabled.unwrap_or(true)
+            };
+            let is_blocked_by_fm2 = self.fm2_state.unwrap_or(false);
+            let is_forced_by_d = self.d_state.unwrap_or(false) || self.local_override;
+            let fm2_gate_open = !is_blocked_by_fm2 || is_forced_by_d || em_hc_active;
+            let cau_gate_open = self.tic_active || self.cau_authorized != Some(false);
+
+            self.charge_authorized = socket_enabled && fm2_gate_open && cau_gate_open;
+        }
     }
 }
 
@@ -252,9 +288,10 @@ pub struct ConnectorStatus {
     pub ocpp: OcppChargePointStatus,
     pub iec: String,
     pub raw_code: String,
+    pub active_socket: String,
     pub vehicle_connected: bool,
     pub charging: bool,
-    pub paused: bool,
+    pub session_stopped: bool,
     pub charge_complete: bool,
     #[serde(default)]
     pub local_override: bool,
@@ -367,8 +404,14 @@ impl Telemetry {
             }
         };
 
+        let active_socket = match raw_code.as_str() {
+            "B" | "C" | "D" | "E" | "I" | "J" | "K" | "M" | "N" => "t2s".to_string(),
+            "F" | "G" | "H" | "O" | "P" => "domestic".to_string(),
+            _ => "none".to_string(),
+        };
+        let session_stopped = matches!(raw_code.as_str(), "M" | "P");
         let vehicle_connected = !matches!(raw_code.as_str(), "A" | "L" | "DISCONNECTED" | "Y" | "Z" | "") && iec != "A" && iec != "E" && iec != "F";
-        let is_charging = (matches!(raw_code.as_str(), "D" | "E" | "G" | "H") || iec == "C") && !self.charge_paused;
+        let is_charging = matches!(raw_code.as_str(), "D" | "E" | "G" | "H") || iec == "C";
 
         let ocpp = if self.serial.status != SerialStatus::UsbConnected || self.serial.sniffer_mode {
             if self.serial.sniffer_mode && vehicle_connected {
@@ -386,7 +429,7 @@ impl Telemetry {
             OcppChargePointStatus::Unavailable
         } else if has_error || iec == "E" || iec == "F" {
             OcppChargePointStatus::Faulted
-        } else if self.charge_paused || matches!(raw_code.as_str(), "J" | "K" | "M" | "N" | "O" | "P") {
+        } else if matches!(raw_code.as_str(), "J" | "K" | "M" | "N" | "O" | "P") {
             OcppChargePointStatus::SuspendedEVSE
         } else if is_charging {
             OcppChargePointStatus::Charging
@@ -410,9 +453,10 @@ impl Telemetry {
             ocpp,
             iec,
             raw_code,
+            active_socket,
             vehicle_connected,
             charging: is_charging,
-            paused: self.charge_paused,
+            session_stopped,
             charge_complete: self.charge_complete,
             local_override: self.local_override,
             error_code,
@@ -433,7 +477,7 @@ impl Telemetry {
             applied_limit_amps: self.limit_amps,
             min_allowed_amps: min_allowed,
             max_hardware_amps: max_hardware,
-            charge_authorized: self.charge_authorized && !self.charge_paused,
+            charge_authorized: self.charge_authorized,
             local_override: self.local_override,
             pilot_voltage: self.cp_voltage,
         };
@@ -582,14 +626,21 @@ mod tests {
             assert_eq!(conn.meter.current_a, 15.9);
         }
 
-        // 4. Charge paused
-        tel.charge_paused = true;
+        // 4. Session stopped (State M / P -> session_stopped=true, SuspendedEVSE, active_socket)
+        tel.greenup_state = "M".to_string();
+        tel.update_iec_state();
         let conn = tel.to_connector_data(&info);
         assert_eq!(conn.status.ocpp, OcppChargePointStatus::SuspendedEVSE);
-        assert!(conn.status.paused);
+        assert!(conn.status.session_stopped);
+        assert_eq!(conn.status.active_socket, "t2s");
         assert!(!conn.status.charging);
         assert!(!conn.status.charge_complete);
-        tel.charge_paused = false;
+
+        tel.greenup_state = "P".to_string();
+        tel.update_iec_state();
+        let conn_p = tel.to_connector_data(&info);
+        assert!(conn_p.status.session_stopped);
+        assert_eq!(conn_p.status.active_socket, "domestic");
 
         // 4b. Charge complete (vehicle battery full, vehicle connected)
         tel.greenup_state = "B".to_string();
@@ -721,5 +772,37 @@ mod tests {
         tel_pre.em_mask = Some("010".to_string());
         tel_pre.update_charge_status();
         assert!(!tel_pre.local_override);
+    }
+
+    #[test]
+    fn test_charge_authorized_matrix() {
+        let mut tel = Telemetry::default();
+        tel.serial.status = SerialStatus::UsbConnected;
+        tel.greenup_state = "A".to_string();
+        tel.fm2_state = Some(false);
+        tel.d_state = Some(true);
+        tel.update_charge_status();
+        assert!(tel.charge_authorized);
+
+        // T2C disabled blocks charge_authorized unless T2F is forced
+        tel.t2c_enabled = Some(false);
+        tel.update_charge_status();
+        assert!(!tel.charge_authorized);
+
+        tel.t2f_forced = Some(true);
+        tel.update_charge_status();
+        assert!(tel.charge_authorized);
+        tel.t2f_forced = Some(false);
+        tel.t2c_enabled = Some(true);
+
+        // CAU=false blocks charge_authorized only when TIC is not active
+        tel.cau_authorized = Some(false);
+        tel.tic_active = false;
+        tel.update_charge_status();
+        assert!(!tel.charge_authorized);
+
+        tel.tic_active = true;
+        tel.update_charge_status();
+        assert!(tel.charge_authorized);
     }
 }

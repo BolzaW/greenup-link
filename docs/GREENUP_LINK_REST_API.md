@@ -364,17 +364,17 @@ Three standard authentication methods are supported simultaneously against the s
 
 #### Supported actions and exact hardware behavior:
 
-##### 7.1 Universal Supervisor Control (`FM2` + `D`) — *Recommended for EMS / EVCC / Home Assistant*
-- **`enable`** (`FM2:0` + `DOK`): Clears external dry-contact conditioning (`FM2:0`) and activates derogation (`DOK`). Overrides physical Linky TIC Peak Hours (HP) and `FM2` locks while keeping autonomous TIC load-shedding (`CCTIC`) active. Does **not** alter socket availability (`T2C` / `2PC`).
-- **`disable`** (`DNOK` + `FM2:1`): Clears derogation (`DNOK`) and asserts Contact 1 conditioning (`FM2:1`), ramping down via `State:W` and holding the vehicle locked in `State:B` (prevents TIC Off-Peak from starting a charge). If `local_override` (physical front-button long press) is active within the `local_override_disable_lock_secs` window, returns HTTP `200 OK` with `{ "status": "ignored", "reason": "local_override_active", "local_override": true, "lock_remaining_secs": ... }`.
+##### 7.1 Universal Adaptive Supervisor Control (`FM2` + `D`) — *Recommended for EMS / EVCC / Home Assistant*
+- **`enable`** (`FM2:0` + `DOK` + adaptive unblock): Clears external dry-contact conditioning (`FM2:0`) and activates derogation (`DOK`). Automatically adds `T2COK` if Type 2 was disabled (`T2C:0`), `2PCOK` if domestic was disabled (`2PC:0`), and `CAUOK` if `CAU:0` while TIC is inactive. Overrides physical Linky TIC Peak Hours (HP) while keeping autonomous TIC load-shedding (`CCTIC`) active.
+- **`disable`** (`DNOK` + `FM2:1` + adaptive unforce): Clears derogation (`DNOK`) and asserts Contact 1 conditioning (`FM2:1`), ramping down via `State:W` and holding the vehicle locked in `State:B`. Automatically adds `T2FNOK` / `2PFNOK` if a forced override was active. If `local_override` (physical front-button long press) is active within the `local_override_disable_lock_secs` window, returns HTTP `200 OK` with `{ "status": "ignored", "reason": "local_override_active", "local_override": true, "lock_remaining_secs": ... }`.
 
 ##### 7.2 Clean Charge Suspension & Authorization (`CAU`) — *Session & Lock Preserved*
-- **`suspend`** (`CAUNOK`): Cleanly suspends charging (`State:W` $\le 6.1\text{ s}$ $\rightarrow$ `State:B` / `State:J` / `State:F`) without closing the ATmega session or unlocking the Type 2 cable. Blocks charging even if a physical Off-Peak dry contact (pin 27) or `DOK` is active. Maps `status.paused` to `true`.
-- **`authorize`** (`CAUOK`): Restores charge authorization (`CAU:1`), allowing `State:B` $\rightarrow$ `State:C` or `State:J` $\rightarrow$ `State:I`. Maps `status.paused` to `false`.
+- **`suspend`** (`CAUNOK`): Cleanly suspends charging (`State:W` $\le 6.1\text{ s}$ $\rightarrow$ `State:B` / `State:J` / `State:F`) without closing the ATmega session or unlocking the Type 2 cable. Blocks charging even if a physical Off-Peak dry contact (pin 27) or `DOK` is active.
+- **`authorize`** (`CAUOK`): Restores charge authorization (`CAU:1`), allowing `State:B` $\rightarrow$ `State:C` or `State:J` $\rightarrow$ `State:I`.
 
 ##### 7.3 Front Panel Start/Stop Button Simulation (`SB`) — *Closes Session & Unlocks Cable*
-- **`stop_session`** (`SBNOK`): Simulates a short press ($< 1\text{ s}$) on the physical Stop button. Ramps down via `State:W`, **closes the ATmega internal session** (emits `WT/CT` ticket and writes EEPROM history), **unlocks the Type 2 cable**, and parks in `State:M` (or `State:P` for domestic).
-- **`start_session`** (`SBOK`): Simulates a short press on the physical Start button. Exits `State:M`/`State:P` via `State:A`, re-locks the Type 2 cable, and opens a new session in `State:B`.
+- **`stop_session`** (`SBNOK`): Simulates a short press ($< 1\text{ s}$) on the physical Stop button. Ramps down via `State:W`, **closes the ATmega internal session** (emits `WT/CT` ticket and writes EEPROM history), **unlocks the Type 2 cable**, and parks in `State:M` (or `State:P` for domestic, setting `status.session_stopped = true`).
+- **`start_session`** (`SBOK`): Simulates a short press on the physical Start button. Exits `State:M`/`State:P` via `State:A`, re-locks the Type 2 cable, and opens a new session in `State:B` (`status.session_stopped = false`).
 
 ##### 7.4 Hardware Socket Availability (`T2C` / `2PC`)
 - **`enable_type2`** (`T2COK`): Enables the Type 2 socket (`T2C:1`).
@@ -396,7 +396,7 @@ Three standard authentication methods are supported simultaneously against the s
 - **`wake`** (`SNOK`): Wakes the station from deep sleep (`State:Y` $\rightarrow$ `State:A`).
 
 > [!NOTE]
-> Legacy `"pause"` and `"resume"` actions have been removed; use `"suspend"` / `"authorize"` for clean in-session pause/resume (cable locked) or `"stop_session"` / `"start_session"` to simulate the physical front Stop/Start button (session closed & cable unlocked).
+> Legacy `"pause"` and `"resume"` actions have been removed; use `"suspend"` / `"authorize"` for clean in-session pause/resume (cable locked) or `"stop_session"` / `"start_session"` to simulate the physical front Stop/Start button (session closed & cable unlocked, used by the Web UI Pause/Resume button). Note that `CAU` (`"suspend"` / `"authorize"`) is **not compatible** with a connected and active TIC interface and is rejected with `400 Bad Request` (`"not supported while TIC active"`).
 
 - **Typical Response**:
   ```json

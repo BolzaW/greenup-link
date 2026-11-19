@@ -244,6 +244,18 @@ impl AppState {
                 if let Some(t2c) = raw.t2c {
                     tel.t2c_enabled = Some(t2c);
                 }
+                if let Some(dom_2pc) = raw.dom_2pc {
+                    tel.dom_2pc_enabled = Some(dom_2pc);
+                }
+                if let Some(t2f) = raw.t2f {
+                    tel.t2f_forced = Some(t2f);
+                }
+                if let Some(dom_2pf) = raw.dom_2pf {
+                    tel.dom_2pf_forced = Some(dom_2pf);
+                }
+                if let Some(cau) = raw.cau {
+                    tel.cau_authorized = Some(cau);
+                }
                 if let Some(fm2) = raw.fm2 {
                     tel.fm2_state = Some(fm2);
                 }
@@ -252,9 +264,6 @@ impl AppState {
                 }
                 if let Some(ref em) = raw.em {
                     tel.em_mask = Some(em.clone());
-                }
-                if let Some(cau) = raw.cau {
-                    tel.charge_paused = !cau;
                 }
                 if let Some(fcs) = raw.fcs {
                     tel.charge_complete = fcs;
@@ -267,6 +276,7 @@ impl AppState {
                 } else if let Some(ref baud) = raw.tic_test_b {
                     tel.tic_mode = baud.clone();
                 }
+                tel.tic_active = matches!(tel.tic_mode.as_str(), "1200" | "9600");
 
                 if let Some(ref phase) = raw.cph {
                     if cursor.last_cph.as_ref() != Some(phase) {
@@ -470,11 +480,15 @@ impl AppState {
             {
                 cursor.auto_tic_triggered = true;
                 should_auto_start_tic = true;
-                let is_charging_now = matches!(
+                let is_active_session_state = matches!(
                     raw.state.as_deref(),
-                    Some("D") | Some("E") | Some("G") | Some("H")
+                    Some("C") | Some("D") | Some("E") | Some("F") | Some("G") | Some("H") | Some("I")
                 );
-                if raw.cau.is_none() && !is_charging_now {
+                let tic_detected = raw
+                    .tic_test_b
+                    .as_deref()
+                    .is_some_and(|b| !b.is_empty() && b != "0");
+                if raw.cau.is_none() && !is_active_session_state && !tic_detected {
                     should_query_cau = true;
                 }
             }
@@ -543,6 +557,22 @@ impl AppState {
     /// Returns `true` if the station is operating in Sniffer mode (passive listen-only, zero TX).
     pub fn sniffer_mode(&self) -> bool {
         self.sniffer_mode.load(Ordering::Relaxed)
+    }
+
+    /// Returns `true` if an active TIC interface has been detected (baudrate `"1200"` or `"9600"`).
+    pub fn is_tic_active(&self) -> bool {
+        self.sync_from_driver();
+        if let Ok(tel) = self.telemetry.lock() {
+            if matches!(tel.tic_mode.as_str(), "1200" | "9600") {
+                return true;
+            }
+        }
+        self.driver
+            .get_snapshot()
+            .atmega
+            .tic_test_b
+            .as_deref()
+            .is_some_and(|b| !b.is_empty() && b != "0")
     }
 
     /// Configures the `local_override` disable lock duration in seconds (`-1`, `0`, or `> 0`).
@@ -873,15 +903,29 @@ impl ChargeAction {
 pub enum ChargeActionOutcome {
     Executed,
     IgnoredLocalOverride { remaining_secs: i64 },
+    NotSupportedWhileTicActive,
     SerialError,
 }
 
-/// Executes a [`ChargeAction`] on the given [`AppState`], enforcing `local_override` protection on `Disable`.
+/// Executes a [`ChargeAction`] on the given [`AppState`], enforcing `local_override` protection on `Disable`
+/// and rejecting `CAU` actions (`Suspend` / `Authorize`) while an active TIC is detected.
 pub async fn execute_charge_action(
     point: &AppState,
     action: ChargeAction,
     log_source: &str,
 ) -> ChargeActionOutcome {
+    if matches!(action, ChargeAction::Suspend | ChargeAction::Authorize) && point.is_tic_active() {
+        logger::warn(
+            log_source,
+            &format!(
+                "⛔ Side {}: Charge action '{:?}' rejected (not supported while TIC active)",
+                point.side(),
+                action
+            ),
+        );
+        return ChargeActionOutcome::NotSupportedWhileTicActive;
+    }
+
     if action == ChargeAction::Disable {
         if let Some(remaining) = point.is_disable_locked_by_local_override() {
             let lock_desc = if remaining < 0 {
@@ -904,7 +948,31 @@ pub async fn execute_charge_action(
         point.clear_local_override();
     }
 
-    let (desc, cmds) = action.commands();
+    let (desc, mut cmds) = action.commands();
+    let raw_atmega = point.driver.get_snapshot().atmega;
+    match action {
+        ChargeAction::Enable => {
+            if raw_atmega.t2c == Some(false) {
+                cmds.push(Command::AuthorizeType2(true));
+            }
+            if raw_atmega.dom_2pc == Some(false) {
+                cmds.push(Command::AuthorizeDomestic(true));
+            }
+            if !point.is_tic_active() && raw_atmega.cau == Some(false) {
+                cmds.push(Command::SetChargeAuthorization(true));
+            }
+        }
+        ChargeAction::Disable => {
+            if raw_atmega.t2f == Some(true) {
+                cmds.push(Command::ForceType2(false));
+            }
+            if raw_atmega.dom_2pf == Some(true) {
+                cmds.push(Command::ForceDomestic(false));
+            }
+        }
+        _ => {}
+    }
+
     logger::log(
         log_source,
         &format!("Point {}: {}", point.side(), desc),
@@ -1424,29 +1492,45 @@ mod tests {
         let (tx, rx) = mpsc::channel(32);
         let state = Arc::new(AppState::new(tx));
 
-        // 1. CAU=false maps to status.paused=true; CAU=true maps to status.paused=false
+        // 1. State M / P maps to status.session_stopped=true; State B maps to session_stopped=false
         state.driver.update_both(|raw, usb| {
             usb.status = SerialStatus::UsbConnected;
-            raw.state = Some("B".to_string());
-            raw.cau = Some(false);
+            raw.state = Some("M".to_string());
         });
-        assert!(state.to_connector_data().status.paused);
+        let conn_m = state.to_connector_data();
+        assert!(conn_m.status.session_stopped);
+        assert_eq!(conn_m.status.active_socket, "t2s");
 
         state.driver.update_raw(|raw| {
-            raw.cau = Some(true);
+            raw.state = Some("B".to_string());
         });
-        assert!(!state.to_connector_data().status.paused);
+        let conn_b = state.to_connector_data();
+        assert!(!conn_b.status.session_stopped);
+        assert_eq!(conn_b.status.active_socket, "t2s");
 
-        // 2. When init completes while charging (State:D), CAU? must NOT be queried
-        let (tx_chg, mut rx_chg) = mpsc::channel(32);
-        let state_chg = Arc::new(AppState::new(tx_chg));
-        state_chg.driver.update_both(|raw, usb| {
+        // 2. When init completes in active session states (C, D, I, etc.) or with active TIC, CAU? must NOT be queried
+        for active_state in ["C", "D", "I"] {
+            let (tx_chg, mut rx_chg) = mpsc::channel(32);
+            let state_chg = Arc::new(AppState::new(tx_chg));
+            state_chg.driver.update_both(|raw, usb| {
+                usb.status = SerialStatus::UsbConnected;
+                usb.init_completed = true;
+                raw.state = Some(active_state.to_string());
+            });
+            state_chg.sync_from_driver();
+            assert!(rx_chg.try_recv().is_err(), "CAU? should not be queried in State:{}", active_state);
+        }
+
+        let (tx_tic, mut rx_tic) = mpsc::channel(32);
+        let state_tic = Arc::new(AppState::new(tx_tic));
+        state_tic.driver.update_both(|raw, usb| {
             usb.status = SerialStatus::UsbConnected;
             usb.init_completed = true;
-            raw.state = Some("D".to_string());
+            raw.state = Some("B".to_string());
+            raw.tic_test_b = Some("9600".to_string());
         });
-        state_chg.sync_from_driver();
-        assert!(rx_chg.try_recv().is_err());
+        state_tic.sync_from_driver();
+        assert!(rx_tic.try_recv().is_err(), "CAU? should not be queried when TIC is active");
 
         // 3. When init completes while idle (State:B) and cau is None, CAU? IS queried
         let (tx_idle, mut rx_idle) = mpsc::channel(32);
@@ -1467,6 +1551,41 @@ mod tests {
         assert_eq!(ChargeAction::from_mqtt_str("ON"), Some(ChargeAction::Enable));
         assert_eq!(ChargeAction::from_mqtt_str("OFF"), Some(ChargeAction::Disable));
         drop(rx);
+    }
+
+    #[tokio::test]
+    async fn test_adaptive_enable_disable_actions() {
+        let (tx, mut rx) = mpsc::channel(32);
+        let state = Arc::new(AppState::new(tx));
+        state.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            raw.state = Some("B".to_string());
+            raw.t2c = Some(false);
+            raw.dom_2pc = Some(false);
+            raw.cau = Some(false);
+        });
+
+        let outcome = execute_charge_action(&state, ChargeAction::Enable, "TEST").await;
+        assert_eq!(outcome, ChargeActionOutcome::Executed);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::AuthorizeType2(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::AuthorizeDomestic(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetChargeAuthorization(true));
+        assert!(rx.try_recv().is_err());
+
+        // Disable unforces T2F and 2PF when active
+        state.driver.update_raw(|raw| {
+            raw.t2f = Some(true);
+            raw.dom_2pf = Some(true);
+        });
+        let outcome = execute_charge_action(&state, ChargeAction::Disable, "TEST").await;
+        assert_eq!(outcome, ChargeActionOutcome::Executed);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::ForceType2(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::ForceDomestic(false));
+        assert!(rx.try_recv().is_err());
     }
 
     #[tokio::test]

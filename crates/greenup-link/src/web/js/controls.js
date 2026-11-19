@@ -11,7 +11,7 @@ function unlockControls() {
     // Let polling restore state properly
 }
 
-function updateControlButtons(charge_authorized, charge_paused) {
+function updateControlButtons(charge_authorized, session_stopped) {
     const iconEnable = document.getElementById('iconEnable');
     const iconDisable = document.getElementById('iconDisable');
     const lblEnableDisable = document.getElementById('lblEnableDisable');
@@ -47,7 +47,7 @@ function updateControlButtons(charge_authorized, charge_paused) {
         btnEnableDisable.classList.replace('hover:shadow-[0_0_25px_rgba(244,63,94,0.4)]', 'hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]');
     }
 
-    if (charge_paused) {
+    if (session_stopped) {
         iconPause.classList.add('hidden');
         iconResume.classList.remove('hidden');
         lblPauseResume.innerText = t('controls.resume');
@@ -168,7 +168,7 @@ btnEnableDisable.addEventListener('click', () => {
 
 btnPauseResume.addEventListener('click', () => {
     if (window.isSnifferMode) return;
-    sendPostAction('/api/charge', { action: window.lastChargePaused ? 'authorize' : 'suspend' });
+    sendPostAction('/api/charge', { action: window.lastSessionStopped ? 'start_session' : 'stop_session' });
 });
 
 slider.addEventListener('mousedown', () => isDraggingSlider = true);
