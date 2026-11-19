@@ -844,8 +844,17 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
                 &format!("ℹ️ EM (Energy Management Mask) = {}", mask),
             );
             if !driver.sniffer_mode() {
-                let _ = driver.serial_tx.try_send(Command::GetDerogation);
-                let _ = driver.serial_tx.try_send(Command::GetExternalSignal);
+                let bytes = mask.as_bytes();
+                let contact_changed = bytes.first().is_some_and(|&b| b == b'0' || b == b'1')
+                    || bytes.get(1).is_some_and(|&b| b == b'0' || b == b'1');
+                let derogation_changed = bytes.get(2).is_some_and(|&b| b == b'0' || b == b'1');
+
+                if derogation_changed {
+                    let _ = driver.serial_tx.try_send(Command::GetDerogation);
+                }
+                if contact_changed {
+                    let _ = driver.serial_tx.try_send(Command::GetExternalSignal);
+                }
             }
         }
         ProtocolEvent::SessionTicket(ticket) => {
@@ -1102,8 +1111,16 @@ mod tests {
         assert_eq!(raw.d, None);
         assert_eq!(raw.fm2, None);
 
-        // Must systematically emit D? and FM2?
+        // EM:XX1 only touches bit 2 (derogation) -> must emit D? only
         assert_eq!(rx.try_recv(), Ok(Command::GetDerogation));
+        assert!(rx.try_recv().is_err());
+
+        // EM:0XX and EM:X1X touch contact bits (0/1) -> must emit FM2? only
+        parse_incoming_line("EM:0XX", &driver);
+        assert_eq!(rx.try_recv(), Ok(Command::GetExternalSignal));
+        assert!(rx.try_recv().is_err());
+
+        parse_incoming_line("EM:X1X", &driver);
         assert_eq!(rx.try_recv(), Ok(Command::GetExternalSignal));
         assert!(rx.try_recv().is_err());
 

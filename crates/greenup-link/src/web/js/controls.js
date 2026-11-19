@@ -11,20 +11,17 @@ function unlockControls() {
     // Let polling restore state properly
 }
 
-function updateControlButtons(charge_authorized, session_stopped) {
+function updateControlButtons(charge_authorized) {
     const iconEnable = document.getElementById('iconEnable');
     const iconDisable = document.getElementById('iconDisable');
     const lblEnableDisable = document.getElementById('lblEnableDisable');
-    const iconPause = document.getElementById('iconPause');
-    const iconResume = document.getElementById('iconResume');
-    const lblPauseResume = document.getElementById('lblPauseResume');
 
     if (isActionPending) {
         btnEnableDisable.classList.add('opacity-50', 'pointer-events-none');
-        btnPauseResume.classList.add('opacity-50', 'pointer-events-none');
+        if (btnStandalone) btnStandalone.classList.add('opacity-50', 'pointer-events-none');
     } else {
         btnEnableDisable.classList.remove('opacity-50', 'pointer-events-none');
-        btnPauseResume.classList.remove('opacity-50', 'pointer-events-none');
+        if (btnStandalone) btnStandalone.classList.remove('opacity-50', 'pointer-events-none');
     }
 
     if (charge_authorized) {
@@ -46,68 +43,13 @@ function updateControlButtons(charge_authorized, session_stopped) {
         btnEnableDisable.classList.replace('shadow-[0_0_20px_rgba(244,63,94,0.2)]', 'shadow-[0_0_20px_rgba(16,185,129,0.2)]');
         btnEnableDisable.classList.replace('hover:shadow-[0_0_25px_rgba(244,63,94,0.4)]', 'hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]');
     }
-
-    if (session_stopped) {
-        iconPause.classList.add('hidden');
-        iconResume.classList.remove('hidden');
-        lblPauseResume.innerText = t('controls.resume');
-        btnPauseResume.classList.replace('bg-amber-500', 'bg-emerald-500');
-        btnPauseResume.classList.replace('hover:bg-amber-400', 'hover:bg-emerald-400');
-        btnPauseResume.classList.replace('text-amber-950', 'text-emerald-950');
-        btnPauseResume.classList.replace('shadow-[0_0_20px_rgba(245,158,11,0.2)]', 'shadow-[0_0_20px_rgba(16,185,129,0.2)]');
-        btnPauseResume.classList.replace('hover:shadow-[0_0_25px_rgba(245,158,11,0.4)]', 'hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]');
-    } else {
-        iconResume.classList.add('hidden');
-        iconPause.classList.remove('hidden');
-        lblPauseResume.innerText = t('controls.pause');
-        btnPauseResume.classList.replace('bg-emerald-500', 'bg-amber-500');
-        btnPauseResume.classList.replace('hover:bg-emerald-400', 'hover:bg-amber-400');
-        btnPauseResume.classList.replace('text-emerald-950', 'text-amber-950');
-        btnPauseResume.classList.replace('shadow-[0_0_20px_rgba(16,185,129,0.2)]', 'shadow-[0_0_20px_rgba(245,158,11,0.2)]');
-        btnPauseResume.classList.replace('hover:shadow-[0_0_25px_rgba(16,185,129,0.4)]', 'hover:shadow-[0_0_25px_rgba(245,158,11,0.4)]');
-    }
 }
-
-function updateAppliedLimitBadge(appliedAmps, setpointAmps) {
-    const box = document.getElementById('boxAppliedValue');
-    const lbl = document.getElementById('lblAppliedLimit');
-    if (!box || !lbl) return;
-
-    if (!window.isUsbConnected || appliedAmps == null) {
-        lbl.innerText = '--';
-        box.className = 'bg-slate-800/40 px-2.5 py-1 rounded border border-slate-700/50 transition-all duration-300';
-        lbl.className = 'font-bold text-slate-500 font-mono text-sm transition-colors';
-        return;
-    }
-
-    const applied = Number(appliedAmps);
-    const setpoint = Number(setpointAmps);
-    lbl.innerText = `${applied} A`;
-
-    const tooltipBase = (typeof t === 'function' ? t('controls.applied_limit_tooltip') : 'Consigne réellement appliquée par la borne (CC)') || 'Consigne réellement appliquée par la borne (CC)';
-    box.title = `${tooltipBase} : ${applied} A`;
-
-    box.classList.remove('state-equal', 'state-lower', 'state-higher');
-    if (applied === setpoint) {
-        // Identique -> Vert (Emerald)
-        box.classList.add('state-equal');
-    } else if (applied < setpoint) {
-        // Plus basse -> Orange (Amber)
-        box.classList.add('state-lower');
-    } else {
-        // Plus haute -> Rouge (Rose)
-        box.classList.add('state-higher');
-    }
-}
-window.updateAppliedLimitBadge = updateAppliedLimitBadge;
 
 function updateControlsForMode(isSniffer) {
     const notice = typeof t === 'function' ? t('controls.local_mode_notice') : "Commandes verrouillées : mode Sniffer actif (écoute seule)";
     const sliderBox = document.getElementById('sliderBox');
     const boxSliderValue = document.getElementById('boxSliderValue');
     const lblSlider = document.getElementById('lblSlider');
-    const boxAppliedValue = document.getElementById('boxAppliedValue');
-    const lblAppliedLimit = document.getElementById('lblAppliedLimit');
     const btnInit = document.getElementById('btnSerialInit');
     const btnReset = document.getElementById('btnSerialReset');
     const btToggle = document.getElementById('btToggle');
@@ -118,15 +60,13 @@ function updateControlsForMode(isSniffer) {
         if (sliderBox) sliderBox.classList.add('slider-disabled');
         if (boxSliderValue) boxSliderValue.classList.add('slider-disabled');
         if (lblSlider) lblSlider.classList.add('slider-disabled');
-        if (boxAppliedValue) boxAppliedValue.classList.add('slider-disabled');
-        if (lblAppliedLimit) lblAppliedLimit.classList.add('slider-disabled');
         if (btnEnableDisable) {
             btnEnableDisable.disabled = true;
             btnEnableDisable.title = notice;
         }
-        if (btnPauseResume) {
-            btnPauseResume.disabled = true;
-            btnPauseResume.title = notice;
+        if (btnStandalone) {
+            btnStandalone.disabled = true;
+            btnStandalone.title = notice;
         }
         if (controlsPanel) {
             controlsPanel.classList.add('mode-passive');
@@ -140,15 +80,13 @@ function updateControlsForMode(isSniffer) {
         if (sliderBox) sliderBox.classList.remove('slider-disabled');
         if (boxSliderValue) boxSliderValue.classList.remove('slider-disabled');
         if (lblSlider) lblSlider.classList.remove('slider-disabled');
-        if (boxAppliedValue) boxAppliedValue.classList.remove('slider-disabled');
-        if (lblAppliedLimit) lblAppliedLimit.classList.remove('slider-disabled');
         if (btnEnableDisable && window.isUsbConnected) {
             btnEnableDisable.disabled = false;
             btnEnableDisable.removeAttribute('title');
         }
-        if (btnPauseResume && window.isUsbConnected) {
-            btnPauseResume.disabled = false;
-            btnPauseResume.removeAttribute('title');
+        if (btnStandalone && window.isUsbConnected) {
+            btnStandalone.disabled = false;
+            btnStandalone.title = typeof t === 'function' ? t('controls.standalone_tooltip') : "Charge autonome : réinitialise tous les blocages et forçages de charge";
         }
         if (controlsPanel && window.isUsbConnected && !isActionPending) {
             controlsPanel.classList.remove('mode-passive');
@@ -166,10 +104,12 @@ btnEnableDisable.addEventListener('click', () => {
     sendPostAction('/api/charge', { action: window.lastChargeAuthorized ? 'disable' : 'enable' });
 });
 
-btnPauseResume.addEventListener('click', () => {
-    if (window.isSnifferMode) return;
-    sendPostAction('/api/charge', { action: window.lastSessionStopped ? 'start_session' : 'stop_session' });
-});
+if (btnStandalone) {
+    btnStandalone.addEventListener('click', () => {
+        if (window.isSnifferMode) return;
+        sendPostAction('/api/charge', { action: 'standalone' });
+    });
+}
 
 slider.addEventListener('mousedown', () => isDraggingSlider = true);
 slider.addEventListener('mouseup', () => isDraggingSlider = false);
@@ -178,9 +118,6 @@ slider.addEventListener('touchend', () => isDraggingSlider = false);
 
 slider.addEventListener('input', (e) => {
     lblSlider.innerText = e.target.value + " A";
-    if (window.lastAppliedLimitAmps != null) {
-        updateAppliedLimitBadge(window.lastAppliedLimitAmps, Number(e.target.value));
-    }
 });
 slider.addEventListener('change', (e) => {
     if (window.isSnifferMode) return;

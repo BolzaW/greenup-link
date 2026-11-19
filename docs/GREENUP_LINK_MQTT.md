@@ -126,8 +126,7 @@ All published telemetry topics have `retain: true` enabled.
 | Topic | Unit | Example Value | Description |
 | :--- | :--- | :--- | :--- |
 | `<base>/connector/<id>/control/charge` | - | `ON` / `OFF` | Master charge authorization switch state |
-| `<base>/connector/<id>/control/setpoint_amps` | A | `16` | Current setpoint configured (`CCEl`) |
-| `<base>/connector/<id>/control/applied_limit_amps` | A | `16` | Effective current limit applied by ATmega (`CC`) |
+| `<base>/connector/<id>/control/setpoint_amps` | A | `16` | Current setpoint configured (`CC`) |
 | `<base>/connector/<id>/control/min_allowed_amps` | A | `7` | Minimum allowed current (Legrand standard: 7A) |
 | `<base>/connector/<id>/control/max_hardware_amps` | A | `32` | Maximum hardware capacity of the station |
 
@@ -160,6 +159,7 @@ Publishing to these topics allows external systems to pilot the charging station
 | :--- | :--- | :--- |
 | `enable`, `ON`, `1`, `true` | `FM2:0` + `DOK` *(+ `T2COK`/`2PCOK`/`CAUOK` if blocked)* | Universal adaptive supervisor enable (clears any blocking gate) |
 | `disable`, `OFF`, `0`, `false` | `DNOK` + `FM2:1` *(+ `T2FNOK`/`2PFNOK` if forced)* | Universal adaptive supervisor disable (`State:W` $\rightarrow$ `State:B`, respects `local_override` lock) |
+| `standalone` *(alias `autonomous`)* | Conditional (`FM2:0`, `DNOK`, `T2FNOK`, `2PFNOK`, `T2COK`, `2PCOK`, `CAUOK`, `SBOK`, `SNOK`, `PANOK`, `PAFCNOK`, `Dec:0`, `FM:1`) | Restores native standalone / direct charging by conditionally clearing only active locks and overrides without modifying `CC` |
 | `authorize` | `CAUOK` | Restores charge authorization (`CAU:1`) *(rejected if TIC is active)* |
 | `suspend` | `CAUNOK` | Cleanly suspends charge (`State:W` $\rightarrow$ `State:B`/`J`/`F`), keeps cable locked & session open *(rejected if TIC is active)* |
 | `start_session` | `SBOK` | Simulates Start button press (exits `State:M`/`P`, re-locks T2S, opens new session, `status/session_stopped` = `false`) |

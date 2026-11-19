@@ -82,6 +82,8 @@
     "setpoint_limit_tooltip": "Consigne demandée par le superviseur (CCEl)",
     "enable": "ACTIVER",
     "disable": "DÉSACTIVER",
+    "standalone": "AUTONOME",
+    "standalone_tooltip": "Charge autonome : réinitialise tous les blocages et forçages de charge",
     "pause": "PAUSE",
     "resume": "REPRENDRE",
     "local_mode_notice": "Mode Sniffer (écoute seule) : la borne fonctionne en autonomie. Les commandes sont verrouillées."

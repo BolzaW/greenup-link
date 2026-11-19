@@ -12,7 +12,7 @@ const valEnergy = document.getElementById('valEnergy');
 const slider = document.getElementById('currentSlider');
 const lblSlider = document.getElementById('lblSlider');
 const btnEnableDisable = document.getElementById('btnEnableDisable');
-const btnPauseResume = document.getElementById('btnPauseResume');
+const btnStandalone = document.getElementById('btnStandalone');
 const controlsPanel = document.getElementById('controlsPanel');
 
 // Visualizer Elements

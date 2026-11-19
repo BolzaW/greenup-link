@@ -305,7 +305,6 @@ pub struct ConnectorStatus {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ConnectorControl {
     pub setpoint_amps: u32,
-    pub applied_limit_amps: u32,
     pub min_allowed_amps: u32,
     pub max_hardware_amps: u32,
     pub charge_authorized: bool,
@@ -472,11 +471,10 @@ impl Telemetry {
             .unwrap_or(false);
         let min_allowed = if is_three_phase { 13 } else { 7 };
         let max_hardware = info.capabilities.as_ref().map(|c| c.max_current_amps as u32).unwrap_or(32);
-        let setpoint = self.eliot_limit_amps.unwrap_or(self.limit_amps).clamp(min_allowed, max_hardware);
+        let setpoint = self.limit_amps.clamp(min_allowed, max_hardware);
 
         let control = ConnectorControl {
             setpoint_amps: setpoint,
-            applied_limit_amps: self.limit_amps,
             min_allowed_amps: min_allowed,
             max_hardware_amps: max_hardware,
             charge_authorized: self.charge_authorized,
