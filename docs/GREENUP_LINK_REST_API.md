@@ -88,14 +88,16 @@ Three standard authentication methods are supported simultaneously against the s
   ```json
   {
     "station": {
-      "charge_point_vendor": "Legrand",
-      "charge_point_model": "Green'Up Premium (058001)",
-      "charge_point_serial_number": "012345",
-      "firmware_version": "V01.18.10",
+      "vendor": "Legrand",
+      "model": "058001",
+      "serial_number": "012345",
       "hardware_version": "V02.01.01",
+      "firmware_version": "V01.18.10",
+      "link_version": "1.1.0-dev",
       "production_date": "21W20",
-      "link_version": "0.5.0-dev",
-      "connector_count": 1,
+      "is_dual": false,
+      "available_connectors": [1],
+      "board_code": "13862",
       "capabilities": {
         "phases": 1,
         "max_power_kw": 7.4,
@@ -115,15 +117,18 @@ Three standard authentication methods are supported simultaneously against the s
     },
     "connectors": [
       {
-        "connector_id": 1,
+        "id": 1,
         "status": {
-          "iec": "C",
           "ocpp": "Charging",
-          "legrand_raw": "C",
-          "connected": true,
+          "iec": "C",
+          "raw_code": "C",
+          "active_socket": "t2s",
+          "vehicle_connected": true,
           "charging": true,
-          "error_code": "0000",
-          "error_description": "No error"
+          "session_stopped": false,
+          "charge_complete": false,
+          "local_override": false,
+          "error_code": "0000"
         },
         "control": {
           "setpoint_amps": 16,
@@ -131,8 +136,7 @@ Three standard authentication methods are supported simultaneously against the s
           "min_allowed_amps": 7,
           "max_hardware_amps": 32,
           "charge_authorized": true,
-          "paused_by_user": false,
-          "mode": "RemoteControl"
+          "local_override": false
         },
         "meter": {
           "power_w": 3680.0,
@@ -164,14 +168,16 @@ Three standard authentication methods are supported simultaneously against the s
 - **Typical Response**:
   ```json
   {
-    "charge_point_vendor": "Legrand",
-    "charge_point_model": "Green'Up Premium (058001)",
-    "charge_point_serial_number": "012345",
-    "firmware_version": "V01.18.10",
+    "vendor": "Legrand",
+    "model": "058001",
+    "serial_number": "012345",
     "hardware_version": "V02.01.01",
+    "firmware_version": "V01.18.10",
+    "link_version": "1.1.0-dev",
     "production_date": "21W20",
-    "link_version": "0.5.0-dev",
-    "connector_count": 1,
+    "is_dual": false,
+    "available_connectors": [1],
+    "board_code": "13862",
     "capabilities": {
       "phases": 1,
       "max_power_kw": 7.4,
@@ -202,15 +208,18 @@ Three standard authentication methods are supported simultaneously against the s
 - **Typical Response (`GET /api/connectors/1`)**:
   ```json
   {
-    "connector_id": 1,
+    "id": 1,
     "status": {
-      "iec": "C",
       "ocpp": "Charging",
-      "legrand_raw": "C",
-      "connected": true,
+      "iec": "C",
+      "raw_code": "C",
+      "active_socket": "t2s",
+      "vehicle_connected": true,
       "charging": true,
-      "error_code": "0000",
-      "error_description": "No error"
+      "session_stopped": false,
+      "charge_complete": false,
+      "local_override": false,
+      "error_code": "0000"
     },
     "control": {
       "setpoint_amps": 16,
@@ -218,8 +227,7 @@ Three standard authentication methods are supported simultaneously against the s
       "min_allowed_amps": 7,
       "max_hardware_amps": 32,
       "charge_authorized": true,
-      "paused_by_user": false,
-      "mode": "RemoteControl"
+      "local_override": false
     },
     "meter": {
       "power_w": 3680.0,
