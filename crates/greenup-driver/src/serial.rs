@@ -128,7 +128,7 @@ pub fn driver_startup_queries() -> Vec<Command> {
             !matches!(
                 cmd,
                 Command::GetSleep
-                    | Command::GetEnergyMeterPulses
+                    | Command::GetEnergyManagementMask
                     | Command::GetRfidEnabled
                     | Command::GetRfidUserManagement
             )
@@ -812,15 +812,16 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
                 logger::debug("SERIAL", &format!("⚠️ Unknown FM Mode detected = {}", fm_val));
             }
         }
-        ProtocolEvent::ExternalSignal(enabled) | ProtocolEvent::ExternalSignalForced(enabled) => {
+        ProtocolEvent::ExternalSignal(mask) | ProtocolEvent::ExternalSignalForced(mask) => {
             logger::debug(
                 "SERIAL",
                 &format!(
-                    "ℹ️ FM2 (External Signal) = {}",
-                    if *enabled {
-                        "1 (BLOCK CHARGE)"
+                    "ℹ️ FM2 (External Signal) = {} ({})",
+                    mask,
+                    if *mask != 0 {
+                        "BLOCK CHARGE"
                     } else {
-                        "0 (ALLOW CHARGE)"
+                        "ALLOW CHARGE"
                     }
                 ),
             );

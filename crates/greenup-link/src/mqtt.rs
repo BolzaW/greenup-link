@@ -16,7 +16,10 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
 use greenup_driver::logger;
-use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
+use greenup_protocol::{Command, MAX_CURRENT_AMPS};
+
+/// Safety floor enforced by Green'Up Link (protocol minimum is 6A; 7A adds a 1A margin).
+const SAFE_MIN_CURRENT_AMPS: u8 = 7;
 use rumqttc::{AsyncClient, Event, LastWill, MqttOptions, Packet, QoS};
 
 use crate::config::MqttConfig;
@@ -861,10 +864,22 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
                 return;
             }
 
+            let is_three_phase = point
+                .info
+                .lock()
+                .ok()
+                .and_then(|i| i.capabilities.as_ref().map(|c| c.phases == 3))
+                .unwrap_or(false);
+            let min_amps = if is_three_phase { 13 } else { SAFE_MIN_CURRENT_AMPS };
+
             let rounded = amps.round();
             let validated_amps = if rounded.is_finite() && (0.0..=255.0).contains(&rounded) {
                 let a = rounded as u8;
-                Command::set_current_limit(a).ok().map(|_| a)
+                if a >= min_amps {
+                    Command::set_current_limit(a).ok().map(|_| a)
+                } else {
+                    None
+                }
             } else {
                 None
             };
@@ -876,7 +891,7 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
                         "MQTT",
                         &format!(
                             "⛔ Rejecting out of bounds current: {:.2}A (allowed {}-{}A)",
-                            amps, MIN_CURRENT_AMPS, MAX_CURRENT_AMPS
+                            amps, min_amps, MAX_CURRENT_AMPS
                         ),
                     );
                     return;
@@ -891,32 +906,14 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
             }
 
             point.sync_from_driver();
-            let current_greenup_state = point
-                .telemetry
-                .lock()
-                .map(|t| t.greenup_state.clone())
-                .unwrap_or_else(|_| "Unknown".to_string());
-
-            if current_greenup_state == "A" {
-                logger::debug(
-                    "MQTT",
-                    &format!(
-                        "⚡ Current limit modification in State A on Side {} → {}A (synchronizing CCEl:{:02} and CC:{:02})",
-                        side, validated_amps, validated_amps, validated_amps
-                    ),
-                );
-                let _ = point.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await;
-                let _ = point.serial_tx.send(Command::SetDirectCurrentLimit(validated_amps)).await;
-            } else {
-                logger::debug(
-                    "MQTT",
-                    &format!(
-                        "⚡ Current limit modification on Side {} → {}A (sending CCEl:{:02})",
-                        side, validated_amps, validated_amps
-                    ),
-                );
-                let _ = point.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await;
-            }
+            logger::debug(
+                "MQTT",
+                &format!(
+                    "⚡ Current limit modification on Side {} → {}A (sending CCEl:{:02})",
+                    side, validated_amps, validated_amps
+                ),
+            );
+            let _ = point.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await;
         }
         MqttCommand::SetVoltage { side, voltage, ttl_seconds } => {
             if voltage < 100.0 || voltage > 300.0 {

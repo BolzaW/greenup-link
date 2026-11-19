@@ -16,7 +16,10 @@ use serde_json::json;
 use axum::extract::Query;
 use greenup_driver::logger;
 use greenup_driver::serial::TicStartError;
-use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
+use greenup_protocol::{Command, MAX_CURRENT_AMPS};
+
+/// Safety floor enforced by Green'Up Link (protocol minimum is 6A; 7A adds a 1A margin).
+const SAFE_MIN_CURRENT_AMPS: u8 = 7;
 use crate::station::{SharedState, SharedStation};
 
 use std::sync::Arc;
@@ -462,10 +465,22 @@ async fn set_current(
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
+    let is_three_phase = state
+        .info
+        .lock()
+        .ok()
+        .and_then(|i| i.capabilities.as_ref().map(|c| c.phases == 3))
+        .unwrap_or(false);
+    let min_amps = if is_three_phase { 13 } else { SAFE_MIN_CURRENT_AMPS };
+
     let rounded = amps.round();
     let validated_amps = if rounded.is_finite() && (0.0..=255.0).contains(&rounded) {
         let a = rounded as u8;
-        Command::set_current_limit(a).ok().map(|_| a)
+        if a >= min_amps {
+            Command::set_current_limit(a).ok().map(|_| a)
+        } else {
+            None
+        }
     } else {
         None
     };
@@ -478,7 +493,7 @@ async fn set_current(
                 StatusCode::BAD_REQUEST,
                 Json(json!({"error": format!(
                     "Current must be between {} and {} Amps",
-                    MIN_CURRENT_AMPS, MAX_CURRENT_AMPS
+                    min_amps, MAX_CURRENT_AMPS
                 )})),
             );
         }
@@ -492,54 +507,26 @@ async fn set_current(
     }
 
     state.sync_from_driver();
-    let current_greenup_state = state
-        .telemetry
-        .lock()
-        .map(|t| t.greenup_state.clone())
-        .unwrap_or_else(|_| "Unknown".to_string());
-
-    if current_greenup_state == "A" {
-        logger::debug(
-            "API",
-            &format!(
-                "⚡ Current limit modification in State A → {}A (synchronizing CCEl:{:02} and CC:{:02})",
-                validated_amps, validated_amps, validated_amps
-            ),
-        );
-        let _ = state.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await;
-        if state.serial_tx.send(Command::SetDirectCurrentLimit(validated_amps)).await.is_ok() {
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "status": "success",
-                    "message": format!("Current limit set to {}A (CCEl and CC synchronized in State A)", validated_amps)
-                })),
-            )
-        } else {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "Internal error: Failed to communicate with serial thread"})),
-            )
-        }
+    logger::debug(
+        "API",
+        &format!(
+            "⚡ Current limit modification → {}A (sending CCEl:{:02})",
+            validated_amps, validated_amps
+        ),
+    );
+    if state.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await.is_ok() {
+        (
+            StatusCode::OK,
+            Json(json!({
+                "status": "success",
+                "message": format!("Current limit set to {}A", validated_amps)
+            })),
+        )
     } else {
-        logger::debug(
-            "API",
-            &format!("⚡ Current limit modification → {}A (sending CCEl:{:02})", validated_amps, validated_amps),
-        );
-        if state.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await.is_ok() {
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "status": "success",
-                    "message": format!("Current limit set to {}A", validated_amps)
-                })),
-            )
-        } else {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "Internal error: Failed to communicate with serial thread"})),
-            )
-        }
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Internal error: Failed to communicate with serial thread"})),
+        )
     }
 }
 
@@ -1487,11 +1474,11 @@ mod tests {
         let res_high = set_current(State(station.clone()), axum::extract::Path(33.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_high.status(), StatusCode::BAD_REQUEST);
 
-        // 3. Valid current limit in State A -> 200 OK, sends SetCurrentLimit(24) AND SetDirectCurrentLimit(24)
+        // 3. Valid current limit in State A -> 200 OK, sends ONLY SetCurrentLimit(24)
         let res = set_current(State(station.clone()), axum::extract::Path(24.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(24));
-        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(24));
+        assert!(rx.try_recv().is_err());
 
         // 4. Valid current limit in State C -> sends ONLY SetCurrentLimit(16)
         {

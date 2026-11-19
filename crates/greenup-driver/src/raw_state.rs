@@ -425,15 +425,15 @@ impl AtmegaRawState {
                 self.fm = Some(m.clone());
                 true
             }
-            ProtocolEvent::ExternalSignal(b) | ProtocolEvent::ExternalSignalForced(b) => {
-                self.fm2 = Some(*b);
+            ProtocolEvent::ExternalSignal(mask) | ProtocolEvent::ExternalSignalForced(mask) => {
+                self.fm2 = Some(*mask != 0);
                 true
             }
             ProtocolEvent::EnergyManagementMask(mask) => {
                 self.em = Some(merge_em_mask(self.em.as_deref(), mask));
                 true
             }
-            ProtocolEvent::EmergencyStop(b) => {
+            ProtocolEvent::ChargeAuthorization(b) => {
                 self.cau = Some(*b);
                 true
             }
@@ -470,13 +470,13 @@ impl AtmegaRawState {
             }
 
             // 9. Modbus Settings
-            ProtocolEvent::ModbusEnergyMeterAddress(v) => {
+            ProtocolEvent::ModbusEnergyMeterEnabled(v) => {
                 if !v.starts_with("ok") {
                     self.modbus_ema = Some(v.clone());
                 }
                 true
             }
-            ProtocolEvent::ModbusDlmAddress(v) => {
+            ProtocolEvent::ModbusDlmEnabled(v) => {
                 if !v.starts_with("ok") {
                     self.modbus_dlma = Some(v.clone());
                 }

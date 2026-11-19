@@ -10,25 +10,25 @@ use greenup_driver::logger;
 use crate::telemetry::Telemetry;
 
 /// Returns true if the state indicates an immediate session termination
-/// (unlatched, fault, power outage, or emergency stop).
+/// (unlatched, fault, power outage, or sleep/production mode).
 pub fn is_immediate_termination_state(state: &str) -> bool {
-    matches!(state, "L" | "R" | "ST" | "S" | "T" | "U" | "V" | "W" | "X" | "Y" | "Z")
+    matches!(state, "L" | "R" | "S" | "T" | "U" | "V" | "X" | "Y" | "Z")
 }
 
 /// Returns true if the Legrand state indicates an eligible charging session start state.
 /// Sessions can ONLY start in:
-/// - Type 2: B (waiting station), C (waiting vehicle), D/E (charging)
+/// - Type 2: B (waiting station), C (waiting vehicle), D/E (charging), I/J (suspended with EV plugged)
 /// - Domestic 2P+T (Schuko): F (waiting station), G/H (charging)
 pub fn is_session_start_state(state: &str) -> bool {
-    matches!(state, "B" | "C" | "D" | "E" | "F" | "G" | "H")
+    matches!(state, "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J")
 }
 
 /// Returns true if the state indicates a connected vehicle / plug on the station
-/// according to `STATE_MACHINE.md` (active charge, waiting, or suspended with cable plugged in).
+/// according to `STATE_MACHINE.md` (active charge, waiting, decelerating, or suspended with cable plugged in).
 pub fn is_connected_state(state: &str) -> bool {
     matches!(
         state,
-        "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "M" | "N" | "O" | "P"
+        "B" | "C" | "D" | "E" | "F" | "G" | "H" | "I" | "J" | "K" | "M" | "N" | "O" | "P" | "W"
     )
 }
 
@@ -336,6 +336,16 @@ pub fn on_state_change_for_side(side: u8, new_state: &str, tel: &Telemetry) {
             let dt = now_instant.duration_since(session.last_tick_instant).as_secs_f64().min(2.0);
             session.active_charging_duration_secs_f64 += dt;
             session.cumulative_current_a_secs += (session.last_sample_current as f64) * dt;
+            let effective_voltage = if tel.voltage > 50.0 { tel.voltage as f64 } else { 230.0 };
+            let phase_mult = if !is_domestic_state(&session.last_sample_state)
+                && matches!(session.phase.as_str(), "Tri" | "3-phase" | "3")
+            {
+                3.0
+            } else {
+                1.0
+            };
+            session.cumulative_energy_wh +=
+                effective_voltage * (session.last_sample_current as f64) * phase_mult * (dt / 3600.0);
         }
         session.last_tick_instant = now_instant;
 
@@ -1478,17 +1488,17 @@ mod tests {
 
     #[test]
     fn test_immediate_termination_states() {
-        for state in &["L", "R", "ST", "S", "T", "U", "V", "W", "X", "Y", "Z"] {
+        for state in &["L", "R", "S", "T", "U", "V", "X", "Y", "Z"] {
             assert!(is_immediate_termination_state(state), "State {} should be termination state", state);
             assert!(!is_connected_state(state), "State {} should NOT be connected state", state);
             assert!(!is_session_start_state(state), "State {} should NOT be session start state", state);
         }
-        for state in &["B", "C", "D", "E", "F", "G", "H"] {
+        for state in &["B", "C", "D", "E", "F", "G", "H", "I", "J"] {
             assert!(!is_immediate_termination_state(state), "State {} should NOT be termination state", state);
             assert!(is_connected_state(state), "State {} should be connected state", state);
             assert!(is_session_start_state(state), "State {} should be session start state", state);
         }
-        for state in &["I", "J", "K", "M", "N", "O", "P"] {
+        for state in &["K", "M", "N", "O", "P", "W"] {
             assert!(!is_immediate_termination_state(state), "State {} should NOT be termination state", state);
             assert!(is_connected_state(state), "State {} should be connected state", state);
             assert!(!is_session_start_state(state), "State {} must NOT be session start state", state);
@@ -1504,19 +1514,19 @@ mod tests {
         let dir = setup_test_dir();
         let tel = Telemetry::default();
 
-        // Must reject starting in State I
-        start_session("I", &tel);
-        assert!(!is_active(), "Session must not start in State I");
+        // Must reject starting in State W (transient deceleration)
+        start_session("W", &tel);
+        assert!(!is_active(), "Session must not start in State W");
 
         // Must reject starting in State A
         start_session("A", &tel);
         assert!(!is_active(), "Session must not start in State A");
 
-        // Must reject starting in State M or J
+        // Must reject starting in State M or K
         start_session("M", &tel);
         assert!(!is_active(), "Session must not start in State M");
-        start_session("J", &tel);
-        assert!(!is_active(), "Session must not start in State J");
+        start_session("K", &tel);
+        assert!(!is_active(), "Session must not start in State K");
 
         // Must succeed in starting in State B
         start_session("B", &tel);

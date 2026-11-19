@@ -200,6 +200,8 @@ impl AppState {
 
             // 3. Update Telemetry, State transitions, Power/Energy, and Sessions
             let mut should_clear_raw_em_derogation = false;
+            let mut should_clear_raw_fcs = false;
+            let mut should_reset_cc_el_to_max = false;
             {
                 let mut tel = self.telemetry.lock().unwrap_or_else(|e| e.into_inner());
                 tel.side = side;
@@ -283,6 +285,7 @@ impl AppState {
                         if is_charging && !was_charging {
                             tel.last_power_update = Some(std::time::Instant::now());
                             tel.charge_complete = false;
+                            should_clear_raw_fcs = true;
                         } else if was_charging && !is_charging {
                             tel.current = 0.0;
                             tel.power = 0.0;
@@ -302,6 +305,8 @@ impl AppState {
                             tel.current = 0.0;
                             tel.power = 0.0;
                             tel.last_power_update = None;
+                            tel.charge_complete = false;
+                            should_clear_raw_fcs = true;
                             tel.em_mask = Some(greenup_driver::raw_state::clear_em_derogation_bit(
                                 tel.em_mask.as_deref(),
                             ));
@@ -321,12 +326,14 @@ impl AppState {
                             tel.energy = 0.0;
                             tel.last_power_update = None;
                             tel.charge_complete = false;
+                            should_clear_raw_fcs = true;
                             tel.em_mask = Some(greenup_driver::raw_state::clear_em_derogation_bit(
                                 tel.em_mask.as_deref(),
                             ));
                             tel.local_override = false;
                             tel.local_override_started_at = None;
                             should_clear_raw_em_derogation = true;
+                            should_reset_cc_el_to_max = true;
                         } else if state_val == "A" {
                             tel.current = 0.0;
                             tel.power = 0.0;
@@ -337,12 +344,14 @@ impl AppState {
                             tel.local_override = false;
                             tel.local_override_started_at = None;
                             should_clear_raw_em_derogation = true;
+                            should_reset_cc_el_to_max = true;
 
                             if crate::session::is_active_for_side(side) {
                                 crate::session::on_state_change_for_side(side, state_val, &tel);
                             } else {
                                 tel.energy = 0.0;
                                 tel.charge_complete = false;
+                                should_clear_raw_fcs = true;
                             }
                         } else if crate::session::is_connected_state(state_val) {
                             if crate::session::is_active_for_side(side) {
@@ -360,12 +369,14 @@ impl AppState {
                 // Instantaneous phase current update & trapezoidal energy integration
                 if raw.cci_updates_count > cursor.last_cci_count {
                     cursor.last_cci_count = raw.cci_updates_count;
-                    let c = raw.cci.unwrap_or(0.0);
+                    let l1 = raw.cci.unwrap_or(0.0);
+                    let l2 = raw.cci_l2.unwrap_or(0.0);
+                    let l3 = raw.cci_l3.unwrap_or(0.0);
                     tel.evaluate_voltage();
                     if matches!(tel.greenup_state.as_str(), "D" | "E" | "G" | "H") {
                         let previous_power = tel.power;
-                        tel.current = c;
-                        tel.power = tel.voltage * tel.current;
+                        tel.current = l1;
+                        tel.power = tel.voltage * (l1 + l2 + l3);
                         let now = std::time::Instant::now();
                         if let Some(last_time) = tel.last_power_update {
                             let elapsed_hours = last_time.elapsed().as_secs_f32() / 3600.0;
@@ -389,13 +400,36 @@ impl AppState {
                 }
             }
 
-            if should_clear_raw_em_derogation {
+            if should_clear_raw_em_derogation || (should_clear_raw_fcs && raw.fcs.is_some()) {
                 let cleared_em = greenup_driver::raw_state::clear_em_derogation_bit(raw.em.as_deref());
-                if raw.em.as_deref() != Some(cleared_em.as_str()) {
+                let update_em = should_clear_raw_em_derogation && raw.em.as_deref() != Some(cleared_em.as_str());
+                let update_fcs = should_clear_raw_fcs && raw.fcs.is_some();
+                if update_em || update_fcs {
                     self.driver.update_raw(|r| {
-                        r.em = Some(cleared_em);
+                        if update_em {
+                            r.em = Some(cleared_em);
+                        }
+                        if update_fcs {
+                            r.fcs = None;
+                        }
                     });
                 }
+            }
+
+            if should_reset_cc_el_to_max
+                && !usb.sniffer_mode
+                && usb.status == SerialStatus::UsbConnected
+                && raw.cc_el.is_some_and(|v| v != 32)
+            {
+                logger::debug(
+                    "SERIAL",
+                    &format!(
+                        "⚡ Side {}: Idle / end-of-session state reached with CCEl={}A → resetting CCEl:32",
+                        side,
+                        raw.cc_el.unwrap_or(0)
+                    ),
+                );
+                let _ = self.serial_tx.try_send(Command::SetCurrentLimit(32));
             }
 
             // 4. High-level automatic TIC detection check after driver init completes

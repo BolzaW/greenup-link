@@ -25,14 +25,14 @@ The semantics of these states were established through reverse-engineering of th
 | **F** | **Domestic 2P+T** socket occupied (micro-switch closed), waiting for authorization / suspended | SuspendedEVSE |
 | **G** | Domestic 2P+T → **charging in progress** (contact conditioning active: `FM2:1..3`) | Charging |
 | **H** | Domestic 2P+T → **charging in progress** (direct mode: `FM2:0`) | Charging |
-| **I** | T2S → charge suspended by vehicle (variant) | SuspendedEV |
-| **J** | T2S → charge suspended by station | SuspendedEVSE |
-| **K** | Charge suspended by station | SuspendedEVSE |
+| **I** | T2S → charge suspended by vehicle (CP back to 9 V; emits `FCS:1` after 20 min) | SuspendedEV |
+| **J** | T2S → charge suspended by station from `State:I` (waiting for authorization to resume `State:I`) | SuspendedEVSE |
+| **K** | T2S → RFID end-of-charge state with cable kept locked | SuspendedEVSE |
 | **L** | **Vehicle unplugged** / end of session (transient) | Disconnected |
-| **M** | **Local stop** (paused via Stop Button `SBNOK` or front button) | SuspendedEVSE |
-| **N** | Suspended by station (T2S socket) | SuspendedEVSE |
-| **O** | Suspended by station (Domestic socket) | SuspendedEVSE |
-| **P** | Local stop in progress | SuspendedEVSE |
+| **M** | **Local stop** (paused via Stop Button `SBNOK` or front button; T2S unlocked) | SuspendedEVSE |
+| **N** | T2S → ventilation requested by vehicle (CP 3 V, unsupported; PWM held at +12 V) | SuspendedEVSE |
+| **O** | Domestic 2P+T → RFID end-of-charge state | SuspendedEVSE |
+| **P** | Domestic 2P+T → local stop / session close in progress | SuspendedEVSE |
 | **R** | **Fault** (socket lock, overload, contactor) | Faulted |
 | **S** | **Fault** (contactor, Control Pilot) | Faulted |
 | **T** | **Fault** (Control Pilot short-circuit) | Faulted |
@@ -307,28 +307,28 @@ When modulating charging current limits via `POST /api/current/:amps` or MQTT:
 The ATmega serial parser strictly expects a 2-digit integer for all current setpoints (e.g. `CC:09`, `CCEl:16`).  
 Sending a single digit (such as `CC:9`) causes the ATmega parser to misread the parameter, which evaluates internally to `0A` (`CC:00`), inducing immediate regulation failures.
 
-#### 2. The 6A Boundary & The 7A Operational Safety Floor
-The IEC 61851-1 specification defines 6A as the normative minimum pilot current (10% PWM duty cycle).
-- **Sub-6A Firmware Crash (`< 6A`):** If a setpoint strictly below 6A is received by the ATmega (such as `CC:05`, `CCEl:05`, or `CC:00`), the station fails to regulate cleanly, panics after approximately 8 seconds with error **`E:0010`**, and **forces a full hardware reboot (`State:X`)**!
-- **Real-World Calibration at 6A:** While `CC:06` or `CCEl:06` is accepted by the firmware without crashing, field measurements demonstrate that the actual physical current delivered by the station at a 6A setpoint is very close to 7A. This slight calibration offset brings the station dangerously close to its internal overcurrent safety threshold.
-- **Safety Clamp at 7A:** To prevent tripping overcurrent protections and ensure rock-solid stability, Green'Up Link intentionally clamps all dynamic current setpoints to a strict minimum of **7A**.
+#### 2. The Hardware PWM Floor & `E:0010` Overload Trip (7 A Single-Phase / 13 A Three-Phase)
+The ATmega enforces a hardware minimum Control Pilot PWM floor depending on the station phase configuration:
+- **Single-Phase**: Minimum PWM duty cycle is clamped to 12% (**7.2 A** advertised to the EV).
+- **Three-Phase**: Minimum PWM duty cycle is clamped to 22% (**13.2 A** advertised to the EV).
+- **Overcurrent Trip (`E:0010`) & Reboot (`State:X`)**: If measured phase current reaches or exceeds $1.2 \times \text{CC}$ for 8 consecutive seconds, the station trips with **`E:0010`** (`State:R`), opens the contactor, and triggers a watchdog reboot (`State:X`) after 5 seconds. Consequently, setpoints below 6 A in single-phase (since $7.2\text{ A} \ge 1.2 \times 6\text{ A}$) or at/below 11 A in three-phase (since $13.2\text{ A} \ge 1.2 \times 11\text{ A}$) trigger `E:0010`.
+- **Operational Safety Floors**: To keep clear of the hardware PWM floor and measurement tolerances, Green'Up Link clamps setpoints to a minimum of **7 A** on single-phase stations and **13 A** on three-phase stations.
 
-#### 3. Why Green'Up Link Modulates `CCEl` Rather Than Direct `CC`
-The Legrand ATmega power board implements multiple concurrent current limiting registers:
-- `CC`: The effective active current limit currently applied to the Control Pilot PWM. **Warning**: This register is volatile in RAM and is frequently overwritten by internal station routines back to the nominal maximum station current (`CCS`) during re-arm sequences.
-- `CCEl`: The non-volatile Eco-Logic / Eliot supervisory limit written directly to EEPROM. It is never overwritten by background routines.
-- `CCTIC`: The autonomous grid load-shedding limit dynamically calculated from the TIC interface.
-- `CCCa`: The physical cable rating detected via the Proximity Pilot (PP) resistor (e.g. 13A, 20A, 32A).
-- Hardware Jumpers / DIP switches: The physical installation maximum (e.g. 16A or 32A).
+#### 3. Modulating via `CCEl` & Non-Limiting Idle Restore (`CCEl:32`)
+The Legrand ATmega power board evaluates multiple concurrent current limiting registers:
+- `CC`: Active consolidated limit applied to the Control Pilot PWM. Setting `CC:<val>` updates the volatile supervisor register (`CCCo`), which is **not** reset on vehicle plug/unplug.
+- `CCEl`: Non-volatile Eco-Logic / Eliot supervisory limit written directly to EEPROM.
+- `CCTIC`: Autonomous grid load-shedding limit dynamically calculated from the TIC interface.
+- `CCCa`: Physical cable rating detected via the Proximity Pilot (PP) resistor (e.g. 13 A, 20 A, 32 A).
+- Hardware DIP switches: Boot-time station maximum (`CCS`: 16 A, 20 A, 25 A, or 32 A).
 
 The ATmega determines the effective pilot current dynamically by computing the **minimum** across all active constraints:
-$$\text{Effective Limit} = \min(\text{Hardware Dipswitch}, \text{Cable PP (CCCa)}, \text{CCEl}, \text{CCTIC})$$
+$$\text{Effective Limit} = \min(\text{CCS}, \text{CCCa}, \text{CCEl}, \text{CCCo}, \text{CCTIC})$$
 
-**Why using `CCEl` is safer and more stable:**
-- `CCEl` writes directly into EEPROM and persists without background resets.
-- In nominal operation, setting `CCEl` regulates the charging speed just like `CC`.
-- However, modulating `CCEl` preserves all underlying hardware and safety limits: if an undersized cable is plugged in, or if the physical TIC triggers emergency load-shedding (`CCTIC`), the ATmega automatically caps the charge to that lower value. Writing `CCEl` lets the ATmega exercise its full safety checks.
-- **State A Synchronization:** When the station is idle in `State:A` (no vehicle plugged in), Green'Up Link synchronizes both `CCEl` and `CC` so that the station's baseline default matches the requested limit before a vehicle is attached. Once a vehicle is connected and a session is active, Green'Up Link exclusively modulates `CCEl`.
+**Why Green'Up Link exclusively modulates `CCEl`:**
+- Green'Up Link never sends `CC:<val>`, leaving `CCCo` at its boot-time `CCS` default so it never introduces an unintended ceiling.
+- Writing `CCEl` persists the supervisory setpoint in EEPROM while preserving hardware cable and TIC load-shedding limits.
+- **Non-Limiting Restore (`CCEl:32`)**: Because `CCEl` is stored in EEPROM, Green'Up Link automatically resets `CCEl:32` upon transitioning to idle or end-of-session states (`State:A`, `State:L`, or fault/sleep termination) whenever `CCEl` differs from `32`. This guarantees the station is never left permanently throttled if Green'Up Link is later uninstalled or operated standalone.
 
 ---
 
