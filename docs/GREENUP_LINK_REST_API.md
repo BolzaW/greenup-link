@@ -44,8 +44,8 @@ Three standard authentication methods are supported simultaneously against the s
 ### Control & Actions
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/api/charge` | Control charge state (`enable`, `disable`, `pause`, `resume`) |
-| `POST` | `/api/current/:amps` | Current limit (`CCEl:XX`, 7A to 32A) |
+| `POST` | `/api/charge` | Control charge state, authorization, sockets, overrides, unlock, and sleep (`enable`, `disable`, `authorize`, `suspend`, `start_session`, `stop_session`, etc.) |
+| `POST` | `/api/current/:amps` | Current limit (`CC:XX`, RAM-only, 7A to 32A) |
 | `POST` | `/api/voltage` | Inject external grid voltage (`{"voltage": 230.0}`) |
 | `POST` | `/api/init` | Relaunch startup sequence |
 | `POST` | `/api/reset` | ATmega board hardware restart (`Reset`) |
@@ -88,14 +88,16 @@ Three standard authentication methods are supported simultaneously against the s
   ```json
   {
     "station": {
-      "charge_point_vendor": "Legrand",
-      "charge_point_model": "Green'Up Premium (058001)",
-      "charge_point_serial_number": "012345",
-      "firmware_version": "V01.18.10",
+      "vendor": "Legrand",
+      "model": "058001",
+      "serial_number": "012345",
       "hardware_version": "V02.01.01",
+      "firmware_version": "V01.18.10",
+      "link_version": "1.1.0-dev",
       "production_date": "21W20",
-      "link_version": "0.5.0-dev",
-      "connector_count": 1,
+      "is_dual": false,
+      "available_connectors": [1],
+      "board_code": "13862",
       "capabilities": {
         "phases": 1,
         "max_power_kw": 7.4,
@@ -115,15 +117,18 @@ Three standard authentication methods are supported simultaneously against the s
     },
     "connectors": [
       {
-        "connector_id": 1,
+        "id": 1,
         "status": {
-          "iec": "C",
           "ocpp": "Charging",
-          "legrand_raw": "C",
-          "connected": true,
+          "iec": "C",
+          "raw_code": "C",
+          "active_socket": "t2s",
+          "vehicle_connected": true,
           "charging": true,
-          "error_code": "0000",
-          "error_description": "No error"
+          "session_stopped": false,
+          "charge_complete": false,
+          "local_override": false,
+          "error_code": "0000"
         },
         "control": {
           "setpoint_amps": 16,
@@ -131,8 +136,7 @@ Three standard authentication methods are supported simultaneously against the s
           "min_allowed_amps": 7,
           "max_hardware_amps": 32,
           "charge_authorized": true,
-          "paused_by_user": false,
-          "mode": "RemoteControl"
+          "local_override": false
         },
         "meter": {
           "power_w": 3680.0,
@@ -164,14 +168,16 @@ Three standard authentication methods are supported simultaneously against the s
 - **Typical Response**:
   ```json
   {
-    "charge_point_vendor": "Legrand",
-    "charge_point_model": "Green'Up Premium (058001)",
-    "charge_point_serial_number": "012345",
-    "firmware_version": "V01.18.10",
+    "vendor": "Legrand",
+    "model": "058001",
+    "serial_number": "012345",
     "hardware_version": "V02.01.01",
+    "firmware_version": "V01.18.10",
+    "link_version": "1.1.0-dev",
     "production_date": "21W20",
-    "link_version": "0.5.0-dev",
-    "connector_count": 1,
+    "is_dual": false,
+    "available_connectors": [1],
+    "board_code": "13862",
     "capabilities": {
       "phases": 1,
       "max_power_kw": 7.4,
@@ -202,15 +208,18 @@ Three standard authentication methods are supported simultaneously against the s
 - **Typical Response (`GET /api/connectors/1`)**:
   ```json
   {
-    "connector_id": 1,
+    "id": 1,
     "status": {
-      "iec": "C",
       "ocpp": "Charging",
-      "legrand_raw": "C",
-      "connected": true,
+      "iec": "C",
+      "raw_code": "C",
+      "active_socket": "t2s",
+      "vehicle_connected": true,
       "charging": true,
-      "error_code": "0000",
-      "error_description": "No error"
+      "session_stopped": false,
+      "charge_complete": false,
+      "local_override": false,
+      "error_code": "0000"
     },
     "control": {
       "setpoint_amps": 16,
@@ -218,8 +227,7 @@ Three standard authentication methods are supported simultaneously against the s
       "min_allowed_amps": 7,
       "max_hardware_amps": 32,
       "charge_authorized": true,
-      "paused_by_user": false,
-      "mode": "RemoteControl"
+      "local_override": false
     },
     "meter": {
       "power_w": 3680.0,
@@ -361,13 +369,42 @@ Three standard authentication methods are supported simultaneously against the s
   ```json
   { "action": "enable" }
   ```
-  *(Supported actions: `"enable"`, `"disable"`, `"pause"`, `"resume"`)*
 
-#### Actions detail:
-- **`enable`**: Authorizes and forces the charge. First sends `T2COK` to ensure the Type 2 port is active, then `FM2:0` to unblock any external restrictions, then activates Derogation (`DOK`). This overrides the physical TIC (Peak/Off-Peak) and the external signal (`FM2`) limitations, while keeping the local hardware load-balancing (Délestage) active to protect the main breaker. The station will report `State:D` (Derogation Charge) which is equivalent to `State:C`.
-- **`disable`**: Securely disables the charge. First sends `FM2:1` to firmly block the charge via the simulated external contact (preventing TIC from accidentally starting it during Off-Peak hours), then sends `DNOK` to release the derogation. If a local physical button forced charge (`local_override`) is active within the configured `local_override_disable_lock_secs` window (default `30s`, or `-1` for the whole session), the command is ignored with HTTP `200 OK` (`{ "status": "ignored", "reason": "local_override_active", "local_override": true, "lock_remaining_secs": ... }`).
-- **`pause`**: Pauses the charge naturally by simulating a press on the physical Stop button (`SBNOK`). This puts the station in a paused state (`SB:1`).
-- **`resume`**: Resumes the charge naturally by simulating a press on the physical Start button (`SBOK`), removing the paused state (`SB:0`).
+#### Supported actions and exact hardware behavior:
+
+##### 7.1 Universal Adaptive Supervisor Control (`FM2` + `D`) — *Recommended for EMS / EVCC / Home Assistant*
+- **`enable`** (`FM2:0` + `DOK` + adaptive unblock): Clears external dry-contact conditioning (`FM2:0`) and activates derogation (`DOK`). Automatically adds `T2COK` if Type 2 was disabled (`T2C:0`), `2PCOK` if domestic was disabled (`2PC:0`), and `CAUOK` if `CAU:0` while TIC is inactive. Overrides physical Linky TIC Peak Hours (HP) while keeping autonomous TIC load-shedding (`CCTIC`) active.
+- **`disable`** (`DNOK` + `FM2:1` + adaptive unforce): Clears derogation (`DNOK`) and asserts Contact 1 conditioning (`FM2:1`), ramping down via `State:W` and holding the vehicle locked in `State:B`. Automatically adds `T2FNOK` / `2PFNOK` if a forced override was active. If `local_override` (physical front-button long press) is active within the `local_override_disable_lock_secs` window, returns HTTP `200 OK` with `{ "status": "ignored", "reason": "local_override_active", "local_override": true, "lock_remaining_secs": ... }`.
+
+##### 7.2 Clean Charge Suspension & Authorization (`CAU`) — *Session & Lock Preserved*
+- **`suspend`** (`CAUNOK`): Cleanly suspends charging (`State:W` $\le 6.1\text{ s}$ $\rightarrow$ `State:B` / `State:J` / `State:F`) without closing the ATmega session or unlocking the Type 2 cable. Blocks charging even if a physical Off-Peak dry contact (pin 27) or `DOK` is active.
+- **`authorize`** (`CAUOK`): Restores charge authorization (`CAU:1`), allowing `State:B` $\rightarrow$ `State:C` or `State:J` $\rightarrow$ `State:I`.
+
+##### 7.3 Front Panel Start/Stop Button Simulation (`SB`) — *Closes Session & Unlocks Cable*
+- **`stop_session`** (`SBNOK`): Simulates a short press ($< 1\text{ s}$) on the physical Stop button. Ramps down via `State:W`, **closes the ATmega internal session** (emits `WT/CT` ticket and writes EEPROM history), **unlocks the Type 2 cable**, and parks in `State:M` (or `State:P` for domestic, setting `status.session_stopped = true`).
+- **`start_session`** (`SBOK`): Simulates a short press on the physical Start button. Exits `State:M`/`State:P` via `State:A`, re-locks the Type 2 cable, and opens a new session in `State:B` (`status.session_stopped = false`).
+
+##### 7.4 Hardware Socket Availability (`T2C` / `2PC`)
+- **`enable_type2`** (`T2COK`): Enables the Type 2 socket (`T2C:1`).
+- **`disable_type2`** (`T2CNOK`): Disables the Type 2 socket (`T2C:0`). Aborts and unlocks any active Type 2 session and freezes Type 2 detection in `State:A` (the domestic socket remains operational).
+- **`enable_domestic`** (`2PCOK`): Enables the auxiliary domestic (Schuko / 2P+T) socket (`2PC:1`).
+- **`disable_domestic`** (`2PCNOK`): Disables the auxiliary domestic (Schuko / 2P+T) socket (`2PC:0`). Aborts any active domestic session and ignores domestic plug insertion.
+
+##### 7.5 Priority Forced Overrides (`T2F` / `2PF`)
+- **`force_type2`** (`T2FOK`): Forces immediate charging on the Type 2 socket, bypassing schedules, `FM2`, `CAU`, and `Dec` timers.
+- **`unforce_type2`** (`T2FNOK`): Releases the forced Type 2 override.
+- **`force_domestic`** (`2PFOK`): Forces immediate charging on the domestic (Schuko) socket, bypassing schedules, `FM2`, `CAU`, and `Dec` timers.
+- **`unforce_domestic`** (`2PFNOK`): Releases the forced domestic override.
+
+##### 7.6 Off-Peak Derogation (`D`), Cable Unlock & Deep Sleep (`S`)
+- **`enable_derogation`** (`DOK`): Activates off-peak / schedule derogation (`D:1`) for the current session without modifying `FM2`.
+- **`disable_derogation`** (`DNOK`): Deactivates off-peak / schedule derogation (`D:0`) without modifying `FM2`.
+- **`unlock`** (`Unlock`): Cleanly stops any active charge (`State:W`), closes the session, fires the Type 2 motorized unlock pulse, and transitions to `State:A`.
+- **`sleep`** (`SOK`): Cleanly stops any active charge (`State:W`), unlocks the Type 2 cable, turns off LEDs, and puts the station into persistent deep sleep (`State:Y`, OCPP `Unavailable`).
+- **`wake`** (`SNOK`): Wakes the station from deep sleep (`State:Y` $\rightarrow$ `State:A`).
+
+> [!NOTE]
+> Legacy `"pause"` and `"resume"` actions have been removed; use `"suspend"` / `"authorize"` for clean in-session pause/resume (cable locked) or `"stop_session"` / `"start_session"` to simulate the physical front Stop/Start button (session closed & cable unlocked, used by the Web UI Pause/Resume button). Note that `CAU` (`"suspend"` / `"authorize"`) is **not compatible** with a connected and active TIC interface and is rejected with `400 Bad Request` (`"not supported while TIC active"`).
 
 - **Typical Response**:
   ```json
@@ -381,8 +418,8 @@ Three standard authentication methods are supported simultaneously against the s
 - **Method**: `POST`
 - **Query Parameter**: `side` (optional, `1` or `2`)
 - **URL Parameter**: `:amps` (numeric, integer or decimal between **7** and **32**; decimal numbers such as `16.7` are automatically rounded to the nearest integer, e.g. `17`).
-- **Description**: Sets the current limit target. When the station is in `State:A` (vehicle unplugged), Green'Up Link sends both `CCEl:XX` and `CC:XX` to keep the ATmega limits synchronized while idle. In all other operating states (`B`, `C`, etc.), only `CCEl:XX` is sent, allowing the ATmega to dynamically consolidate internal hardware limits (`CC = min(DIP, CCCa, CCEl, CCTIC)`).
-- **Security**: The API rejects any value outside `[7, 32]` with a `400` error. While the ATmega board can technically accept values above 32A, they have not been tested in real conditions to avoid hardware risks. Using `CCEl` (Eliot limit) instead of directly forcing `CC` in active states is a deliberate safety choice: it allows the ATmega to keep its internal safeguards active, computing the final safe limit (`CC`) based on other hardware factors. Finally, note that below 6A the station crashes (`E:0010`), and the electronics do not regulate below ~6.8A.
+- **Description**: Sets the current limit target via `CC:XX` (volatile supervisor register in RAM). In active charging states (`C`, `D`, `E`, `I`), the ATmega immediately recalculates the Control Pilot PWM using `min(CCS, CCCa, CCEl, CC, CCTIC)`.
+- **Security & EEPROM Protection**: The API rejects any value outside `[7, 32]` with a `400` error (7A floor in single-phase, 13A floor in three-phase to avoid hardware PWM `E:0010` trips). Using `CC:XX` instead of `CCEl:XX` is a deliberate hardware-protection choice: `CCEl:XX` writes to EEPROM on every value change, which would wear out the ATmega2560's ~100,000-cycle EEPROM under frequent solar modulation (e.g. EVCC). `CC:XX` is 100% RAM-based (zero EEPROM wear) while preserving all ATmega safeguards (`CCCa`, `CCTIC`, `CCS`), and `greenup-link` separately ensures `CCEl` remains non-limiting at `32A`.
 - **Typical Response**:
   ```json
   { "status": "success", "message": "Current limit set to 16A" }

@@ -52,4 +52,4 @@ let isDraggingSlider = false;
 let lastReportedState = "";
 let lastReportedTicMode = null;
 window.lastChargeAuthorized = false;
-window.lastChargePaused = false;
+window.lastSessionStopped = false;

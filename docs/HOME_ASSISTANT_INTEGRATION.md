@@ -80,7 +80,6 @@ graph TD
     Device --> Diagnostics["Diagnostic & System"]
 
     Controls --> C1["Charge Switch (ON / OFF)"]
-    Controls --> C2["Pause Switch (ON / OFF)"]
     Controls --> C3["Current Setpoint Slider (7A – 32A)"]
 
     Sensors --> S1["Active Power (W)"]
@@ -101,9 +100,9 @@ graph TD
 
 ### 3.1 Controls (Actuators)
 - **`Charge`** (`switch.legrand_greenup_charge`): Master charge authorization.
-  - `ON`: Authorizes charging.
-  - `OFF`: Shuts down contactor and disables charging.
-- **`Pause`** (`switch.legrand_greenup_pause`): Software pause button. Temporarily suspends charging without dropping the pilot connection.
+  - `ON`: Authorizes charging (`FM2:0` + `DOK`).
+  - `OFF`: Shuts down contactor cleanly and disables charging (`DNOK` + `FM2:1`).
+  - Note: Advanced actions (`suspend`, `authorize`, `stop_session`, `start_session`, `enable_type2`, `disable_type2`, `unlock`, `sleep`, etc.) can also be published to `<base>/connector/<id>/control/charge/set`.
 - **`Current Setpoint`** (`number.legrand_greenup_current_setpoint`): Interactive slider allowing real-time current regulation from **7A to 32A** (1A steps). Dynamically modifies the internal Legrand `CCEl` register.
 
 ### 3.2 Electrical Telemetry Sensors

@@ -16,7 +16,10 @@ use serde_json::json;
 use axum::extract::Query;
 use greenup_driver::logger;
 use greenup_driver::serial::TicStartError;
-use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
+use greenup_protocol::{Command, MAX_CURRENT_AMPS};
+
+/// Safety floor enforced by Green'Up Link (protocol minimum is 6A; 7A adds a 1A margin).
+const SAFE_MIN_CURRENT_AMPS: u8 = 7;
 use crate::station::{SharedState, SharedStation};
 
 use std::sync::Arc;
@@ -295,9 +298,12 @@ async fn get_state(State(station): State<SharedStation>) -> impl IntoResponse {
 
 /// GET /api/station
 /// Returns the station hardware identity and system status.
-async fn get_station(State(station): State<SharedStation>) -> impl IntoResponse {
+async fn get_station(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
     logger::debug("API", "🔍 GET request /api/station");
-    Json(station.snapshot().station)
+    Json(station.station_for_side(query.side))
 }
 
 /// GET /api/connectors
@@ -459,10 +465,22 @@ async fn set_current(
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
+    let is_three_phase = state
+        .info
+        .lock()
+        .ok()
+        .and_then(|i| i.capabilities.as_ref().map(|c| c.phases == 3))
+        .unwrap_or(false);
+    let min_amps = if is_three_phase { 13 } else { SAFE_MIN_CURRENT_AMPS };
+
     let rounded = amps.round();
     let validated_amps = if rounded.is_finite() && (0.0..=255.0).contains(&rounded) {
         let a = rounded as u8;
-        Command::set_current_limit(a).ok().map(|_| a)
+        if a >= min_amps {
+            Command::set_current_limit(a).ok().map(|_| a)
+        } else {
+            None
+        }
     } else {
         None
     };
@@ -475,7 +493,7 @@ async fn set_current(
                 StatusCode::BAD_REQUEST,
                 Json(json!({"error": format!(
                     "Current must be between {} and {} Amps",
-                    MIN_CURRENT_AMPS, MAX_CURRENT_AMPS
+                    min_amps, MAX_CURRENT_AMPS
                 )})),
             );
         }
@@ -489,54 +507,26 @@ async fn set_current(
     }
 
     state.sync_from_driver();
-    let current_greenup_state = state
-        .telemetry
-        .lock()
-        .map(|t| t.greenup_state.clone())
-        .unwrap_or_else(|_| "Unknown".to_string());
-
-    if current_greenup_state == "A" {
-        logger::debug(
-            "API",
-            &format!(
-                "⚡ Current limit modification in State A → {}A (synchronizing CCEl:{:02} and CC:{:02})",
-                validated_amps, validated_amps, validated_amps
-            ),
-        );
-        let _ = state.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await;
-        if state.serial_tx.send(Command::SetDirectCurrentLimit(validated_amps)).await.is_ok() {
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "status": "success",
-                    "message": format!("Current limit set to {}A (CCEl and CC synchronized in State A)", validated_amps)
-                })),
-            )
-        } else {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "Internal error: Failed to communicate with serial thread"})),
-            )
-        }
+    logger::debug(
+        "API",
+        &format!(
+            "⚡ Current limit modification → {}A (sending CC:{:02})",
+            validated_amps, validated_amps
+        ),
+    );
+    if state.serial_tx.send(Command::SetDirectCurrentLimit(validated_amps)).await.is_ok() {
+        (
+            StatusCode::OK,
+            Json(json!({
+                "status": "success",
+                "message": format!("Current limit set to {}A", validated_amps)
+            })),
+        )
     } else {
-        logger::debug(
-            "API",
-            &format!("⚡ Current limit modification → {}A (sending CCEl:{:02})", validated_amps, validated_amps),
-        );
-        if state.serial_tx.send(Command::SetCurrentLimit(validated_amps)).await.is_ok() {
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "status": "success",
-                    "message": format!("Current limit set to {}A", validated_amps)
-                })),
-            )
-        } else {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "Internal error: Failed to communicate with serial thread"})),
-            )
-        }
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Internal error: Failed to communicate with serial thread"})),
+        )
     }
 }
 
@@ -776,71 +766,42 @@ async fn set_charge_state(
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
-    match payload.action.as_str() {
-        "enable" => {
-            logger::log("API", "⚡ Charge enable requested (T2COK + FM2:0 + DOK)");
-            let _ = state.serial_tx.send(Command::AuthorizeType2(true)).await;
-            let _ = state.serial_tx.send(Command::SetExternalSignal(false)).await;
-            if state.serial_tx.send(Command::SetDerogation(true)).await.is_ok() {
-                (StatusCode::OK, Json(json!({"status": "success"})))
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
-            }
-        },
-        "disable" => {
-            if let Some(remaining) = state.is_disable_locked_by_local_override() {
-                let lock_desc = if remaining < 0 {
-                    "locked until end of charge".to_string()
-                } else {
-                    format!("{}s remaining", remaining)
-                };
-                logger::log(
-                    "API",
-                    &format!(
-                        "🛡️ Charge disable ignored on Side {}: local_override active ({})",
-                        state.side(),
-                        lock_desc
-                    ),
-                );
-                return (
-                    StatusCode::OK,
-                    Json(json!({
-                        "status": "ignored",
-                        "reason": "local_override_active",
-                        "local_override": true,
-                        "lock_remaining_secs": remaining
-                    })),
-                );
-            }
-            state.clear_local_override();
-            logger::log("API", "🛑 Charge disable requested (FM2:1 + DNOK)");
-            let _ = state.serial_tx.send(Command::SetExternalSignal(true)).await;
-            if state.serial_tx.send(Command::SetDerogation(false)).await.is_ok() {
-                (StatusCode::OK, Json(json!({"status": "success"})))
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
-            }
-        },
-        "pause" => {
-            logger::log("API", "⏸ Charge pause requested (SBNOK)");
-            if state.serial_tx.send(Command::SetStartButton(false)).await.is_ok() {
-                (StatusCode::OK, Json(json!({"status": "success"})))
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
-            }
-        },
-        "resume" => {
-            logger::log("API", "▶ Charge resume requested (SBOK)");
-            if state.serial_tx.send(Command::SetStartButton(true)).await.is_ok() {
-                (StatusCode::OK, Json(json!({"status": "success"})))
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
-            }
-        },
-        _ => {
-            logger::log("API", &format!("⚠️ Invalid charge action received: '{}'", payload.action));
-            (StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid action"})))
+
+    let action = match crate::station::ChargeAction::from_api_str(&payload.action) {
+        Some(a) => a,
+        None => {
+            logger::log(
+                "API",
+                &format!("⚠️ Invalid charge action received: '{}'", payload.action),
+            );
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid action"})),
+            );
         }
+    };
+
+    match crate::station::execute_charge_action(&state, action, "API").await {
+        crate::station::ChargeActionOutcome::Executed => {
+            (StatusCode::OK, Json(json!({"status": "success"})))
+        }
+        crate::station::ChargeActionOutcome::IgnoredLocalOverride { remaining_secs } => (
+            StatusCode::OK,
+            Json(json!({
+                "status": "ignored",
+                "reason": "local_override_active",
+                "local_override": true,
+                "lock_remaining_secs": remaining_secs
+            })),
+        ),
+        crate::station::ChargeActionOutcome::NotSupportedWhileTicActive => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "not supported while TIC active"})),
+        ),
+        crate::station::ChargeActionOutcome::SerialError => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Serial error"})),
+        ),
     }
 }
 
@@ -1177,7 +1138,7 @@ mod tests {
         assert_eq!(res_state.status(), StatusCode::OK);
 
         // 2. GET /api/station
-        let res_station = get_station(State(station.clone())).await.into_response();
+        let res_station = get_station(State(station.clone()), Query(SideQuery::default())).await.into_response();
         assert_eq!(res_station.status(), StatusCode::OK);
 
         // 3. GET /api/connectors
@@ -1405,34 +1366,68 @@ mod tests {
             tel.serial.status = SerialStatus::UsbConnected;
         }
 
-        // 2. Invalid action -> 400
+        // 2. Invalid & removed legacy actions -> 400
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "invalid_action".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        let res_pause = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "pause".to_string() })).await.into_response();
+        assert_eq!(res_pause.status(), StatusCode::BAD_REQUEST);
+        let res_resume = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "resume".to_string() })).await.into_response();
+        assert_eq!(res_resume.status(), StatusCode::BAD_REQUEST);
 
-        // 3. Action enable -> sends AuthorizeType2(true), SetExternalSignal(false), SetDerogation(true)
+        // 3. Action enable -> sends SetExternalSignal(false), SetDerogation(true) (NO AuthorizeType2)
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "enable".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::AuthorizeType2(true));
         assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(false));
         assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(true));
+        assert!(rx.try_recv().is_err());
 
-        // 4. Action disable -> sends SetExternalSignal(true), SetDerogation(false)
+        // 4. Action disable -> sends SetDerogation(false), SetExternalSignal(true)
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "disable".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
         assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
 
-        // 5. Action pause -> sends SetStartButton(false)
-        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "pause".to_string() })).await.into_response();
+        // 5. Action suspend / authorize -> sends SetChargeAuthorization(false / true)
+        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "suspend".to_string() })).await.into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetChargeAuthorization(false));
+
+        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "authorize".to_string() })).await.into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetChargeAuthorization(true));
+
+        // 6. Action stop_session / start_session -> sends SetStartButton(false / true)
+        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "stop_session".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(rx.recv().await.unwrap(), Command::SetStartButton(false));
 
-        // 6. Action resume -> sends SetStartButton(true)
-        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "resume".to_string() })).await.into_response();
+        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "start_session".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(rx.recv().await.unwrap(), Command::SetStartButton(true));
 
-        // 7. Action disable while local_override is active -> 200 OK ignored, no serial command sent
+        // 7. Hardware socket / override / unlock / sleep actions
+        let extra_cases = [
+            ("enable_type2", Command::AuthorizeType2(true)),
+            ("disable_type2", Command::AuthorizeType2(false)),
+            ("enable_domestic", Command::AuthorizeDomestic(true)),
+            ("disable_domestic", Command::AuthorizeDomestic(false)),
+            ("force_type2", Command::ForceType2(true)),
+            ("unforce_type2", Command::ForceType2(false)),
+            ("force_domestic", Command::ForceDomestic(true)),
+            ("unforce_domestic", Command::ForceDomestic(false)),
+            ("enable_derogation", Command::SetDerogation(true)),
+            ("disable_derogation", Command::SetDerogation(false)),
+            ("unlock", Command::Unlock),
+            ("sleep", Command::SetSleep(true)),
+            ("wake", Command::SetSleep(false)),
+        ];
+        for (action_name, expected_cmd) in extra_cases {
+            let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: action_name.to_string() })).await.into_response();
+            assert_eq!(res.status(), StatusCode::OK, "action {}", action_name);
+            assert_eq!(rx.recv().await.unwrap(), expected_cmd, "action {}", action_name);
+        }
+
+        // 8. Action disable while local_override is active -> 200 OK ignored, no serial command sent
         point1.driver.update_both(|raw, usb| {
             usb.status = SerialStatus::UsbConnected;
             raw.state = Some("D".to_string());
@@ -1449,13 +1444,26 @@ mod tests {
         assert_eq!(json_val["local_override"], true);
         assert!(rx.try_recv().is_err());
 
-        // 8. Setting lock to 0 allows disable and clears local_override
+        // 9. Setting lock to 0 allows disable and clears local_override
         point1.set_local_override_disable_lock_secs(0);
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "disable".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
         assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
         assert!(!point1.to_connector_data().status.local_override);
+
+        // 10. CAU actions (suspend / authorize) are rejected with 400 when TIC is active
+        point1.driver.update_raw(|raw| {
+            raw.tic_test_b = Some("9600".to_string());
+        });
+        for cau_action in ["suspend", "authorize"] {
+            let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: cau_action.to_string() })).await.into_response();
+            assert_eq!(res.status(), StatusCode::BAD_REQUEST, "action {}", cau_action);
+            let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+            let json_val: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json_val["error"], "not supported while TIC active");
+            assert!(rx.try_recv().is_err());
+        }
     }
 
     #[tokio::test]
@@ -1484,37 +1492,37 @@ mod tests {
         let res_high = set_current(State(station.clone()), axum::extract::Path(33.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_high.status(), StatusCode::BAD_REQUEST);
 
-        // 3. Valid current limit in State A -> 200 OK, sends SetCurrentLimit(24) AND SetDirectCurrentLimit(24)
+        // 3. Valid current limit in State A -> 200 OK, sends ONLY SetDirectCurrentLimit(24) (CC:24)
         let res = set_current(State(station.clone()), axum::extract::Path(24.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(24));
         assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(24));
+        assert!(rx.try_recv().is_err());
 
-        // 4. Valid current limit in State C -> sends ONLY SetCurrentLimit(16)
+        // 4. Valid current limit in State C -> sends ONLY SetDirectCurrentLimit(16) (CC:16)
         {
             let mut tel = point1.telemetry.lock().unwrap();
             tel.greenup_state = "C".to_string();
         }
         let res = set_current(State(station.clone()), axum::extract::Path(16.0), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(16));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(16));
         assert!(rx.try_recv().is_err());
 
         // 5. Decimal inputs with round()
         // 16.7 -> rounded to 17
         let res_round_up = set_current(State(station.clone()), axum::extract::Path(16.7), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_round_up.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(17));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(17));
 
         // 16.2 -> rounded to 16
         let res_round_down = set_current(State(station.clone()), axum::extract::Path(16.2), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_round_down.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(16));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(16));
 
         // Bounds testing with decimals: 6.6 -> rounds to 7 (valid)
         let res_bound_ok = set_current(State(station.clone()), axum::extract::Path(6.6), Query(SideQuery { side: None })).await.into_response();
         assert_eq!(res_bound_ok.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(7));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(7));
 
         // 6.4 -> rounds to 6 (out of bounds -> 400)
         let res_bound_nok = set_current(State(station.clone()), axum::extract::Path(6.4), Query(SideQuery { side: None })).await.into_response();

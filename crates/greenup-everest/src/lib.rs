@@ -1,5 +1,8 @@
 use greenup_driver::SharedDriver;
-use greenup_protocol::{Command, MAX_CURRENT_AMPS, MIN_CURRENT_AMPS};
+use greenup_protocol::{Command, MAX_CURRENT_AMPS};
+
+/// Safety floor for Green'Up Link / EVerest (6A is the hardware minimum; 7A adds a 1A margin).
+const SAFE_MIN_CURRENT_AMPS: u8 = 7;
 use tokio::sync::broadcast;
 
 /// Translated events for EVerest (evse_board_support interface)
@@ -159,13 +162,13 @@ impl EverestAdapter {
     /// (EVerest) set_pwm: Translates a PWM duty cycle to Amperes for Legrand
     pub async fn set_pwm(&self, duty_cycle_pct: f32) -> Result<(), String> {
         let mut amps = (duty_cycle_pct * 0.6).round() as u8;
-        if amps < MIN_CURRENT_AMPS {
-            amps = MIN_CURRENT_AMPS;
+        if amps < SAFE_MIN_CURRENT_AMPS {
+            amps = SAFE_MIN_CURRENT_AMPS;
         } else if amps > MAX_CURRENT_AMPS {
             amps = MAX_CURRENT_AMPS;
         }
 
-        if let Ok(cmd) = Command::set_current_limit(amps) {
+        if let Ok(cmd) = Command::set_direct_current_limit(amps) {
             self.driver
                 .send_command(cmd)
                 .await

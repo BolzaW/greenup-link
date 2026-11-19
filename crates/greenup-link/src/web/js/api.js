@@ -484,6 +484,7 @@ async function fetchInfo() {
         let line2 = [];
         if (station.serial_number) line2.push(`SN: ${station.serial_number}`);
         if (prodDate) line2.push(`Prod: ${prodDate}`);
+        if (station.board_code) line2.push(`Code: ${station.board_code}`);
         subInfo.innerText = line2.length > 0 ? line2.join(' | ') : '';
 
         if (station.link_version) {
@@ -688,7 +689,8 @@ async function fetchTelemetry() {
             greenup_state: conn.status.raw_code,
             iec_state: conn.status.iec,
             charge_authorized: conn.control.charge_authorized,
-            charge_paused: conn.status.paused,
+            session_stopped: conn.status.session_stopped,
+            active_socket: conn.status.active_socket,
             charge_complete: conn.status.charge_complete,
             tic_mode: conn.grid.tic_mode,
             sniffer_mode: (station && station.serial_connection) ? !!station.serial_connection.sniffer_mode : false,
@@ -742,7 +744,7 @@ async function fetchTelemetry() {
 
         lastReportedState = conn.status.raw_code;
         updateLinky(conn.grid.tic_mode);
-        updateVisuals(conn.status.raw_code, conn.status.charge_complete, conn.status.iec, conn.status.error_code, conn.status.paused, conn.control.charge_authorized);
+        updateVisuals(conn.status.raw_code, conn.status.charge_complete, conn.status.iec, conn.status.error_code, conn.status.session_stopped, conn.control.charge_authorized, conn.status.active_socket);
 
         const isSniffer = (station && station.serial_connection) ? !!station.serial_connection.sniffer_mode : false;
         window.isSnifferMode = isSniffer;

@@ -18,27 +18,27 @@ The semantics of these states were established through reverse-engineering of th
 | State | Hardware Interpretation | OCPP Mapping (ATmega Internal Semantics) |
 |---|---|---|
 | **A** | Idle, no vehicle connected | Available |
-| **B** | **T2S** socket occupied, waiting for authorization / external signal | SuspendedEVSE |
+| **B** | **T2S** socket occupied, waiting for authorization / external signal (held here under `FM2:1`, Linky Peak Hours, or `CAUNOK`) | SuspendedEVSE |
 | **C** | T2S → charge suspended by vehicle (waiting for EV demand) | SuspendedEV |
-| **D** | T2S → **charging in progress** (under Derogation `DOK`) | Charging |
-| **E** | T2S → **charging in progress** (nominal mode) | Charging |
-| **F** | **Domestic 2P+T** socket occupied, waiting for authorization | SuspendedEVSE |
-| **G** | Domestic → **charging in progress** | Charging |
-| **H** | Domestic → **charging in progress** (variant) | Charging |
-| **I** | T2S → charge suspended by vehicle (variant) | SuspendedEV |
-| **J** | T2S → charge suspended by station | SuspendedEVSE |
-| **K** | Charge suspended by station | SuspendedEVSE |
+| **D** | T2S → **charging in progress** (contact conditioning active: `FM2:1..3`) | Charging |
+| **E** | T2S → **charging in progress** (direct mode: `FM2:0`) | Charging |
+| **F** | **Domestic 2P+T** socket occupied (micro-switch closed), waiting for authorization / suspended | SuspendedEVSE |
+| **G** | Domestic 2P+T → **charging in progress** (contact conditioning active: `FM2:1..3`) | Charging |
+| **H** | Domestic 2P+T → **charging in progress** (direct mode: `FM2:0`) | Charging |
+| **I** | T2S → charge suspended by vehicle (CP back to 9 V; emits `FCS:1` after 20 min) | SuspendedEV |
+| **J** | T2S → charge suspended by station from `State:I` (waiting for authorization to resume `State:I`) | SuspendedEVSE |
+| **K** | T2S → RFID end-of-charge state with cable kept locked | SuspendedEVSE |
 | **L** | **Vehicle unplugged** / end of session (transient) | Disconnected |
-| **M** | **Local stop** (paused via Stop Button `SBNOK` or front button) | SuspendedEVSE |
-| **N** | Suspended by station (T2S socket) | SuspendedEVSE |
-| **O** | Suspended by station (Domestic socket) | SuspendedEVSE |
-| **P** | Local stop in progress | SuspendedEVSE |
+| **M** | **Local stop** (paused via Stop Button `SBNOK` or front button; T2S unlocked) | SuspendedEVSE |
+| **N** | T2S → ventilation requested by vehicle (CP 3 V, unsupported; PWM held at +12 V) | SuspendedEVSE |
+| **O** | Domestic 2P+T → RFID end-of-charge state | SuspendedEVSE |
+| **P** | Domestic 2P+T → local stop / session close in progress | SuspendedEVSE |
 | **R** | **Fault** (socket lock, overload, contactor) | Faulted |
 | **S** | **Fault** (contactor, Control Pilot) | Faulted |
 | **T** | **Fault** (Control Pilot short-circuit) | Faulted |
 | **U** | **Power loss** | Faulted |
 | **V** | **Fatal power loss** (emitted with `E:0012` before shutdown) | Faulted |
-| **W** | Transient stopping state emitted during shutdown sequence | Preparing |
+| **W** | Transient stopping state emitted during deceleration / shutdown sequence (PWM set to 0A) | Preparing |
 | **X** | ATmega microcontroller reboot in progress | Faulted |
 | **Y** | Deep **sleep mode** (command `Slp:1`) | Unavailable |
 | **Z** | Factory initialization / production mode | Unavailable |
@@ -175,7 +175,13 @@ Connecting an active TIC Historique signal directly alters the ATmega's internal
 2. **Dynamic 10-Second Setpoint Cycling**: Every 10 seconds, the station recalculates `CCTIC`. The effective charging current `CC` is updated to $\min(\text{DIP}, \text{CCCa}, \text{CCEl}, \text{CCTIC})$.
 3. **End-of-Charge Transitions**: When a charging session completes under TIC management, the ATmega may loop back to `State:B` instead of holding steadily in `State:I`.
 
-### 4.5 Caution: Mixing Physical TIC with External Software EMS (EVCC / HA)
+### 4.5 Why Native Linky TIC Load-Shedding (*Délestage*) is Problematic (e.g. on 6 kVA Subscriptions)
+Field analysis reveals major architectural flaws in the native ATmega TIC load-shedding implementation:
+1. **The 0.85 Derating Coefficient**: The firmware systematically deducts a hardcoded 15% safety margin from the total subscribed capacity ($I_{max\_allowed} = I_{sub} \times 0.85$). On a standard 6 kVA single-phase contract (30 A), the station caps whole-house consumption at $25.5\text{ A}$ total!
+2. **10-Second Control Loop Latency**: The firmware recalculates the PWM setpoint only once every 10 seconds. When a heavy domestic load (such as an induction hob, kettle, or space heater) suddenly starts, the station cannot ramp down charging fast enough to avoid an impending trip.
+3. **Emergency Trip Guillotine & 10-Minute Penalty**: If available headroom drops below 8 A or the instantaneous overload reaches 125%, a fast-path watchdog aborts charging immediately without waiting for PWM ramping, opening the contactor directly. Worse, the station enforces a mandatory **10-minute timeout penalty** before allowing any retry!
+
+### 4.6 Caution: Mixing Physical TIC with External Software EMS (EVCC / HA)
 While running both the physical TIC link and an external energy management system (like EVCC or Home Assistant) is technically functional, **co-habitation is not recommended**:
 - The ATmega's internal 10-second TIC load-balancing loop and EVCC's dynamic control loop (`CCEl:XX`) operate concurrently without coordination.
 - Under fast solar fluctuations or large domestic load steps, having two independent controllers adjusting the current setpoint simultaneously can produce setpoint oscillations or unwanted charge interruptions.
@@ -189,43 +195,151 @@ Green'Up Link implements two tiers of charge control to supervise charging relia
 
 ### 5.1 Master Session Control: The `D` + `FM2` Combination (`enable` / `disable`)
 
-The primary charge gatekeeper in Green'Up Link uses a combination of the Front Button Derogation (`D`) and the Simulated External Signal (`FM2`):
+The primary charge gatekeeper in Green'Up Link uses a combination of Derogation (`D`) and the Dry Contact conditioning sub-mode (`FM2`):
 
-#### To Start / Authorize Charge (`action: "enable"`):
-1. Sends `T2COK`: Ensures the Type 2 socket state machine is awake and operational.
-2. Sends `FM2:0`: Clears any external simulated blocking signal.
-3. Sends `DOK`: Activates Derogation.
+#### Understanding `FM2` as a 2-bit Forcing Mask
+`FM2` is a 2-bit mask controlling dry contact conditioning:
+- **`FM2:0` (`00`)**: Direct / Nominal mode (charges in `State:E` / `State:H`). Immediate charge upon vehicle plug-in.
+- **`FM2:1` (`01`)**: Conditioned on Contact 1 (Off-Peak contact simulation / Peak-Hours lockout; charges in `State:D` / `State:G`).
+  - Inhibits automatic charging on cable plug-in until Contact 1 closes or `DOK` is sent.
+  - Setting `FM2:1` causes `FM?` to return `2`.
+- **`FM2:2` (`10`)**: Conditioned on Contact 2 (not overridable by `DOK`).
+- **`FM2:3` (`11`)**: Conditioned on Contact 1 AND Contact 2.
+
+#### Understanding `D` (Dérogation)
+Derogation (`DOK` / `DNOK`) is a software flag placed in logical OR with the physical Off-Peak dry contact (Contact 1) and the Linky TIC Off-Peak signal (`Contact_HC || TIC_HC || Derogation`).
+- `DOK` immediately lifts a Linky Peak-Hours (HP) lockout or an `FM2:1` conditioning block.
+
+#### Adaptive Charge Start / Enable (`action: "enable"`):
+When invoking `enable` via REST (`POST /api/charge`) or MQTT (`.../control/charge/set` with `"on"` / `"enable"`), Green'Up Link executes an **adaptive command sequence**:
+1. **Core Enablement**: Sends `FM2:0` (clears external conditioning block) followed by `DOK` (asserts software derogation).
+2. **Self-Healing Sockets**: If the Type 2 socket was previously disabled (`t2c == Some(false)`), `enable` automatically issues `T2COK`. Similarly, if the auxiliary domestic socket was inhibited (`dom_2pc == Some(false)`), it automatically issues `2PCOK`.
+3. **Restoring Authorization**: If `CAU` was suspended (`cau == Some(false)`) and no active TIC interface is present, `enable` automatically sends `CAUOK` to restore authorization.
 
 **Why this combination is bulletproof:**
-- Activating Derogation (`DOK`) forces the ATmega to transition from `State:B` directly to active charge (**`State:D`**).
-- **Overrides TIC Peak Hours:** If a physical TIC is wired, `DOK` completely overrides the Peak-Hours (HP) restriction, allowing immediate charging.
-- **Preserves Autonomous Load-Balancing:** A critical hardware safety feature is that **the physical TIC délestage remains fully active under Derogation**. If household consumption spikes, `CCTIC` will still throttle the charge to protect the main breaker!
+- Transitions the station reliably from `State:B` to active charge (**`State:E`**).
+- **Overrides TIC Peak Hours:** If a physical TIC is wired, `DOK` overrides the Peak-Hours (HP) restriction, allowing immediate charging.
+- **Preserves Autonomous Load-Balancing:** Physical TIC load-shedding remains active under Derogation; `CCTIC` will still throttle the charge if household consumption spikes.
+- **Resolves Inconsistent Sub-States:** Users or automations do not get stuck if a previous action had left `T2CNOK` or `CAUNOK` engaged.
 
-#### To Stop / Block Charge (`action: "disable"`):
-1. Sends `FM2:1`: Asserts the external blocking signal.
-2. Sends `DNOK`: Releases the derogation.
+#### Charge Stop / Block (`action: "disable"`):
+When invoking `disable` (or MQTT `"off"`):
+1. **Local Override Guard**: Checks if a local button override is active (`local_override`). If active, the command is ignored (returns `409 Conflict` with remaining cooldown seconds or `-1` if locked for the whole session).
+2. **Core Inhibition**: Sends `DNOK` (releases derogation) followed by `FM2:1` (asserts Contact 1 conditioning, simulating peak hours).
+3. **Releases Forced Flags**: If manual forcing was engaged (`T2FOK` or `2PFOK`), sends `T2FNOK` / `2PFNOK` to clear them.
+4. **Clears Local Override**: Once the disable is accepted, any pending local override flag is cleared.
 
 **Why this combination is safe:**
-- `FM2:1` cleanly holds the station in `State:B` without opening contactors under heavy electrical load.
+- `FM2:1` holds the station in `State:B` without opening contactors under load.
 - It prevents the physical TIC from automatically triggering a charge when an Off-Peak (HC) tariff window arrives.
 
 ---
 
-### 5.2 Soft Pause & Resume: The `SB` Button Mechanism (`pause` / `resume`)
+### 5.2 Charge Authorization Control (`CAUOK` / `CAUNOK`) & Clean Cutoff
 
-For transient pauses during an ongoing charging session (e.g. temporary solar dips or EVCC pause cycles), Green'Up Link simulates the station's physical Start/Stop push button:
-- **`action: "pause"`**: Sends `SBNOK` (simulates pressing the Stop button). Sets `SB` to `0`. The station safely ramps down current, passes through transient `State:W`, and stabilizes in **`State:M`** (`SB:0`).
-- **`action: "resume"`**: Sends `SBOK` (simulates pressing the Start button). Sets `SB` to `1`. The station returns to `SB:1` and resumes charging (`State:C` $\rightarrow$ `State:D`/`State:E`).
-
-> [!WARNING]
-> **Non-Blocking Behavior of `SB` upon Cable Replug:**  
-> Unlike `FM2:1`, the `SBNOK` pause state is **not persistent across physical connection events**.  
-> If the station is paused via `SBNOK` (`SB:0` in `State:M`), and the user **unplugs and replugs the charging cable into the vehicle**, the ATmega automatically resets `SB` back to `1` and clears the pause!  
-> For this reason, `pause`/`resume` should be reserved for temporary in-session pauses, while `enable`/`disable` is the authoritative session lock.
+`CAU` stands for **Charge AUthorization**:
+- **Clean Deceleration & Cutoff (`CAUNOK`)**: Ramps down charging current via deceleration state **`State:W`** (PWM to 0 A), opens the contactor off-load, and holds the vehicle plugged and locked in **`State:B`**. *(In `State:D`, `CAUNOK` requires `RaspberryPiModeOK` to be active).*
+- **Restoring Authorization (`CAUOK`)**: Re-arms charge authorization (`State:B` $\rightarrow$ `State:C` or `State:J` $\rightarrow$ `State:I`).
+- **Incompatible with Active TIC**: The ATmega firmware cannot reliably arbitrate `CAU` while its internal TIC demodulator and load-shedding engine are active in `FM:2`. Invoking `suspend` (`CAUNOK`) or `authorize` (`CAUOK`) when a TIC interface is detected (`1200` or `9600` bauds) is rejected by Green'Up Link (`not supported while TIC active`).
+- **Avoid `CAU?` Query**: `CAU?` compares the T2S and Domestic authorization flags; if they differ (which occurs during TIC load-shedding or single-socket sessions), `CAU?` resets both to `0` and **abruptly cuts off active charging**. Green'Up Link queries `CAU?` only at boot/init when the station is strictly idle (`!D/E/G/H`) and no TIC is detected.
 
 ---
 
-### 5.3 Current Setpoints: Protocol Formatting, Safety Clamping & `CCEl` vs `CC`
+### 5.3 Deferred Start (`Dec:`) & Calendar Matrix
+
+- **`Dec:<minutes>` (Deferred Start)**: Active **only in `FM:1`** (`FM2:0`), quantized in **3-hour increments** (`0`, `180`, `360`, `540` min; values > 540 are ignored).
+  - **Expiration Behavior**: When the countdown expires, charging starts if authorized (still blocked if Linky TIC is in Peak Hours without `DOK`).
+- **`Calendar?` (Matrix Display)**: Read-only console printout of a 7-day schedule. **Evaluated only in standalone `FM:4`**.
+
+---
+
+### 5.4 Front Panel Push Button, Asynchronous `EM:` Notifications & Local Override
+
+The front panel button interaction on Green'Up Premium generates spontaneous events and hardware overrides:
+- **Short Press (< ~1 s)**: Toggles the session Start/Stop flag (`SB`), emitting `SBF:1` or `SBF:0` (and clearing any active `Dec:` timer on stop).
+- **Long Press (> ~1 s)**: Toggles the hardware derogation state (equivalent to `DOK` / `DNOK`), broadcasting an asynchronous `EM:` notification.
+- **Continuous Hold (in `FM:1` plastic enclosure)**: Cycles through deferred start delays (`180` $\rightarrow$ `360` $\rightarrow$ `540` $\rightarrow$ `0` min) every 2 s and emits `Dec:<min>` on release.
+- **Spontaneous `EM:` Notifications**:
+  - Emitted asynchronously **only when `FM:2` (`FM2:1..3`) and `RaspberryPiModeOK` are active**:
+  - **`EM:1XX` / `EM:0XX`**: Contact 2 state.
+  - **`EM:X1X` / `EM:X0X`**: Contact 1 state (off-peak dry contact or physical TIC off-peak window).
+  - **`EM:XX1` / `EM:XX0`**: Derogation state (toggled by front button long press or `DOK`/`DNOK`).
+
+#### Software Handling of `local_override`:
+When a user physically triggers a long press on the front button to force charging during peak hours:
+1. The ATmega broadcasts `EM:XX1`.
+2. Green'Up Link captures this frame and asserts `control.local_override = true` and `status.local_override = true`.
+3. An anti-disruption guard (`local_override_disable_lock_secs`, default 30s, or `-1` for full charge session) blocks external automated EMS or solar controllers (like EVCC) from immediately canceling the charge with an automated `disable` command.
+4. When the session finishes (vehicle unplugged `State:A` / `State:L`) or when an explicit authorized software `disable` is issued after the lock expires, Green'Up Link clears the derogation bit (`EM:XX0`) and resets `local_override` to `false`.
+
+---
+
+### 5.5 Domestic 2P+T Auxiliary Socket Behavior
+
+- **Presence Detection (`DOM?`)**: Reads the socket insertion micro-switch $\rightarrow$ `DOM:0` (empty) or `DOM:1` (plugged).
+- **Dedicated FSM States**:
+  - **`State:F`**: Plug inserted, waiting / suspended.
+  - **`State:H`**: Active charge at 16 A (`FM2:0`).
+  - **`State:G`**: Active charge with contact conditioning (`FM2:1..3`).
+- **Absolute T2S Priority**: Plugging a vehicle into the Type 2 socket while a domestic charge is active immediately cuts power to the domestic socket and switches priority to the EV.
+- **`2PCNOK`**: Software inhibition of the domestic socket.
+- **Current Telemetry**: Current draw on the domestic socket is reported via standard `CCI:` frames through the shared Phase 1 current transformer.
+
+---
+
+### 5.6 Physical DIP Switches & Supervisory Override (`RaspberryPiModeOK`)
+
+- **Switches 1 & 2 (Remote Controls / Conditioning)**:
+  - Switch 1: Contact 2 conditioning (`FM2:2`, not overridable by `DOK`).
+  - Switch 2: Contact 1 conditioning (`FM2:1`, overridable by `DOK`). Setting Switch 2 to `ON` in standalone mode enforces `FM2:1` every second.
+- **Switches 3 & 4 (Maximum Station Current)**: Encodes boot-time hardware maximum limits (`16A`, `20A`, `25A`, `32A`).
+- **`RaspberryPiModeOK` Reporting & Override**:
+  - Reports `DIP1`..`DIP4` in reverse order of the physical board switches (Switch 4 = `DIP1`, Switch 3 = `DIP2`, Switch 2 = `DIP3`, Switch 1 = `DIP4`).
+  - Disables runtime polling of Switches 1 & 2, but preserves the boot-time current limit (`CCS`) from Switches 3 & 4 unless overridden via `CCS:<val>`.
+
+---
+
+### 5.7 In-Session Suspension (`suspend` / `authorize`) vs. Session Stop Button (`stop_session` / `start_session`)
+
+Green'Up Link distinguishes two fundamentally different interruption mechanisms:
+
+1. **Front Panel Start/Stop Button Simulation (`SBOK` / `SBNOK`) — `action: "stop_session"` / `"start_session"`** *(mapped to Web UI Pause/Resume)*:
+   - **`action: "stop_session"`** (`SBNOK`): Simulates pressing the physical Stop button. Ramps down via transient `State:W`, **closes the ATmega session** (`WT/CT` ticket + EEPROM write), **unlocks the Type 2 cable**, and stabilizes in **`State:M`** (`State:P` for domestic). Green'Up Link reports **`status.session_stopped = true`**. Works across all installations regardless of TIC status.
+   - **`action: "start_session"`** (`SBOK`): Simulates pressing the physical Start button. Exits `State:M`/`State:P` via `State:A`, re-locks the Type 2 cable, resets `session_stopped = false`, and starts a new session (`State:B`).
+
+2. **Clean In-Session Suspension (`CAUOK` / `CAUNOK`) — `action: "suspend"` / `"authorize"`**:
+   - **`action: "suspend"`** (`CAUNOK`): Ramps down current through transient `State:W`, opens the contactor off-load, and holds the vehicle in **`State:B`** (or `State:J` / `State:F`). **The Type 2 cable stays locked**, **the internal ATmega session remains open** (no `WT/CT` ticket, no EEPROM history write), and **physical dry-contact / `DOK` bypasses are blocked**. Persists across cable unplug/replug.
+   - **`action: "authorize"`** (`CAUOK`): Restores charge authorization (`State:B` $\rightarrow$ `State:C` or `State:J` $\rightarrow$ `State:I`).
+   - **Constraint**: Only available when physical TIC is not active.
+
+> [!WARNING]
+> **Non-Blocking Behavior of `SB` upon Cable Replug:**  
+> Unlike `FM2:1` and `CAUNOK`, the `SBNOK` stop state is **not persistent across physical connection events**.  
+> If the station is stopped in `State:M` via `SBNOK`, and the user **unplugs and replugs the charging cable into the vehicle**, the ATmega automatically resets `SB` back to `1` and starts a new session!  
+> For this reason, `enable`/`disable` (`FM2`/`D`) remains the authoritative supervisor gatekeeper for external automated EMS (EVCC / Home Assistant), while `stop_session`/`start_session` (`SBNOK`/`SBOK`) provides immediate user-facing pause and cable release.
+
+---
+
+### 5.8 High-Level State Synthesis: `charge_authorized` & `active_socket`
+
+Rather than exposing fragmented internal hardware registers, Green'Up Link continuously synthesizes two high-level state attributes from the raw ATmega state:
+
+#### 1. Authorization Matrix (`control.charge_authorized`)
+A charging session is reported as authorized (`charge_authorized: true`) only when all hardware and software gates are aligned:
+- **Socket Gate**: The active socket must be enabled (`t2c != false` for Type 2, `dom_2pc != false` for domestic).
+- **Conditioning Gate**: Either direct mode is asserted (`!fm2`), software derogation is active (`d`), local override is active (`local_override`), or the off-peak contact is closed (`em_mask` Contact 1 bit `== '1'`).
+- **Authorization Gate**: Either an active TIC is running (supervising authorization autonomously) or software authorization is not inhibited (`cau != false`).
+- **Force Override**: If manual forcing is engaged (`t2f == true` or `dom_2pf == true`), all gates are bypassed and `charge_authorized` is immediately `true`.
+
+#### 2. Active Socket Identification (`status.active_socket`)
+Green'Up Link maps the physical socket currently involved in the session directly from the FSM:
+- **`"t2s"`**: States `B`, `C`, `D`, `E`, `I`, `J`, `K`, `M`, `N`.
+- **`"domestic"`**: States `F`, `G`, `H`, `O`, `P`.
+- **`"none"`**: Idle, fault, disconnected, or sleep states (`A`, `L`, `R`, `S`, `T`, `U`, `V`, `W`, `X`, `Y`, `Z`).
+
+---
+
+### 5.9 Current Setpoints: Protocol Formatting, Safety Clamping & `CC` vs `CCEl` (EEPROM Wear)
 
 When modulating charging current limits via `POST /api/current/:amps` or MQTT:
 
@@ -233,27 +347,28 @@ When modulating charging current limits via `POST /api/current/:amps` or MQTT:
 The ATmega serial parser strictly expects a 2-digit integer for all current setpoints (e.g. `CC:09`, `CCEl:16`).  
 Sending a single digit (such as `CC:9`) causes the ATmega parser to misread the parameter, which evaluates internally to `0A` (`CC:00`), inducing immediate regulation failures.
 
-#### 2. The 6A Boundary & The 7A Operational Safety Floor
-The IEC 61851-1 specification defines 6A as the normative minimum pilot current (10% PWM duty cycle).
-- **Sub-6A Firmware Crash (`< 6A`):** If a setpoint strictly below 6A is received by the ATmega (such as `CC:05`, `CCEl:05`, or `CC:00`), the station fails to regulate cleanly, panics after approximately 8 seconds with error **`E:0010`**, and **forces a full hardware reboot (`State:X`)**!
-- **Real-World Calibration at 6A:** While `CC:06` or `CCEl:06` is accepted by the firmware without crashing, field measurements demonstrate that the actual physical current delivered by the station at a 6A setpoint is very close to 7A. This slight calibration offset brings the station dangerously close to its internal overcurrent safety threshold.
-- **Safety Clamp at 7A:** To prevent tripping overcurrent protections and ensure rock-solid stability, Green'Up Link intentionally clamps all dynamic current setpoints to a strict minimum of **7A**.
+#### 2. The Hardware PWM Floor & `E:0010` Overload Trip (7 A Single-Phase / 13 A Three-Phase)
+The ATmega enforces a hardware minimum Control Pilot PWM floor depending on the station phase configuration:
+- **Single-Phase**: Minimum PWM duty cycle is clamped to 12% (**7.2 A** advertised to the EV).
+- **Three-Phase**: Minimum PWM duty cycle is clamped to 22% (**13.2 A** advertised to the EV).
+- **Overcurrent Trip (`E:0010`) & Reboot (`State:X`)**: If measured phase current reaches or exceeds $1.2 \times \text{CC}$ for 8 consecutive seconds, the station trips with **`E:0010`** (`State:R`), opens the contactor, and triggers a watchdog reboot (`State:X`) after 5 seconds. Consequently, setpoints below 6 A in single-phase (since $7.2\text{ A} \ge 1.2 \times 6\text{ A}$) or at/below 11 A in three-phase (since $13.2\text{ A} \ge 1.2 \times 11\text{ A}$) trigger `E:0010`.
+- **Operational Safety Floors**: To keep clear of the hardware PWM floor and measurement tolerances, Green'Up Link clamps setpoints to a minimum of **7 A** on single-phase stations and **13 A** on three-phase stations.
 
-#### 3. Why Green'Up Link Modulates `CCEl` Rather Than Direct `CC`
-The Legrand ATmega power board implements multiple concurrent current limiting registers:
-- `CC`: The effective active current limit currently applied to the Control Pilot PWM.
-- `CCEl`: The external "Eliot" supervisory limit (writable over serial).
-- `CCTIC`: The autonomous grid load-shedding limit dynamically calculated from the TIC interface.
-- `CCCa`: The physical cable rating detected via the Proximity Pilot (PP) resistor (e.g. 13A, 20A, 32A).
-- Hardware Jumpers / DIP switches: The physical installation maximum (e.g. 16A or 32A).
+#### 3. Modulating via `CC` (RAM-only) & Enforcing `CCEl:32` (EEPROM Protection)
+The Legrand ATmega power board evaluates multiple concurrent current limiting registers:
+- `CC`: Active consolidated limit applied to the Control Pilot PWM. Sending `CC:<val>` updates the volatile supervisor register (`g_supervisor_cc_1238` / `CCCo`) **purely in RAM** (zero EEPROM writes). In active states (`C`, `D`, `E`, `I`), the ATmega immediately recalculates the PWM using the minimum across all constraints and echoes `CC:<effective>`.
+- `CCEl`: Non-volatile Eco-Logic / Eliot supervisory limit (`g_calendar_cc_1235`) persisted to EEPROM via `EEPROM.put()` (`EERef::update()`, read-before-write).
+- `CCTIC`: Autonomous grid load-shedding limit dynamically calculated from the TIC interface.
+- `CCCa`: Physical cable rating detected via the Proximity Pilot (PP) resistor (e.g. 13 A, 20 A, 32 A).
+- Hardware DIP switches: Boot-time station maximum (`CCS`: 16 A, 20 A, 25 A, or 32 A).
 
 The ATmega determines the effective pilot current dynamically by computing the **minimum** across all active constraints:
-$$\text{Effective Limit} = \min(\text{Hardware Dipswitch}, \text{Cable PP (CCCa)}, \text{CCEl}, \text{CCTIC})$$
+$$\text{Effective Limit} = \min(\text{CCS}, \text{CCCa}, \text{CCEl}, \text{CCCo}, \text{CCTIC})$$
 
-**Why using `CCEl` is safer:**
-- In nominal operation, setting `CCEl` regulates the charging speed just like `CC`.
-- However, modulating `CCEl` preserves all underlying hardware and safety limits: if an undersized cable is plugged in, or if the physical TIC triggers emergency load-shedding (`CCTIC`), the ATmega automatically caps the charge to that lower value. Writing `CCEl` lets the ATmega exercise its full safety checks.
-- **State A Synchronization:** When the station is idle in `State:A` (no vehicle plugged in), Green'Up Link synchronizes both `CCEl` and `CC` so that the station's baseline default matches the requested limit before a vehicle is attached. Once a vehicle is connected and a session is active, Green'Up Link exclusively modulates `CCEl`.
+**Why Green'Up Link exclusively modulates `CC` (`CCCo`) instead of `CCEl`:**
+- **EEPROM Wear Prevention (Critical)**: Disassembly of the ATmega2560 firmware confirms that `CCEl:<val>` writes to a fixed EEPROM cell via `EEPROM.put()` whenever the value changes. Dynamic solar/load-management controllers (e.g. EVCC) adjust the current setpoint every 10–30 seconds; continuously toggling `CCEl` would quickly exhaust the ATmega2560's ~100,000-cycle EEPROM endurance within months. Modulating `CC:<val>` updates RAM only (**0 EEPROM writes**).
+- **Safe Uninstallation & Reboot Behaviour**: Because `CCCo` is volatile in RAM and automatically reset to `CCS` (DIP switch limit) on reboot or `FM:x` mode changes, removing Green'Up Link can never leave the station permanently throttled. Green'Up Link also resets `CC:32` upon returning to idle/end-of-session states (`State:A`, `State:L`, or fault/sleep termination).
+- **Non-Limiting `CCEl:32` Enforcement**: To guarantee an old EEPROM value (e.g. from a previous installation) never silently caps charging, Green'Up Link monitors `CCEl` after initialization and automatically enforces `CCEl:32` (with retry cooldown) whenever `CCEl != 32`. Once at `32`, no further `CCEl` commands or EEPROM writes occur.
 
 ---
 
@@ -284,6 +399,15 @@ When the station enters a fault state (`State:R`, `State:S`, `State:T`, `State:U
 ## 7. Functioning Modes (`FM`)
 
 > [!IMPORTANT]
+> **Dynamic Calculation of `FM?`:**  
+> The query `FM?` does not retrieve a static mode number. Instead, the ATmega computes this value dynamically from internal state and configuration flags:
+> - **`FM:1`**: Direct Mode (Nominal) — returned when no derogation, external contact conditioning, planning, or remote supervision is asserted.
+> - **`FM:2`**: Contact Conditioning Active — returned as soon as dry contact conditioning is active (`FM2:1`, `FM2:2`, `FM2:3`).
+> - **`FM:4`**: Weekly Calendar / Planning mode (Bluetooth schedule).
+> - **`FM:5`**: Modbus RTU Slave mode (RS485 `Serial3`).
+> - **`FM:6`**: Remote OCPP Cloud supervisor.
+> - **`FM:3` does not exist**: Sending `FM:3` hits default handling in firmware and automatically forces the station back to `FM:1`.
+> 
 > **Validated Mode for Green'Up Link: `FM:1` (Direct Charge)**  
 > **Only `FM:1` (Direct Charge / Permanent) has been regularly used, tested, and validated with Green'Up Link.**  
 > While modes 2, 4, and 5 are theoretically compatible with specific hardware setups, they have not been thoroughly tested. Mode 6 (OCPP Cloud) introduces significant timing alterations (a mandatory 30-second RFID authorization delay, altered unlock commands) and is likely incompatible with local supervision.  
@@ -293,9 +417,9 @@ The station's active functioning mode can be queried with `FM?` and set via `FM:
 
 | Mode | Official Designation | Explanation & Green'Up Link Compatibility |
 | :--- | :--- | :--- |
-| **`FM:1`** | **Direct Charge (Permanent)** | **Validated & Recommended.** The station delegates session control to the supervisory port. Green'Up Link manages authorization cleanly via `D` + `FM2`. |
-| **`FM:2`** | **Remote Controls (Auto-Hours)** | Relies on external dry contact or physical TIC for Peak/Off-Peak switching. Potentially compatible, but untested with Green'Up Link. |
-| **`FM:3`** | **Smart Meter (TIC Linky)** | Intended by Legrand for smart Linky control, but **not implemented in the ATmega firmware** (hidden in the official web interface). |
-| **`FM:4`** | **Programming (Planning)** | Internal calendar scheduling mode. Potentially compatible, but untested. |
-| **`FM:5`** | **Modbus (DLM)** | Station controlled via RS485 Modbus by an external dynamic load manager. Potentially compatible, but untested. |
+| **`FM:1`** | **Direct Charge (Permanent)** | **Validated & Recommended.** Returned dynamically when no conditioning flags are set. The station delegates session control to the supervisory port. Green'Up Link manages authorization cleanly via `D` + `FM2`. |
+| **`FM:2`** | **Remote Controls (Auto-Hours / Forcing)** | Returned as soon as Contact 1 or Contact 2 conditioning is engaged (`FM2:1`, `FM2:2`, `FM2:3`). Relies on external dry contact or physical TIC for Peak/Off-Peak switching. |
+| **`FM:3`** | **Does Not Exist** | Not implemented in the ATmega firmware (aliased to `FM:1`). |
+| **`FM:4`** | **Programming (Planning)** | Weekly calendar scheduling mode (standalone only; only mode where `Calendar?` is evaluated). |
+| **`FM:5`** | **Modbus RTU Slave** | Station controlled via RS485 Modbus RTU (`Serial3`). |
 | **`FM:6`** | **OCPP Cloud** | Cloud supervision mode. Disables TIC detection, enforces a 30s RFID authorization wait, and modifies unlock logic. **Incompatible with Green'Up Link.** |

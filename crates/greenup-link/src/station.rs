@@ -34,6 +34,7 @@ struct SyncCursor {
     last_ticket_count: u64,
     last_cph: Option<String>,
     auto_tic_triggered: bool,
+    last_cc_el_reset_attempt: Option<std::time::Instant>,
 }
 
 /// High-level supervisor state for a single charge point (Side 1 or Side 2).
@@ -132,6 +133,7 @@ impl AppState {
     /// high-level [`BoardInfo`], [`Telemetry`], power/energy integration, and session events.
     pub fn apply_driver_snapshot(&self, snap: &DriverSnapshot) {
         let mut should_auto_start_tic = false;
+        let mut should_query_cau = false;
 
         {
             let mut cursor = self.cursor.lock().unwrap_or_else(|e| e.into_inner());
@@ -189,9 +191,19 @@ impl AppState {
                         info.capabilities = Some(spec);
                     }
                 }
+                info.board_code = compute_board_code(
+                    &info.week_year_production,
+                    &info.software_version,
+                    &info.serial_number,
+                    &info.hardware_version,
+                    &info.reference,
+                );
             }
 
             // 3. Update Telemetry, State transitions, Power/Energy, and Sessions
+            let mut should_clear_raw_em_derogation = false;
+            let mut should_clear_raw_fcs = false;
+            let mut should_reset_cc_to_max = false;
             {
                 let mut tel = self.telemetry.lock().unwrap_or_else(|e| e.into_inner());
                 tel.side = side;
@@ -232,6 +244,18 @@ impl AppState {
                 if let Some(t2c) = raw.t2c {
                     tel.t2c_enabled = Some(t2c);
                 }
+                if let Some(dom_2pc) = raw.dom_2pc {
+                    tel.dom_2pc_enabled = Some(dom_2pc);
+                }
+                if let Some(t2f) = raw.t2f {
+                    tel.t2f_forced = Some(t2f);
+                }
+                if let Some(dom_2pf) = raw.dom_2pf {
+                    tel.dom_2pf_forced = Some(dom_2pf);
+                }
+                if let Some(cau) = raw.cau {
+                    tel.cau_authorized = Some(cau);
+                }
                 if let Some(fm2) = raw.fm2 {
                     tel.fm2_state = Some(fm2);
                 }
@@ -240,9 +264,6 @@ impl AppState {
                 }
                 if let Some(ref em) = raw.em {
                     tel.em_mask = Some(em.clone());
-                }
-                if let Some(sb) = raw.sb {
-                    tel.charge_paused = !sb;
                 }
                 if let Some(fcs) = raw.fcs {
                     tel.charge_complete = fcs;
@@ -255,6 +276,7 @@ impl AppState {
                 } else if let Some(ref baud) = raw.tic_test_b {
                     tel.tic_mode = baud.clone();
                 }
+                tel.tic_active = matches!(tel.tic_mode.as_str(), "1200" | "9600");
 
                 if let Some(ref phase) = raw.cph {
                     if cursor.last_cph.as_ref() != Some(phase) {
@@ -275,6 +297,7 @@ impl AppState {
                         if is_charging && !was_charging {
                             tel.last_power_update = Some(std::time::Instant::now());
                             tel.charge_complete = false;
+                            should_clear_raw_fcs = true;
                         } else if was_charging && !is_charging {
                             tel.current = 0.0;
                             tel.power = 0.0;
@@ -294,6 +317,14 @@ impl AppState {
                             tel.current = 0.0;
                             tel.power = 0.0;
                             tel.last_power_update = None;
+                            tel.charge_complete = false;
+                            should_clear_raw_fcs = true;
+                            tel.em_mask = Some(greenup_driver::raw_state::clear_em_derogation_bit(
+                                tel.em_mask.as_deref(),
+                            ));
+                            tel.local_override = false;
+                            tel.local_override_started_at = None;
+                            should_clear_raw_em_derogation = true;
                         } else if crate::session::is_immediate_termination_state(state_val) {
                             if crate::session::is_active_for_side(side) {
                                 let reason = match state_val.as_str() {
@@ -307,16 +338,32 @@ impl AppState {
                             tel.energy = 0.0;
                             tel.last_power_update = None;
                             tel.charge_complete = false;
+                            should_clear_raw_fcs = true;
+                            tel.em_mask = Some(greenup_driver::raw_state::clear_em_derogation_bit(
+                                tel.em_mask.as_deref(),
+                            ));
+                            tel.local_override = false;
+                            tel.local_override_started_at = None;
+                            should_clear_raw_em_derogation = true;
+                            should_reset_cc_to_max = true;
                         } else if state_val == "A" {
                             tel.current = 0.0;
                             tel.power = 0.0;
                             tel.last_power_update = None;
+                            tel.em_mask = Some(greenup_driver::raw_state::clear_em_derogation_bit(
+                                tel.em_mask.as_deref(),
+                            ));
+                            tel.local_override = false;
+                            tel.local_override_started_at = None;
+                            should_clear_raw_em_derogation = true;
+                            should_reset_cc_to_max = true;
 
                             if crate::session::is_active_for_side(side) {
                                 crate::session::on_state_change_for_side(side, state_val, &tel);
                             } else {
                                 tel.energy = 0.0;
                                 tel.charge_complete = false;
+                                should_clear_raw_fcs = true;
                             }
                         } else if crate::session::is_connected_state(state_val) {
                             if crate::session::is_active_for_side(side) {
@@ -334,12 +381,14 @@ impl AppState {
                 // Instantaneous phase current update & trapezoidal energy integration
                 if raw.cci_updates_count > cursor.last_cci_count {
                     cursor.last_cci_count = raw.cci_updates_count;
-                    let c = raw.cci.unwrap_or(0.0);
+                    let l1 = raw.cci.unwrap_or(0.0);
+                    let l2 = raw.cci_l2.unwrap_or(0.0);
+                    let l3 = raw.cci_l3.unwrap_or(0.0);
                     tel.evaluate_voltage();
                     if matches!(tel.greenup_state.as_str(), "D" | "E" | "G" | "H") {
                         let previous_power = tel.power;
-                        tel.current = c;
-                        tel.power = tel.voltage * tel.current;
+                        tel.current = l1;
+                        tel.power = tel.voltage * (l1 + l2 + l3);
                         let now = std::time::Instant::now();
                         if let Some(last_time) = tel.last_power_update {
                             let elapsed_hours = last_time.elapsed().as_secs_f32() / 3600.0;
@@ -363,7 +412,66 @@ impl AppState {
                 }
             }
 
-            // 4. High-level automatic TIC detection check after driver init completes
+            if should_clear_raw_em_derogation || (should_clear_raw_fcs && raw.fcs.is_some()) {
+                let cleared_em = greenup_driver::raw_state::clear_em_derogation_bit(raw.em.as_deref());
+                let update_em = should_clear_raw_em_derogation && raw.em.as_deref() != Some(cleared_em.as_str());
+                let update_fcs = should_clear_raw_fcs && raw.fcs.is_some();
+                if update_em || update_fcs {
+                    self.driver.update_raw(|r| {
+                        if update_em {
+                            r.em = Some(cleared_em);
+                        }
+                        if update_fcs {
+                            r.fcs = None;
+                        }
+                    });
+                }
+            }
+
+            // Reset RAM-only direct current limit (CC:32) on idle / end-of-session
+            if should_reset_cc_to_max
+                && !usb.sniffer_mode
+                && usb.status == SerialStatus::UsbConnected
+                && raw.cc.is_some_and(|v| v != 32)
+            {
+                logger::debug(
+                    "SERIAL",
+                    &format!(
+                        "⚡ Side {}: Idle / end-of-session state reached with CC={}A → resetting CC:32",
+                        side,
+                        raw.cc.unwrap_or(0)
+                    ),
+                );
+                let _ = self.serial_tx.try_send(Command::SetDirectCurrentLimit(32));
+            }
+
+            // Ensure EEPROM-backed CCEl stays non-limiting at 32A (retry with 5s cooldown until confirmed)
+            if raw.cc_el == Some(32) {
+                cursor.last_cc_el_reset_attempt = None;
+            } else if !usb.sniffer_mode
+                && usb.status == SerialStatus::UsbConnected
+                && usb.init_completed
+                && raw.cc_el.is_some_and(|v| v != 32)
+            {
+                let should_retry = cursor
+                    .last_cc_el_reset_attempt
+                    .is_none_or(|t| t.elapsed() >= std::time::Duration::from_secs(5));
+                if should_retry {
+                    logger::debug(
+                        "SERIAL",
+                        &format!(
+                            "🛡️ Side {}: CCEl={}A != 32A → enforcing CCEl:32 (non-limiting EEPROM baseline)",
+                            side,
+                            raw.cc_el.unwrap_or(0)
+                        ),
+                    );
+                    if self.serial_tx.try_send(Command::SetCurrentLimit(32)).is_ok() {
+                        cursor.last_cc_el_reset_attempt = Some(std::time::Instant::now());
+                    }
+                }
+            }
+
+            // 4. High-level automatic TIC detection & safe CAU? check after driver init completes
             if !usb.init_completed {
                 cursor.auto_tic_triggered = false;
             } else if usb.init_completed
@@ -372,7 +480,26 @@ impl AppState {
             {
                 cursor.auto_tic_triggered = true;
                 should_auto_start_tic = true;
+                let is_active_session_state = matches!(
+                    raw.state.as_deref(),
+                    Some("C") | Some("D") | Some("E") | Some("F") | Some("G") | Some("H") | Some("I")
+                );
+                let tic_detected = raw
+                    .tic_test_b
+                    .as_deref()
+                    .is_some_and(|b| !b.is_empty() && b != "0");
+                if raw.cau.is_none() && !is_active_session_state && !tic_detected {
+                    should_query_cau = true;
+                }
             }
+        }
+
+        if should_query_cau {
+            logger::debug(
+                "SERIAL",
+                "🔍 Querying CAU? after init sequence (no active charge in progress)",
+            );
+            let _ = self.serial_tx.try_send(Command::GetChargeAuthorization);
         }
 
         if should_auto_start_tic {
@@ -432,6 +559,22 @@ impl AppState {
         self.sniffer_mode.load(Ordering::Relaxed)
     }
 
+    /// Returns `true` if an active TIC interface has been detected (baudrate `"1200"` or `"9600"`).
+    pub fn is_tic_active(&self) -> bool {
+        self.sync_from_driver();
+        if let Ok(tel) = self.telemetry.lock() {
+            if matches!(tel.tic_mode.as_str(), "1200" | "9600") {
+                return true;
+            }
+        }
+        self.driver
+            .get_snapshot()
+            .atmega
+            .tic_test_b
+            .as_deref()
+            .is_some_and(|b| !b.is_empty() && b != "0")
+    }
+
     /// Configures the `local_override` disable lock duration in seconds (`-1`, `0`, or `> 0`).
     pub fn set_local_override_disable_lock_secs(&self, secs: i64) {
         self.local_override_disable_lock_secs
@@ -465,13 +608,17 @@ impl AppState {
 
     /// Clears `local_override` when an authorized software `disable` is executed.
     pub fn clear_local_override(&self) {
-        if self.driver.get_raw_state().em.is_some() {
+        let current_em = self.driver.get_raw_state().em;
+        let cleared_em = greenup_driver::raw_state::clear_em_derogation_bit(current_em.as_deref());
+        if current_em.as_deref() != Some(cleared_em.as_str()) {
             self.driver.update_raw(|raw| {
-                raw.em = None;
+                raw.em = Some(cleared_em);
             });
         }
         if let Ok(mut tel) = self.telemetry.lock() {
-            tel.em_mask = None;
+            tel.em_mask = Some(greenup_driver::raw_state::clear_em_derogation_bit(
+                tel.em_mask.as_deref(),
+            ));
             tel.local_override = false;
             tel.local_override_started_at = None;
             tel.update_charge_status();
@@ -570,10 +717,272 @@ pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartErro
 }
 
 /// High-level initialization sequence: runs the low-level driver handshake + startup queries,
-/// and initiates TIC detection if the station hardware model supports TIC and is in `State:A`.
+/// safely queries `CAU?` when no active charge is in progress, and initiates TIC detection
+/// if the station hardware model supports TIC and is in `State:A`.
 pub async fn trigger_init_sequence(state: &SharedState) {
     greenup_driver::trigger_init_sequence(&state.driver).await;
+    if !state.sniffer_mode() {
+        let is_charging = state
+            .telemetry
+            .lock()
+            .map(|t| matches!(t.greenup_state.as_str(), "D" | "E" | "G" | "H"))
+            .unwrap_or(false);
+        if !is_charging {
+            let _ = state.serial_tx.send(Command::GetChargeAuthorization).await;
+        }
+    }
     let _ = start_tic_detection(state).await;
+}
+
+/// Supported charge and actuator control actions exposed via REST (`POST /api/charge`)
+/// and MQTT (`.../control/charge/set`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChargeAction {
+    /// Universal supervisor enable (`FM2:0` + `DOK`).
+    Enable,
+    /// Universal supervisor disable (`DNOK` + `FM2:1`), respecting `local_override`.
+    Disable,
+    /// Authorize / resume charging (`CAUOK`). Keeps cable locked and session open.
+    Authorize,
+    /// Cleanly suspend charging (`CAUNOK` -> `State:W` -> `State:B`/`J`/`F`). Keeps cable locked and session open.
+    Suspend,
+    /// Simulate physical Start button press (`SBOK`). Re-arms session from `State:M`/`P`.
+    StartSession,
+    /// Simulate physical Stop button press (`SBNOK`). Closes session (`WT/CT`) and unlocks T2S cable (`State:M`/`P`).
+    StopSession,
+    /// Enable the Type 2 socket (`T2COK`).
+    EnableType2,
+    /// Disable the Type 2 socket (`T2CNOK`). Aborts/unlocks any T2S session and freezes T2S detection in `State:A`.
+    DisableType2,
+    /// Enable the auxiliary domestic Schuko (2P+T) socket (`2PCOK`).
+    EnableDomestic,
+    /// Disable the auxiliary domestic Schuko (2P+T) socket (`2PCNOK`).
+    DisableDomestic,
+    /// Force immediate charging on Type 2 socket (`T2FOK`), bypassing schedules, `CAU`, and contact conditioning.
+    ForceType2,
+    /// Release forced Type 2 charging override (`T2FNOK`).
+    UnforceType2,
+    /// Force immediate charging on domestic Schuko socket (`2PFOK`), bypassing schedules, `CAU`, and contact conditioning.
+    ForceDomestic,
+    /// Release forced domestic charging override (`2PFNOK`).
+    UnforceDomestic,
+    /// Activate off-peak / schedule derogation (`DOK`) without modifying `FM2`.
+    EnableDerogation,
+    /// Deactivate off-peak / schedule derogation (`DNOK`) without modifying `FM2`.
+    DisableDerogation,
+    /// Stop any active charge (`State:W`), close session, and unlock the Type 2 cable (`Unlock`).
+    Unlock,
+    /// Put the station into persistent deep sleep (`SOK` -> `State:Y`, OCPP `Unavailable`).
+    Sleep,
+    /// Wake the station from deep sleep (`SNOK` -> `State:A`).
+    Wake,
+}
+
+impl ChargeAction {
+    /// Parses a REST API action string.
+    pub fn from_api_str(action: &str) -> Option<Self> {
+        match action.trim() {
+            "enable" => Some(Self::Enable),
+            "disable" => Some(Self::Disable),
+            "authorize" => Some(Self::Authorize),
+            "suspend" => Some(Self::Suspend),
+            "start_session" => Some(Self::StartSession),
+            "stop_session" => Some(Self::StopSession),
+            "enable_type2" => Some(Self::EnableType2),
+            "disable_type2" => Some(Self::DisableType2),
+            "enable_domestic" => Some(Self::EnableDomestic),
+            "disable_domestic" => Some(Self::DisableDomestic),
+            "force_type2" => Some(Self::ForceType2),
+            "unforce_type2" => Some(Self::UnforceType2),
+            "force_domestic" => Some(Self::ForceDomestic),
+            "unforce_domestic" => Some(Self::UnforceDomestic),
+            "enable_derogation" => Some(Self::EnableDerogation),
+            "disable_derogation" => Some(Self::DisableDerogation),
+            "unlock" => Some(Self::Unlock),
+            "sleep" => Some(Self::Sleep),
+            "wake" => Some(Self::Wake),
+            _ => None,
+        }
+    }
+
+    /// Parses an MQTT payload for `.../control/charge/set` (includes Home Assistant switch ON/OFF aliases).
+    pub fn from_mqtt_str(payload: &str) -> Option<Self> {
+        let lower = payload.trim().to_lowercase();
+        match lower.as_str() {
+            "on" | "1" | "true" => Some(Self::Enable),
+            "off" | "0" | "false" => Some(Self::Disable),
+            other => Self::from_api_str(other),
+        }
+    }
+
+    /// Returns the human-readable description and exact ATmega command sequence for this action.
+    pub fn commands(self) -> (&'static str, Vec<Command>) {
+        match self {
+            Self::Enable => (
+                "⚡ Charge enable (FM2:0 + DOK)",
+                vec![Command::SetExternalSignal(false), Command::SetDerogation(true)],
+            ),
+            Self::Disable => (
+                "🛑 Charge disable (DNOK + FM2:1)",
+                vec![Command::SetDerogation(false), Command::SetExternalSignal(true)],
+            ),
+            Self::Authorize => (
+                "▶ Charge authorize (CAUOK)",
+                vec![Command::SetChargeAuthorization(true)],
+            ),
+            Self::Suspend => (
+                "⏸ Charge suspend (CAUNOK)",
+                vec![Command::SetChargeAuthorization(false)],
+            ),
+            Self::StartSession => (
+                "▶ Start session / button press (SBOK)",
+                vec![Command::SetStartButton(true)],
+            ),
+            Self::StopSession => (
+                "⏹ Stop session & unlock / button press (SBNOK)",
+                vec![Command::SetStartButton(false)],
+            ),
+            Self::EnableType2 => (
+                "🔌 Enable Type 2 socket (T2COK)",
+                vec![Command::AuthorizeType2(true)],
+            ),
+            Self::DisableType2 => (
+                "🚫 Disable Type 2 socket (T2CNOK)",
+                vec![Command::AuthorizeType2(false)],
+            ),
+            Self::EnableDomestic => (
+                "🔌 Enable domestic Schuko socket (2PCOK)",
+                vec![Command::AuthorizeDomestic(true)],
+            ),
+            Self::DisableDomestic => (
+                "🚫 Disable domestic Schuko socket (2PCNOK)",
+                vec![Command::AuthorizeDomestic(false)],
+            ),
+            Self::ForceType2 => (
+                "⚡ Force Type 2 charge (T2FOK)",
+                vec![Command::ForceType2(true)],
+            ),
+            Self::UnforceType2 => (
+                "🔓 Unforce Type 2 charge (T2FNOK)",
+                vec![Command::ForceType2(false)],
+            ),
+            Self::ForceDomestic => (
+                "⚡ Force domestic Schuko charge (2PFOK)",
+                vec![Command::ForceDomestic(true)],
+            ),
+            Self::UnforceDomestic => (
+                "🔓 Unforce domestic Schuko charge (2PFNOK)",
+                vec![Command::ForceDomestic(false)],
+            ),
+            Self::EnableDerogation => (
+                "🔓 Enable off-peak derogation (DOK)",
+                vec![Command::SetDerogation(true)],
+            ),
+            Self::DisableDerogation => (
+                "🔒 Disable off-peak derogation (DNOK)",
+                vec![Command::SetDerogation(false)],
+            ),
+            Self::Unlock => (
+                "🔓 Unlock Type 2 cable (Unlock)",
+                vec![Command::Unlock],
+            ),
+            Self::Sleep => (
+                "💤 Enter station deep sleep (SOK -> State:Y)",
+                vec![Command::SetSleep(true)],
+            ),
+            Self::Wake => (
+                "☀ Wake station from deep sleep (SNOK -> State:A)",
+                vec![Command::SetSleep(false)],
+            ),
+        }
+    }
+}
+
+/// Outcome of executing a [`ChargeAction`] on a charge point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChargeActionOutcome {
+    Executed,
+    IgnoredLocalOverride { remaining_secs: i64 },
+    NotSupportedWhileTicActive,
+    SerialError,
+}
+
+/// Executes a [`ChargeAction`] on the given [`AppState`], enforcing `local_override` protection on `Disable`
+/// and rejecting `CAU` actions (`Suspend` / `Authorize`) while an active TIC is detected.
+pub async fn execute_charge_action(
+    point: &AppState,
+    action: ChargeAction,
+    log_source: &str,
+) -> ChargeActionOutcome {
+    if matches!(action, ChargeAction::Suspend | ChargeAction::Authorize) && point.is_tic_active() {
+        logger::warn(
+            log_source,
+            &format!(
+                "⛔ Side {}: Charge action '{:?}' rejected (not supported while TIC active)",
+                point.side(),
+                action
+            ),
+        );
+        return ChargeActionOutcome::NotSupportedWhileTicActive;
+    }
+
+    if action == ChargeAction::Disable {
+        if let Some(remaining) = point.is_disable_locked_by_local_override() {
+            let lock_desc = if remaining < 0 {
+                "locked until end of charge".to_string()
+            } else {
+                format!("{}s remaining", remaining)
+            };
+            logger::log(
+                log_source,
+                &format!(
+                    "🛡️ Side {}: Charge disable ignored (local_override active: {})",
+                    point.side(),
+                    lock_desc
+                ),
+            );
+            return ChargeActionOutcome::IgnoredLocalOverride {
+                remaining_secs: remaining,
+            };
+        }
+        point.clear_local_override();
+    }
+
+    let (desc, mut cmds) = action.commands();
+    let raw_atmega = point.driver.get_snapshot().atmega;
+    match action {
+        ChargeAction::Enable => {
+            if raw_atmega.t2c == Some(false) {
+                cmds.push(Command::AuthorizeType2(true));
+            }
+            if raw_atmega.dom_2pc == Some(false) {
+                cmds.push(Command::AuthorizeDomestic(true));
+            }
+            if !point.is_tic_active() && raw_atmega.cau == Some(false) {
+                cmds.push(Command::SetChargeAuthorization(true));
+            }
+        }
+        ChargeAction::Disable => {
+            if raw_atmega.t2f == Some(true) {
+                cmds.push(Command::ForceType2(false));
+            }
+            if raw_atmega.dom_2pf == Some(true) {
+                cmds.push(Command::ForceDomestic(false));
+            }
+        }
+        _ => {}
+    }
+
+    logger::log(
+        log_source,
+        &format!("Point {}: {}", point.side(), desc),
+    );
+    for cmd in cmds {
+        if point.serial_tx.send(cmd).await.is_err() {
+            return ChargeActionOutcome::SerialError;
+        }
+    }
+    ChargeActionOutcome::Executed
 }
 
 /// Manages multi-point charging stations (1 or 2 charge points).
@@ -808,6 +1217,7 @@ impl StationManager {
             bluetooth_enabled: p1_info.bluetooth_enabled,
             mac_address: p1_info.mac_address.clone(),
             capabilities: p1_info.capabilities.clone(),
+            board_code: p1_info.board_code.clone(),
         };
 
         StationSnapshot {
@@ -815,6 +1225,108 @@ impl StationManager {
             connectors,
         }
     }
+
+    /// Produces `StationData` for a specific charge point side (`1` or `2`).
+    pub fn station_for_side(&self, requested_side: Option<u8>) -> StationData {
+        let point = self.get_point(requested_side);
+        let info = point.info.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let tel = point
+            .telemetry
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+
+        StationData {
+            vendor: "Legrand".to_string(),
+            model: info.reference.clone(),
+            serial_number: info.serial_number.clone(),
+            hardware_version: info.hardware_version.clone(),
+            firmware_version: info.software_version.clone(),
+            link_version: info.link_version.clone(),
+            serial_connection: tel.serial,
+            is_dual: self.is_dual(),
+            available_connectors: self.available_points(),
+            production_date: if info.week_year_production.is_empty() {
+                None
+            } else {
+                Some(info.week_year_production.clone())
+            },
+            bluetooth_enabled: info.bluetooth_enabled,
+            mac_address: info.mac_address.clone(),
+            capabilities: info.capabilities.clone(),
+            board_code: info.board_code.clone(),
+        }
+    }
+}
+
+fn crc16_modbus(data: &[u8]) -> u16 {
+    let mut crc: u16 = 0xFFFF;
+    for &b in data {
+        crc ^= b as u16;
+        for _ in 0..8 {
+            if (crc & 1) != 0 {
+                crc = (crc >> 1) ^ 0xA001;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    crc
+}
+
+fn normalize_version_string(v: &str) -> String {
+    let clean: String = v.trim().replace(':', "").replace(' ', "");
+    if clean.is_empty() {
+        return String::new();
+    }
+    if clean.starts_with('V') {
+        clean
+    } else if clean.contains('.') {
+        format!("V{}", clean)
+    } else if clean.len() == 6 {
+        format!("V{}.{}.{}", &clean[0..2], &clean[2..4], &clean[4..6])
+    } else {
+        format!("V{}", clean)
+    }
+}
+
+/// Computes the board identification CRC16 checksum from the hardware identity registers.
+pub fn compute_board_code(
+    week_year_production: &str,
+    software_version: &str,
+    serial_number: &str,
+    hardware_version: &str,
+    reference: &str,
+) -> Option<String> {
+    let prod = week_year_production.trim();
+    let sw = normalize_version_string(software_version);
+    let sn = serial_number.trim();
+    let hw = normalize_version_string(hardware_version);
+    let r = reference.trim();
+
+    if !prod.is_ascii() || !sw.is_ascii() || !sn.is_ascii() || !hw.is_ascii() || !r.is_ascii() {
+        return None;
+    }
+
+    let p = prod.as_bytes();
+    let s = sw.as_bytes();
+    let n = sn.as_bytes();
+    let h = hw.as_bytes();
+    let rf = r.as_bytes();
+
+    if p.len() < 5 || s.len() < 9 || n.len() < 6 || h.len() < 9 || rf.len() < 6 {
+        return None;
+    }
+
+    let buf = [
+        p[0], s[8], n[2], h[8], rf[1],
+        p[4], s[1], n[1], h[7], rf[3],
+        p[1], s[4], n[5], h[1], rf[4],
+        p[3], s[2], n[0], h[2], rf[5],
+        s[5], n[4], h[4], rf[2], s[7], n[3], h[5], rf[0],
+    ];
+
+    Some(crc16_modbus(&buf).to_string())
 }
 
 pub type SharedStation = Arc<StationManager>;
@@ -928,5 +1440,185 @@ mod tests {
         // 5. clear_local_override resets flag
         state.clear_local_override();
         assert!(!state.to_connector_data().status.local_override);
+    }
+
+    #[tokio::test]
+    async fn test_compute_board_code_and_station_for_side() {
+        assert_eq!(
+            compute_board_code("42W22", "V01.18.10", "015184", "V02.01.01", "058001").as_deref(),
+            Some("13862")
+        );
+        assert_eq!(
+            compute_board_code("42W22", "011810", "015184", "02.01.01", "058001").as_deref(),
+            Some("13862")
+        );
+        assert_eq!(
+            compute_board_code("", "V01.18.10", "015184", "V02.01.01", "058001"),
+            None
+        );
+
+        let (tx1, _rx1) = mpsc::channel(8);
+        let (tx2, _rx2) = mpsc::channel(8);
+        let p1 = Arc::new(AppState::new_with_side(1, tx1));
+        let p2 = Arc::new(AppState::new_with_side(2, tx2));
+
+        p1.driver.update_raw(|raw| {
+            raw.reference = Some("058001".to_string());
+            raw.serial_number = Some("015184".to_string());
+            raw.hardware_version = Some("V02.01.01".to_string());
+            raw.software_version = Some("V01.18.10".to_string());
+            raw.week_year_production = Some("42W22".to_string());
+        });
+        p2.driver.update_raw(|raw| {
+            raw.reference = Some("058001".to_string());
+            raw.serial_number = Some("015185".to_string());
+            raw.hardware_version = Some("V02.01.01".to_string());
+            raw.software_version = Some("V01.18.10".to_string());
+            raw.week_year_production = Some("42W22".to_string());
+        });
+
+        let manager = StationManager::new(p1, Some(p2));
+        let s1 = manager.station_for_side(Some(1));
+        let s2 = manager.station_for_side(Some(2));
+        assert_eq!(s1.serial_number, "015184");
+        assert_eq!(s1.board_code.as_deref(), Some("13862"));
+        assert_eq!(s2.serial_number, "015185");
+        assert_ne!(s2.board_code, s1.board_code);
+        assert!(s2.board_code.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_cau_mapped_to_paused_and_queried_safely_after_init() {
+        let (tx, rx) = mpsc::channel(32);
+        let state = Arc::new(AppState::new(tx));
+
+        // 1. State M / P maps to status.session_stopped=true; State B maps to session_stopped=false
+        state.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            raw.state = Some("M".to_string());
+        });
+        let conn_m = state.to_connector_data();
+        assert!(conn_m.status.session_stopped);
+        assert_eq!(conn_m.status.active_socket, "t2s");
+
+        state.driver.update_raw(|raw| {
+            raw.state = Some("B".to_string());
+        });
+        let conn_b = state.to_connector_data();
+        assert!(!conn_b.status.session_stopped);
+        assert_eq!(conn_b.status.active_socket, "t2s");
+
+        // 2. When init completes in active session states (C, D, I, etc.) or with active TIC, CAU? must NOT be queried
+        for active_state in ["C", "D", "I"] {
+            let (tx_chg, mut rx_chg) = mpsc::channel(32);
+            let state_chg = Arc::new(AppState::new(tx_chg));
+            state_chg.driver.update_both(|raw, usb| {
+                usb.status = SerialStatus::UsbConnected;
+                usb.init_completed = true;
+                raw.state = Some(active_state.to_string());
+            });
+            state_chg.sync_from_driver();
+            assert!(rx_chg.try_recv().is_err(), "CAU? should not be queried in State:{}", active_state);
+        }
+
+        let (tx_tic, mut rx_tic) = mpsc::channel(32);
+        let state_tic = Arc::new(AppState::new(tx_tic));
+        state_tic.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            usb.init_completed = true;
+            raw.state = Some("B".to_string());
+            raw.tic_test_b = Some("9600".to_string());
+        });
+        state_tic.sync_from_driver();
+        assert!(rx_tic.try_recv().is_err(), "CAU? should not be queried when TIC is active");
+
+        // 3. When init completes while idle (State:B) and cau is None, CAU? IS queried
+        let (tx_idle, mut rx_idle) = mpsc::channel(32);
+        let state_idle = Arc::new(AppState::new(tx_idle));
+        state_idle.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            usb.init_completed = true;
+            raw.state = Some("B".to_string());
+        });
+        state_idle.sync_from_driver();
+        assert_eq!(rx_idle.recv().await.unwrap(), Command::GetChargeAuthorization);
+
+        // 4. Legacy pause/resume are not accepted by ChargeAction
+        assert_eq!(ChargeAction::from_api_str("pause"), None);
+        assert_eq!(ChargeAction::from_api_str("resume"), None);
+        assert_eq!(ChargeAction::from_mqtt_str("pause"), None);
+        assert_eq!(ChargeAction::from_mqtt_str("resume"), None);
+        assert_eq!(ChargeAction::from_mqtt_str("ON"), Some(ChargeAction::Enable));
+        assert_eq!(ChargeAction::from_mqtt_str("OFF"), Some(ChargeAction::Disable));
+        drop(rx);
+    }
+
+    #[tokio::test]
+    async fn test_adaptive_enable_disable_actions() {
+        let (tx, mut rx) = mpsc::channel(32);
+        let state = Arc::new(AppState::new(tx));
+        state.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            raw.state = Some("B".to_string());
+            raw.t2c = Some(false);
+            raw.dom_2pc = Some(false);
+            raw.cau = Some(false);
+        });
+
+        let outcome = execute_charge_action(&state, ChargeAction::Enable, "TEST").await;
+        assert_eq!(outcome, ChargeActionOutcome::Executed);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::AuthorizeType2(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::AuthorizeDomestic(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetChargeAuthorization(true));
+        assert!(rx.try_recv().is_err());
+
+        // Disable unforces T2F and 2PF when active
+        state.driver.update_raw(|raw| {
+            raw.t2f = Some(true);
+            raw.dom_2pf = Some(true);
+        });
+        let outcome = execute_charge_action(&state, ChargeAction::Disable, "TEST").await;
+        assert_eq!(outcome, ChargeActionOutcome::Executed);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::ForceType2(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::ForceDomestic(false));
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_cc_el_32_enforcement_and_cc_idle_reset() {
+        let (tx, mut rx) = mpsc::channel(32);
+        let state = Arc::new(AppState::new(tx));
+
+        // 1. After init completes with CCEl=16A, CCEl:32 is requested once
+        state.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            usb.init_completed = true;
+            raw.state = Some("D".to_string());
+            raw.cc_el = Some(16);
+        });
+        state.sync_from_driver();
+        assert_eq!(rx.recv().await.unwrap(), Command::SetCurrentLimit(32));
+        assert!(rx.try_recv().is_err());
+
+        // 2. Subsequent snapshot while still CCEl=16A within 5s cooldown does NOT spam
+        state.driver.update_raw(|raw| {
+            raw.cci = Some(10.0);
+        });
+        state.sync_from_driver();
+        assert!(rx.try_recv().is_err());
+
+        // 3. Once CCEl=32A is confirmed, entering State:A with CC=16A resets CC:32 (RAM-only)
+        state.driver.update_raw(|raw| {
+            raw.cc_el = Some(32);
+            raw.cc = Some(16);
+            raw.state = Some("A".to_string());
+        });
+        state.sync_from_driver();
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(32));
+        assert!(rx.try_recv().is_err());
     }
 }

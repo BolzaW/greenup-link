@@ -86,7 +86,7 @@ pub enum ProtocolEvent {
     ForceType2State(bool),
     /// `2PF:0` / `2PF:1` – Forced charging state on Domestic socket.
     ForceDomesticState(bool),
-    /// `Unlock:ok*` / `Unlock:nok*` – Emergency cable unlock result.
+    /// `Unlock` (or `Unlock:ok*`) – Cable unlock acknowledgment.
     UnlockResult(String),
 
     // --- 5. Planning, Scheduling & Modes ---
@@ -98,31 +98,31 @@ pub enum ProtocolEvent {
     Derogation(bool),
     /// `Dec:<min>` – Remaining deferred start delay in minutes.
     DeferredStartDelay(u32),
-    /// `Slp:0` / `Slp:1` (or `SOK:ok*` / `SNOK:ok*`) – Vehicle sleep mode state.
+    /// `Slp:0` / `Slp:1` – Vehicle sleep mode state.
     SleepState(bool),
     /// `FM:<1..6>` – Primary Functioning Mode.
     FmMode(String),
-    /// `FM2:0` / `FM2:1` – Auxiliary dry contact / external signal state.
-    ExternalSignal(bool),
-    /// `FM2F:0` / `FM2F:1` – Spontaneous or post-command notification that `FM2` is forced to `0` or `1`.
-    ExternalSignalForced(bool),
-    /// `CAU:0` / `CAU:1` – Emergency stop interlock state.
-    EmergencyStop(bool),
+    /// `FM2:<0..3>` – Auxiliary dry contact conditioning 2-bit mask.
+    ExternalSignal(u8),
+    /// `FM2F:<0..3>` – Spontaneous or post-command notification that `FM2` was forced.
+    ExternalSignalForced(u8),
+    /// `CAU:0` / `CAU:1` – Charge Authorization state.
+    ChargeAuthorization(bool),
 
     // --- 6. Modbus RS485 & Energy Management ---
     /// `EM:<mask>` – Energy Management / derogation status mask (e.g. `EM:XX1`, `EM:XX0`).
     EnergyManagementMask(String),
-    /// `ModbusAddr:<val>` – Station Modbus slave address or `ok*`.
+    /// `ModbusAddr:<val>` – Station Modbus slave address.
     ModbusAddress(String),
-    /// `ModbusEMA:<val>` – External Energy Meter Modbus address or `ok*`.
-    ModbusEnergyMeterAddress(String),
-    /// `ModbusDLMA:<val>` – Dynamic Load Management (DLM) Modbus address or `ok*`.
-    ModbusDlmAddress(String),
-    /// `ModbusP:<val>` – Modbus parity (`0`, `1`, `2`, or `ok*`).
+    /// `ModbusEMA:<0/1>` – External Energy Meter polling enabled (`0` or `1`).
+    ModbusEnergyMeterEnabled(String),
+    /// `ModbusDLMA:<0/1>` – Dynamic Load Management (DLM) via Modbus enabled (`0` or `1`).
+    ModbusDlmEnabled(String),
+    /// `ModbusP:<val>` – Modbus parity (`0`, `1`, `2`).
     ModbusParity(String),
-    /// `ModbusB:<val>` – Modbus baud rate code or `ok*`.
+    /// `ModbusB:<val>` – Modbus baud rate index (`0`..`8`).
     ModbusBaudRate(String),
-    /// `ModbusSB:<val>` – Modbus stop bits count (`1`, `2`, or `ok*`).
+    /// `ModbusSB:<val>` – Modbus stop bits setting (`0` = 1 bit, `1` = 2 bits).
     ModbusStopBits(String),
 
     // --- 7. Access Control & RFID Badges ---
@@ -130,8 +130,10 @@ pub enum ProtocolEvent {
     RfidEnabled(bool),
     /// `RFIDUM:0` / `RFIDUM:1` – RFID User Management mode.
     RfidUserManagement(bool),
-    /// `RFIDA:<val>` – RFID badge authorization status (`0`, `1`, or `ok*`).
+    /// `RFIDA:<val>` – RFID badge authorization status (`0..5`).
     RfidAuthorization(String),
+    /// `RFIDAF:<val>` – Spontaneous/forced RFID authorization status (`2`, `3`, `4`).
+    RfidAuthorizationForced(String),
     /// `RFIDId:<id>` – Raw badge UID read by the RFID peripheral.
     RfidId(String),
     /// `RFIDIdLP:<val>` – RFID Local Pass enrolment response (`ok*`).
@@ -162,12 +164,16 @@ pub enum ProtocolEvent {
     ChargePhases(String),
     /// `\WT:...:CT:...:\` or `WT:...` – Session summary ticket emitted at end of charge.
     SessionTicket(String),
-    /// `Volt:<v>` – Voltage frame (simulator / external).
+    /// `Volt:<v>` – Voltage frame (external Modbus meter / simulator).
     Voltage(f32),
-    /// `Ener:<wh>` – Energy frame (simulator / external).
+    /// `Ener:<wh>` – Energy frame (external Modbus meter / simulator).
     Energy(f32),
-    /// `Freq:<hz>` – Frequency frame (simulator / external).
+    /// `Freq:<hz>` – Frequency frame (external Modbus meter / simulator).
     Frequency(f32),
+    /// `DLMCI:<amps>` – Dynamic Load Management current from external Modbus meter.
+    DlmCurrent(f32),
+    /// `MP:<watts>` – Active power from external Modbus meter.
+    MeterPower(f32),
     /// `Default:<cmd>` – Unrecognized or malformed command rejected by ATmega.
     CommandNotUnderstood(String),
     /// Unrecognized frame.
@@ -364,6 +370,9 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
             return ProtocolEvent::ForceDomesticState(b);
         }
     }
+    if trimmed == "Unlock" {
+        return ProtocolEvent::UnlockResult("ok".to_string());
+    }
     if let Some(val) = trimmed.strip_prefix("Unlock:") {
         return ProtocolEvent::UnlockResult(val.trim().to_string());
     }
@@ -394,20 +403,18 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
             return ProtocolEvent::SleepState(b);
         }
     }
-    if trimmed.starts_with("SOK:ok") {
-        return ProtocolEvent::SleepState(true);
-    }
-    if trimmed.starts_with("SNOK:ok") {
-        return ProtocolEvent::SleepState(false);
-    }
     if let Some(val) = trimmed.strip_prefix("FM2:") {
-        if let Some(b) = parse_bool_01(val) {
-            return ProtocolEvent::ExternalSignal(b);
+        if let Ok(mask) = val.trim().parse::<u8>() {
+            if mask <= 3 {
+                return ProtocolEvent::ExternalSignal(mask);
+            }
         }
     }
     if let Some(val) = trimmed.strip_prefix("FM2F:") {
-        if let Some(b) = parse_bool_01(val) {
-            return ProtocolEvent::ExternalSignalForced(b);
+        if let Ok(mask) = val.trim().parse::<u8>() {
+            if mask <= 3 {
+                return ProtocolEvent::ExternalSignalForced(mask);
+            }
         }
     }
     if let Some(val) = trimmed.strip_prefix("FM:") {
@@ -415,7 +422,7 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
     }
     if let Some(val) = trimmed.strip_prefix("CAU:") {
         if let Some(b) = parse_bool_01(val) {
-            return ProtocolEvent::EmergencyStop(b);
+            return ProtocolEvent::ChargeAuthorization(b);
         }
     }
 
@@ -430,10 +437,10 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         return ProtocolEvent::ModbusAddress(val.trim().to_string());
     }
     if let Some(val) = trimmed.strip_prefix("ModbusEMA:") {
-        return ProtocolEvent::ModbusEnergyMeterAddress(val.trim().to_string());
+        return ProtocolEvent::ModbusEnergyMeterEnabled(val.trim().to_string());
     }
     if let Some(val) = trimmed.strip_prefix("ModbusDLMA:") {
-        return ProtocolEvent::ModbusDlmAddress(val.trim().to_string());
+        return ProtocolEvent::ModbusDlmEnabled(val.trim().to_string());
     }
     if let Some(val) = trimmed.strip_prefix("ModbusP:") {
         return ProtocolEvent::ModbusParity(val.trim().to_string());
@@ -455,6 +462,9 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
         if let Some(b) = parse_bool_01(val) {
             return ProtocolEvent::RfidUserManagement(b);
         }
+    }
+    if let Some(val) = trimmed.strip_prefix("RFIDAF:") {
+        return ProtocolEvent::RfidAuthorizationForced(val.trim().to_string());
     }
     if let Some(val) = trimmed.strip_prefix("RFIDA:") {
         return ProtocolEvent::RfidAuthorization(val.trim().to_string());
@@ -527,6 +537,16 @@ pub fn parse_line(line: &str) -> ProtocolEvent {
     if let Some(val) = trimmed.strip_prefix("Freq:") {
         if let Ok(f) = val.trim().parse::<f32>() {
             return ProtocolEvent::Frequency(f);
+        }
+    }
+    if let Some(val) = trimmed.strip_prefix("DLMCI:") {
+        if let Ok(a) = val.trim().parse::<f32>() {
+            return ProtocolEvent::DlmCurrent(a);
+        }
+    }
+    if let Some(val) = trimmed.strip_prefix("MP:") {
+        if let Ok(w) = val.trim().parse::<f32>() {
+            return ProtocolEvent::MeterPower(w);
         }
     }
     if let Some(cmd) = trimmed.strip_prefix("Default:") {
@@ -640,6 +660,10 @@ mod tests {
         assert_eq!(parse_line("T2F:1"), ProtocolEvent::ForceType2State(true));
         assert_eq!(parse_line("2PF:0"), ProtocolEvent::ForceDomesticState(false));
         assert_eq!(
+            parse_line("Unlock"),
+            ProtocolEvent::UnlockResult("ok".into())
+        );
+        assert_eq!(
             parse_line("Unlock:ok*"),
             ProtocolEvent::UnlockResult("ok*".into())
         );
@@ -653,9 +677,9 @@ mod tests {
         );
         assert_eq!(parse_line("Dec:120"), ProtocolEvent::DeferredStartDelay(120));
         assert_eq!(parse_line("Slp:1"), ProtocolEvent::SleepState(true));
-        assert_eq!(parse_line("SOK:ok*"), ProtocolEvent::SleepState(true));
-        assert_eq!(parse_line("SNOK:ok*"), ProtocolEvent::SleepState(false));
-        assert_eq!(parse_line("CAU:0"), ProtocolEvent::EmergencyStop(false));
+        assert_eq!(parse_line("CAU:0"), ProtocolEvent::ChargeAuthorization(false));
+        assert_eq!(parse_line("FM2:0"), ProtocolEvent::ExternalSignal(0));
+        assert_eq!(parse_line("FM2:3"), ProtocolEvent::ExternalSignal(3));
         assert_eq!(
             parse_line("EM:XX1"),
             ProtocolEvent::EnergyManagementMask("XX1".into())
@@ -672,6 +696,10 @@ mod tests {
         assert_eq!(
             parse_line("RFIDUM:0"),
             ProtocolEvent::RfidUserManagement(false)
+        );
+        assert_eq!(
+            parse_line("RFIDAF:2"),
+            ProtocolEvent::RfidAuthorizationForced("2".into())
         );
         assert_eq!(
             parse_line("OCPPStatus:Preparing-T2S"),
@@ -695,12 +723,18 @@ mod tests {
         );
         assert_eq!(
             parse_line("FM2F:1"),
-            ProtocolEvent::ExternalSignalForced(true)
+            ProtocolEvent::ExternalSignalForced(1)
         );
         assert_eq!(
             parse_line("FM2F:0"),
-            ProtocolEvent::ExternalSignalForced(false)
+            ProtocolEvent::ExternalSignalForced(0)
         );
+        assert_eq!(
+            parse_line("FM2F:2"),
+            ProtocolEvent::ExternalSignalForced(2)
+        );
+        assert_eq!(parse_line("DLMCI:12.5"), ProtocolEvent::DlmCurrent(12.5));
+        assert_eq!(parse_line("MP:3450.0"), ProtocolEvent::MeterPower(3450.0));
         assert_eq!(
             parse_line("\\WT:00h01:CT:01h20:EVplug:12000:\\"),
             ProtocolEvent::SessionTicket("WT:00h01:CT:01h20:EVplug:12000:".into())

@@ -14,8 +14,8 @@ use std::fmt;
 /// Frame terminator expected by the ATmega (Carriage Return, 0x0D).
 pub const FRAME_TERMINATOR: &str = "\r";
 
-/// Minimum current accepted by the board (below this, the board goes into fault state).
-pub const MIN_CURRENT_AMPS: u8 = 7;
+/// Minimum current accepted by the board (strictly below 6A, the board triggers `E:0010` and reboots).
+pub const MIN_CURRENT_AMPS: u8 = 6;
 /// Maximum current accepted by the board.
 pub const MAX_CURRENT_AMPS: u8 = 32;
 
@@ -26,8 +26,6 @@ pub enum FunctioningMode {
     DirectCharge = 1,
     /// `FM:2` – Controlled by dry contact (Off-Peak / Peak hours).
     RemoteControl = 2,
-    /// `FM:3` – Smart meter (TIC). Not implemented in firmware 18.04.
-    SmartMeter = 3,
     /// `FM:4` – Internal time programming.
     Programming = 4,
     /// `FM:5` – Modbus control (DLM).
@@ -43,11 +41,11 @@ impl FunctioningMode {
     }
 
     /// Decodes the value received in an `FM:X` frame.
+    /// Note: Mode `3` does not exist in firmware (falls back to `FM:1`).
     pub fn from_code(code: &str) -> Option<Self> {
         match code.trim() {
             "1" => Some(Self::DirectCharge),
             "2" => Some(Self::RemoteControl),
-            "3" => Some(Self::SmartMeter),
             "4" => Some(Self::Programming),
             "5" => Some(Self::Modbus),
             "6" => Some(Self::Ocpp),
@@ -134,15 +132,15 @@ pub enum Command {
     // --- 3. Current & Power Modulation ---
     /// `CC?` – Queries consolidated active charging limit enforced on the vehicle.
     GetCurrentLimit,
-    /// `CC:XX` – Direct current override on the vehicle CP PWM.
+    /// `CC:XX` – Direct supervisor current limit (`g_supervisor_cc_1238`, RAM-only, 0 EEPROM wear; primary method used by Green'Up Link).
     SetDirectCurrentLimit(u8),
     /// `CCS?` – Queries Supervisor Current limit (`CCS:`).
     GetSupervisorCurrentLimit,
-    /// `CCS:XX` – Sets Supervisor / Schuko current limit.
-    SetSchukoCurrentLimit(u8),
+    /// `CCS:XX` – Sets Supervisor / station maximum current limit.
+    SetSupervisorCurrentLimit(u8),
     /// `CCEl?` – Queries Cloud Eliot Current limit (`CCEl:`).
     GetEliotCurrentLimit,
-    /// `CCEl:XX` – Sets Cloud Eliot Current limit (primary method used by Green'Up Link).
+    /// `CCEl:XX` – Sets Cloud Eliot Current limit (persisted in EEPROM via `EEPROM.put`; avoid for dynamic modulation).
     SetCurrentLimit(u8),
     /// `CCCo?` – Queries internal Consolidated Current setpoint (`CCCo:`).
     GetConsolidatedCurrentLimit,
@@ -200,30 +198,32 @@ pub enum Command {
     GetFunctioningMode,
     /// `FM:X` – Sets primary Functioning Mode.
     SetFunctioningMode(FunctioningMode),
-    /// `FM2?` – Queries auxiliary dry contact / Eco-Start state (`FM2:0` or `1`).
+    /// `FM2?` – Queries auxiliary dry contact / Eco-Start mask (`FM2:0..3`).
     GetExternalSignal,
-    /// `FM2:1` / `FM2:0` – Simulates external dry contact state (`1` = blocked, `0` = authorized).
+    /// `FM2:1` / `FM2:0` – Simulates external dry contact 1 state (`1` = blocked, `0` = authorized).
     SetExternalSignal(bool),
-    /// `CAU?` – Queries Emergency Stop interlock state (`CAU:0` or `1`).
-    GetEmergencyStop,
-    /// `CAUOK` / `CAUNOK` – Toggles emergency stop safety lockout state.
-    SetEmergencyStop(bool),
+    /// `FM2:<0..3>` – Sets the 2-bit dry contact conditioning mask (`0`..`3`).
+    SetExternalSignalMask(u8),
+    /// `CAU?` – Queries Charge Authorization state (`CAU:0` or `1`). Warning: resets flags if mismatched.
+    GetChargeAuthorization,
+    /// `CAUOK` / `CAUNOK` – Enables/disables Charge Authorization (clean deceleration via `State:W` on `CAUNOK`).
+    SetChargeAuthorization(bool),
 
-    // --- 6. Modbus RS485 & Energy Metering ---
-    /// `EM?` – Queries cumulative Energy Meter pulse count (`EM:<pulses>`).
-    GetEnergyMeterPulses,
+    // --- 6. Modbus RS485 & Energy Management ---
+    /// `EM?` – Queries 3-bit Energy Management / input mask (replies with 3 lines).
+    GetEnergyManagementMask,
     /// `ModbusAddr?` – Queries station's Modbus RS485 slave address.
     GetModbusAddress,
     /// `ModbusAddr:<addr>` – Sets station's Modbus RS485 slave address.
     SetModbusAddress(u8),
-    /// `ModbusEMA?` – Queries external Energy Meter Modbus address.
-    GetModbusEnergyMeterAddress,
-    /// `ModbusEMA:<addr>` – Sets external Energy Meter Modbus address.
-    SetModbusEnergyMeterAddress(u8),
-    /// `ModbusDLMA?` – Queries Dynamic Load Management (DLM) Modbus address.
-    GetModbusDlmAddress,
-    /// `ModbusDLMA:<addr>` – Sets Dynamic Load Management (DLM) Modbus address.
-    SetModbusDlmAddress(u8),
+    /// `ModbusEMA?` – Queries whether external Energy Meter polling (Modbus addr 5) is enabled (`0` or `1`).
+    GetModbusEnergyMeterEnabled,
+    /// `ModbusEMA:<0/1>` – Enables (`1`) or disables (`0`) external Energy Meter polling.
+    SetModbusEnergyMeterEnabled(bool),
+    /// `ModbusDLMA?` – Queries whether Dynamic Load Management (DLM) via Modbus is enabled (`0` or `1`).
+    GetModbusDlmEnabled,
+    /// `ModbusDLMA:<0/1>` – Enables (`1`) or disables (`0`) Dynamic Load Management (DLM) via Modbus.
+    SetModbusDlmEnabled(bool),
     /// `ModbusP?` – Queries Modbus parity (`0` = None, `1` = Even, `2` = Odd).
     GetModbusParity,
     /// `ModbusP:<0/1/2>` – Sets Modbus parity.
@@ -244,19 +244,21 @@ pub enum Command {
     SetRfidEnabled(bool),
     /// `RFIDUM?` – Queries RFID User Management mode (`RFIDUM:0` or `1`).
     GetRfidUserManagement,
-    /// `RFIDA?` – Queries whether badge authorization is currently granted (`RFIDA:0` or `1`).
+    /// `RFIDUMOK` / `RFIDUMNOK` – Enables/disables online supervisor badge validation (`RFIDUM:1` / `0`).
+    SetRfidUserManagement(bool),
+    /// `RFIDA?` – Queries whether badge authorization is currently granted (`RFIDA:0..5`).
     GetRfidAuthorization,
-    /// `RFIDA:<tag>` – Transmits RFID authorization status/tag.
+    /// `RFIDA:<tag>` – Transmits RFID authorization status (`0..5`).
     SendRfidAuthorization(String),
     /// `RFIDId:<id>` – Transmits badge identifier.
     SendRfidId(String),
-    /// `RFIDIdLP:<id>` – Enrols a permanent local pass RFID badge.
+    /// `RFIDIdLP:<id>` – Transmits badge UID read in `State:A` for local pass handling.
     EnrollRfidLocalPass(String),
     /// `OCPPPS?` – Queries OCPP Power Status (`OCPPStatus:`).
     GetOcppParameters,
-    /// `OCPPPACOK` / `OCPPPACNOK` – Enables/disables OCPP Plug & Charge.
+    /// `OCPPPACOK` / `OCPPPACNOK` – Enables/disables OCPP Plug & Charge (no serial reply).
     SetPlugAndCharge(bool),
-    /// `OCPPCTO:<sec>` – Configures OCPP connection timeout in seconds.
+    /// `OCPPCTO:<ms>` – Configures OCPP connection timeout in milliseconds.
     SetOcppConnectionTimeout(u32),
 
     // --- 8. Bluetooth Controller (BLE) ---
@@ -292,8 +294,8 @@ impl Command {
     }
 
     /// Builds a `CCS:XX` command while validating the current range.
-    pub fn set_schuko_current_limit(amps: u8) -> Result<Self, CommandError> {
-        Self::validate_current(amps).map(Command::SetSchukoCurrentLimit)
+    pub fn set_supervisor_current_limit(amps: u8) -> Result<Self, CommandError> {
+        Self::validate_current(amps).map(Command::SetSupervisorCurrentLimit)
     }
 
     /// Builds a `CCSL<1..4>?` query while validating the sub-line index (`1..=4`).
@@ -345,7 +347,7 @@ impl Command {
             Command::GetCurrentLimit => "CC?".into(),
             Command::SetDirectCurrentLimit(a) => format!("CC:{:02}", a),
             Command::GetSupervisorCurrentLimit => "CCS?".into(),
-            Command::SetSchukoCurrentLimit(a) => format!("CCS:{:02}", a),
+            Command::SetSupervisorCurrentLimit(a) => format!("CCS:{:02}", a),
             Command::GetEliotCurrentLimit => "CCEl?".into(),
             Command::SetCurrentLimit(a) => format!("CCEl:{:02}", a),
             Command::GetConsolidatedCurrentLimit => "CCCo?".into(),
@@ -380,17 +382,18 @@ impl Command {
             Command::SetFunctioningMode(m) => format!("FM:{}", m.code()),
             Command::GetExternalSignal => "FM2?".into(),
             Command::SetExternalSignal(on) => format!("FM2:{}", *on as u8),
-            Command::GetEmergencyStop => "CAU?".into(),
-            Command::SetEmergencyStop(on) => ok_nok("CAU", *on),
+            Command::SetExternalSignalMask(mask) => format!("FM2:{}", mask & 0x03),
+            Command::GetChargeAuthorization => "CAU?".into(),
+            Command::SetChargeAuthorization(on) => ok_nok("CAU", *on),
 
-            // 6. Modbus RS485 & Energy Metering
-            Command::GetEnergyMeterPulses => "EM?".into(),
+            // 6. Modbus RS485 & Energy Management
+            Command::GetEnergyManagementMask => "EM?".into(),
             Command::GetModbusAddress => "ModbusAddr?".into(),
             Command::SetModbusAddress(addr) => format!("ModbusAddr:{}", addr),
-            Command::GetModbusEnergyMeterAddress => "ModbusEMA?".into(),
-            Command::SetModbusEnergyMeterAddress(addr) => format!("ModbusEMA:{}", addr),
-            Command::GetModbusDlmAddress => "ModbusDLMA?".into(),
-            Command::SetModbusDlmAddress(addr) => format!("ModbusDLMA:{}", addr),
+            Command::GetModbusEnergyMeterEnabled => "ModbusEMA?".into(),
+            Command::SetModbusEnergyMeterEnabled(on) => format!("ModbusEMA:{}", *on as u8),
+            Command::GetModbusDlmEnabled => "ModbusDLMA?".into(),
+            Command::SetModbusDlmEnabled(on) => format!("ModbusDLMA:{}", *on as u8),
             Command::GetModbusParity => "ModbusP?".into(),
             Command::SetModbusParity(p) => format!("ModbusP:{}", p),
             Command::GetModbusBaudRate => "ModbusB?".into(),
@@ -402,6 +405,7 @@ impl Command {
             Command::GetRfidEnabled => "RFIDE?".into(),
             Command::SetRfidEnabled(on) => ok_nok("RFIDE", *on),
             Command::GetRfidUserManagement => "RFIDUM?".into(),
+            Command::SetRfidUserManagement(on) => ok_nok("RFIDUM", *on),
             Command::GetRfidAuthorization => "RFIDA?".into(),
             Command::SendRfidAuthorization(s) => format!("RFIDA:{}", s),
             Command::SendRfidId(id) => format!("RFIDId:{}", id),
@@ -461,7 +465,7 @@ impl Command {
             Command::GetCurrentLimit => Some("CC:"),
             Command::SetDirectCurrentLimit(_) => Some("CC:"),
             Command::GetSupervisorCurrentLimit => Some("CCS:"),
-            Command::SetSchukoCurrentLimit(_) => Some("CCS:"),
+            Command::SetSupervisorCurrentLimit(_) => Some("CCS:"),
             Command::GetEliotCurrentLimit => Some("CCEl:"),
             Command::SetCurrentLimit(_) => Some("CCEl:"),
             Command::GetConsolidatedCurrentLimit => Some("CCCo:"),
@@ -505,18 +509,19 @@ impl Command {
             Command::SetFunctioningMode(_) => Some("FM:"),
             Command::GetExternalSignal => Some("FM2:"),
             Command::SetExternalSignal(_) => Some("FM2:"),
-            Command::GetEmergencyStop => Some("CAU:"),
-            Command::SetEmergencyStop(true) => Some("CAU:1"),
-            Command::SetEmergencyStop(false) => Some("CAU:0"),
+            Command::SetExternalSignalMask(_) => Some("FM2:"),
+            Command::GetChargeAuthorization => Some("CAU:"),
+            Command::SetChargeAuthorization(true) => Some("CAU:1"),
+            Command::SetChargeAuthorization(false) => Some("CAU:0"),
 
-            // 6. Modbus RS485 & Energy Metering
-            Command::GetEnergyMeterPulses => Some("EM:"),
+            // 6. Modbus RS485 & Energy Management
+            Command::GetEnergyManagementMask => Some("EM:"),
             Command::GetModbusAddress => Some("ModbusAddr:"),
             Command::SetModbusAddress(_) => Some("ModbusAddr:"),
-            Command::GetModbusEnergyMeterAddress => Some("ModbusEMA:"),
-            Command::SetModbusEnergyMeterAddress(_) => Some("ModbusEMA:"),
-            Command::GetModbusDlmAddress => Some("ModbusDLMA:"),
-            Command::SetModbusDlmAddress(_) => Some("ModbusDLMA:"),
+            Command::GetModbusEnergyMeterEnabled => Some("ModbusEMA:"),
+            Command::SetModbusEnergyMeterEnabled(_) => Some("ModbusEMA:"),
+            Command::GetModbusDlmEnabled => Some("ModbusDLMA:"),
+            Command::SetModbusDlmEnabled(_) => Some("ModbusDLMA:"),
             Command::GetModbusParity => Some("ModbusP:"),
             Command::SetModbusParity(_) => Some("ModbusP:"),
             Command::GetModbusBaudRate => Some("ModbusB:"),
@@ -529,12 +534,14 @@ impl Command {
             Command::SetRfidEnabled(true) => Some("RFIDE:1"),
             Command::SetRfidEnabled(false) => Some("RFIDE:0"),
             Command::GetRfidUserManagement => Some("RFIDUM:"),
+            Command::SetRfidUserManagement(true) => Some("RFIDUM:1"),
+            Command::SetRfidUserManagement(false) => Some("RFIDUM:0"),
             Command::GetRfidAuthorization => Some("RFIDA:"),
             Command::SendRfidAuthorization(_) => Some("RFIDA:"),
             Command::SendRfidId(_) => Some("RFIDId:"),
             Command::EnrollRfidLocalPass(_) => Some("RFIDIdLP:"),
             Command::GetOcppParameters => Some("OCPPStatus:"),
-            Command::SetPlugAndCharge(_) => Some("OCPPPAC:"),
+            Command::SetPlugAndCharge(_) => None,
             Command::SetOcppConnectionTimeout(_) => Some("OCPPCTO:"),
 
             // 8. Bluetooth Controller (BLE)
@@ -563,7 +570,8 @@ impl Command {
     /// Special cases:
     /// - `SBOK` (`Command::SetStartButton(true)`): normally acknowledged by `SB:`, but when the
     ///   charging station is in `State:A` with no vehicle connected, the ATmega returns `SBF:0`.
-    /// - `SOK` / `SNOK` (`Command::SetSleep`): acknowledged by `SOK:ok*`, `SNOK:ok*`, or `Slp:`.
+    /// - `SOK` / `SNOK` (`Command::SetSleep`): acknowledged by `Slp:`.
+    /// - `RFIDA:<val>` (`Command::SendRfidAuthorization`): acknowledged by `RFIDA:` or `RFIDAF:`.
     /// - `OCPPPS?` (`Command::GetOcppParameters`): acknowledged by `OCPPStatus:` or `OCPPPS:`.
     pub fn matches_response(&self, rx_line: &str) -> bool {
         match self {
@@ -574,16 +582,15 @@ impl Command {
             Command::SetStartButton(true) => {
                 rx_line.starts_with("SB:") || rx_line.starts_with("SBF:")
             }
-            Command::SetExternalSignal(_) => {
+            Command::SetExternalSignal(_) | Command::SetExternalSignalMask(_) => {
                 rx_line.starts_with("FM2:") || rx_line.starts_with("FM2F:")
             }
             Command::RaspberryPiModeOk => {
                 rx_line.starts_with("DIP1:") || rx_line.starts_with("Side:")
             }
-            Command::SetSleep(_) => {
-                rx_line.starts_with("Slp:")
-                    || rx_line.starts_with("SOK:")
-                    || rx_line.starts_with("SNOK:")
+            Command::SetSleep(_) => rx_line.starts_with("Slp:"),
+            Command::SendRfidAuthorization(_) => {
+                rx_line.starts_with("RFIDA:") || rx_line.starts_with("RFIDAF:")
             }
             Command::GetOcppParameters => {
                 rx_line.starts_with("OCPPStatus:") || rx_line.starts_with("OCPPPS:")
@@ -643,11 +650,9 @@ impl Command {
             Command::GetPlanningAutoForceCharge,
             Command::GetDeferredStartDelay,
             Command::GetSleep,
-            Command::GetEmergencyStop,
-            // 5. Metering, RFID, Modbus & OCPP
-            Command::GetEnergyMeterPulses,
-            Command::GetModbusEnergyMeterAddress,
-            Command::GetModbusDlmAddress,
+            // 5. RFID, Modbus & OCPP (EM? and CAU? intentionally excluded)
+            Command::GetModbusEnergyMeterEnabled,
+            Command::GetModbusDlmEnabled,
             Command::GetRfidEnabled,
             Command::GetRfidUserManagement,
             Command::GetOcppParameters,
@@ -687,8 +692,8 @@ mod tests {
         assert_eq!(Command::GetPlanningAutoForceCharge.encode(), "PAFC?\r");
         assert_eq!(Command::GetDeferredStartDelay.encode(), "Dec?\r");
         assert_eq!(Command::GetSleep.encode(), "Slp?\r");
-        assert_eq!(Command::GetEmergencyStop.encode(), "CAU?\r");
-        assert_eq!(Command::GetEnergyMeterPulses.encode(), "EM?\r");
+        assert_eq!(Command::GetChargeAuthorization.encode(), "CAU?\r");
+        assert_eq!(Command::GetEnergyManagementMask.encode(), "EM?\r");
         assert_eq!(Command::GetModbusAddress.encode(), "ModbusAddr?\r");
         assert_eq!(Command::GetRfidEnabled.encode(), "RFIDE?\r");
         assert_eq!(Command::GetRfidUserManagement.encode(), "RFIDUM?\r");
@@ -709,12 +714,15 @@ mod tests {
         assert_eq!(Command::SetPlanningAutoForceCharge(false).as_frame(), "PAFCNOK");
         assert_eq!(Command::SetSleep(true).as_frame(), "SOK");
         assert_eq!(Command::SetSleep(false).as_frame(), "SNOK");
-        assert_eq!(Command::SetEmergencyStop(true).as_frame(), "CAUOK");
-        assert_eq!(Command::SetEmergencyStop(false).as_frame(), "CAUNOK");
+        assert_eq!(Command::SetChargeAuthorization(true).as_frame(), "CAUOK");
+        assert_eq!(Command::SetChargeAuthorization(false).as_frame(), "CAUNOK");
         assert_eq!(Command::SetRfidEnabled(true).as_frame(), "RFIDEOK");
         assert_eq!(Command::SetRfidEnabled(false).as_frame(), "RFIDENOK");
+        assert_eq!(Command::SetRfidUserManagement(true).as_frame(), "RFIDUMOK");
+        assert_eq!(Command::SetRfidUserManagement(false).as_frame(), "RFIDUMNOK");
         assert_eq!(Command::SetBluetooth(false).as_frame(), "BTNOK");
         assert_eq!(Command::SetPlugAndCharge(true).as_frame(), "OCPPPACOK");
+        assert!(!Command::SetPlugAndCharge(true).expects_response());
     }
 
     #[test]
@@ -722,19 +730,20 @@ mod tests {
         assert_eq!(Command::SetCurrentLimit(7).as_frame(), "CCEl:07");
         assert_eq!(Command::SetCurrentLimit(16).as_frame(), "CCEl:16");
         assert_eq!(Command::SetDirectCurrentLimit(20).as_frame(), "CC:20");
-        assert_eq!(Command::SetSchukoCurrentLimit(10).as_frame(), "CCS:10");
+        assert_eq!(Command::SetSupervisorCurrentLimit(10).as_frame(), "CCS:10");
         assert_eq!(Command::GetSubLineCurrentLimit(1).as_frame(), "CCSL1?");
         assert_eq!(Command::GetSubLineCurrentLimit(4).as_frame(), "CCSL4?");
         assert_eq!(Command::SetDeferredStartDelay(120).as_frame(), "Dec:120");
         assert_eq!(Command::SetModbusAddress(1).as_frame(), "ModbusAddr:1");
-        assert_eq!(Command::SetModbusEnergyMeterAddress(2).as_frame(), "ModbusEMA:2");
-        assert_eq!(Command::SetModbusDlmAddress(3).as_frame(), "ModbusDLMA:3");
+        assert_eq!(Command::SetModbusEnergyMeterEnabled(true).as_frame(), "ModbusEMA:1");
+        assert_eq!(Command::SetModbusDlmEnabled(false).as_frame(), "ModbusDLMA:0");
         assert_eq!(Command::SetModbusParity(0).as_frame(), "ModbusP:0");
         assert_eq!(Command::SetModbusBaudRate(2).as_frame(), "ModbusB:2");
         assert_eq!(Command::SetModbusStopBits(1).as_frame(), "ModbusSB:1");
         assert_eq!(Command::EnrollRfidLocalPass("AABBCC".into()).as_frame(), "RFIDIdLP:AABBCC");
         assert_eq!(Command::SetTicTestMode(true).as_frame(), "TICTM:1");
         assert_eq!(Command::SetExternalSignal(false).as_frame(), "FM2:0");
+        assert_eq!(Command::SetExternalSignalMask(3).as_frame(), "FM2:3");
         assert_eq!(
             Command::SetFunctioningMode(FunctioningMode::DirectCharge).as_frame(),
             "FM:1"
@@ -745,8 +754,12 @@ mod tests {
 
     #[test]
     fn validates_current_and_subline_ranges() {
-        assert!(Command::set_current_limit(6).is_err());
+        assert!(Command::set_current_limit(5).is_err());
         assert!(Command::set_current_limit(33).is_err());
+        assert_eq!(
+            Command::set_current_limit(6),
+            Ok(Command::SetCurrentLimit(6))
+        );
         assert_eq!(
             Command::set_current_limit(16),
             Ok(Command::SetCurrentLimit(16))
@@ -765,10 +778,11 @@ mod tests {
 
     #[test]
     fn functioning_mode_roundtrip() {
-        for code in 1..=6u8 {
+        for code in [1u8, 2, 4, 5, 6] {
             let m = FunctioningMode::from_code(&code.to_string()).unwrap();
             assert_eq!(m.code(), code);
         }
+        assert!(FunctioningMode::from_code("3").is_none());
         assert!(FunctioningMode::from_code("7").is_none());
     }
 
@@ -795,13 +809,21 @@ mod tests {
     #[test]
     fn sleep_and_ocpp_status_match_documented_responses() {
         let sok = Command::SetSleep(true);
-        assert!(sok.matches_response("SOK:ok*"));
         assert!(sok.matches_response("Slp:1"));
+        assert!(!sok.matches_response("SOK:ok*"));
         assert!(!sok.matches_response("State:A"));
+
+        let rfida = Command::SendRfidAuthorization("1".into());
+        assert!(rfida.matches_response("RFIDA:1"));
+        assert!(rfida.matches_response("RFIDAF:2"));
 
         let ocpp = Command::GetOcppParameters;
         assert!(ocpp.matches_response("OCPPStatus:Available"));
         assert!(ocpp.matches_response("OCPPPS:1"));
+
+        let startup = Command::startup_queries();
+        assert!(!startup.contains(&Command::GetChargeAuthorization));
+        assert!(!startup.contains(&Command::GetEnergyManagementMask));
     }
 
     #[test]
