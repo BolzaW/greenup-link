@@ -677,9 +677,7 @@ async function fetchTelemetry() {
 
         window.lastConnector = conn;
 
-        const appliedAmps = conn.control.applied_limit_amps ?? conn.control.setpoint_amps;
         const setpointAmps = conn.control.setpoint_amps;
-        window.lastAppliedLimitAmps = appliedAmps;
         window.lastSetpointAmps = setpointAmps;
 
         // Adapter object so existing UI helpers & session logic retain seamless access
@@ -693,7 +691,6 @@ async function fetchTelemetry() {
             energy: conn.meter.energy_total_wh,
             error_code: conn.status.error_code,
             eliot_limit_amps: conn.control.setpoint_amps,
-            applied_limit_amps: appliedAmps,
             greenup_state: conn.status.raw_code,
             iec_state: conn.status.iec,
             charge_authorized: conn.control.charge_authorized,
@@ -713,9 +710,6 @@ async function fetchTelemetry() {
             valCurrent.innerText = '--';
             valPower.innerText = '--';
             valEnergy.innerText = '--';
-            if (typeof updateAppliedLimitBadge === 'function') {
-                updateAppliedLimitBadge(null, null);
-            }
         } else {
             valVoltage.innerText = conn.meter.voltage_v.toFixed(1);
             if (conn.meter.voltage_source === 'external') {
@@ -744,10 +738,6 @@ async function fetchTelemetry() {
         if (conn.control.setpoint_amps && !isDraggingSlider && !isActionPending) {
             slider.value = conn.control.setpoint_amps;
             lblSlider.innerText = conn.control.setpoint_amps + " A";
-        }
-        if (typeof updateAppliedLimitBadge === 'function') {
-            const currentTarget = isDraggingSlider ? Number(slider.value) : conn.control.setpoint_amps;
-            updateAppliedLimitBadge(appliedAmps, currentTarget);
         }
 
         lastReportedState = conn.status.raw_code;
@@ -1098,12 +1088,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnCopy) {
         btnCopy.addEventListener('click', async () => {
             const cmdEl = document.getElementById('updModalSshCmd');
+            const iconCopy = document.getElementById('iconUpdateCopy');
+            const iconCheck = document.getElementById('iconUpdateCopyCheck');
             if (!cmdEl) return;
             try {
                 await navigator.clipboard.writeText(cmdEl.innerText);
-                const old = btnCopy.innerText;
-                btnCopy.innerText = typeof t === 'function' ? t('update.btn_copied') : 'Copié !';
-                setTimeout(() => { btnCopy.innerText = old; }, 1500);
+                if (iconCopy) iconCopy.classList.add('hidden');
+                if (iconCheck) iconCheck.classList.remove('hidden');
+                setTimeout(() => {
+                    if (iconCheck) iconCheck.classList.add('hidden');
+                    if (iconCopy) iconCopy.classList.remove('hidden');
+                }, 1500);
             } catch (_) {}
         });
     }

@@ -579,7 +579,7 @@ impl Command {
                 let trimmed = rx_line.trim();
                 trimmed.starts_with("pong")
             }
-            Command::SetStartButton(true) => {
+            Command::SetStartButton(_) => {
                 rx_line.starts_with("SB:") || rx_line.starts_with("SBF:")
             }
             Command::SetExternalSignal(_) | Command::SetExternalSignalMask(_) => {
@@ -798,7 +798,8 @@ mod tests {
         let sbnok = Command::SetStartButton(false);
         assert!(sbnok.matches_response("SB:0"));
         assert!(sbnok.matches_response("SB:1"));
-        assert!(!sbnok.matches_response("SBF:0"));
+        assert!(sbnok.matches_response("SBF:0"));
+        assert!(sbnok.matches_response("SBF:1"));
 
         let fm2 = Command::SetExternalSignal(true);
         assert!(fm2.matches_response("FM2:1"));

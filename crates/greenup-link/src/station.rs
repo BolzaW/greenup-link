@@ -24,7 +24,7 @@ pub use crate::telemetry::{
 use greenup_driver::{
     logger, DriverHandle, DriverSnapshot, SerialOptions, SharedDriver, TicStartError,
 };
-use greenup_protocol::Command;
+use greenup_protocol::{commands::FunctioningMode, Command};
 
 #[derive(Default, Debug)]
 struct SyncCursor {
@@ -742,6 +742,8 @@ pub enum ChargeAction {
     Enable,
     /// Universal supervisor disable (`DNOK` + `FM2:1`), respecting `local_override`.
     Disable,
+    /// Return to standalone / direct charge behavior: conditionally clears all locks and overrides without modifying `CC`.
+    Standalone,
     /// Authorize / resume charging (`CAUOK`). Keeps cable locked and session open.
     Authorize,
     /// Cleanly suspend charging (`CAUNOK` -> `State:W` -> `State:B`/`J`/`F`). Keeps cable locked and session open.
@@ -784,6 +786,7 @@ impl ChargeAction {
         match action.trim() {
             "enable" => Some(Self::Enable),
             "disable" => Some(Self::Disable),
+            "standalone" | "autonomous" => Some(Self::Standalone),
             "authorize" => Some(Self::Authorize),
             "suspend" => Some(Self::Suspend),
             "start_session" => Some(Self::StartSession),
@@ -825,6 +828,10 @@ impl ChargeAction {
             Self::Disable => (
                 "🛑 Charge disable (DNOK + FM2:1)",
                 vec![Command::SetDerogation(false), Command::SetExternalSignal(true)],
+            ),
+            Self::Standalone => (
+                "🔓 Standalone charge (clear locks & overrides)",
+                vec![],
             ),
             Self::Authorize => (
                 "▶ Charge authorize (CAUOK)",
@@ -968,6 +975,72 @@ pub async fn execute_charge_action(
             }
             if raw_atmega.dom_2pf == Some(true) {
                 cmds.push(Command::ForceDomestic(false));
+            }
+        }
+        ChargeAction::Standalone => {
+            let had_local_override = point
+                .telemetry
+                .lock()
+                .map(|t| t.local_override)
+                .unwrap_or(false);
+            point.clear_local_override();
+
+            // Only issue FM:1 if trapped in Planning/Modbus/OCPP (avoids EEPROM write & CC reset in FM:1/2)
+            let prev_cc = raw_atmega.cc;
+            let exited_special_fm = matches!(
+                raw_atmega.fm.as_deref(),
+                Some("4") | Some("5") | Some("6")
+            );
+            if exited_special_fm {
+                cmds.push(Command::SetFunctioningMode(FunctioningMode::DirectCharge));
+            }
+
+            if raw_atmega.fm2 != Some(false) {
+                cmds.push(Command::SetExternalSignal(false));
+            }
+            if raw_atmega.d != Some(false) || had_local_override {
+                cmds.push(Command::SetDerogation(false));
+            }
+            if raw_atmega.t2f == Some(true) {
+                cmds.push(Command::ForceType2(false));
+            }
+            if raw_atmega.dom_2pf == Some(true) {
+                cmds.push(Command::ForceDomestic(false));
+            }
+            if raw_atmega.t2c == Some(false) {
+                cmds.push(Command::AuthorizeType2(true));
+            }
+            if raw_atmega.dom_2pc == Some(false) {
+                cmds.push(Command::AuthorizeDomestic(true));
+            }
+            if !point.is_tic_active() && raw_atmega.cau == Some(false) {
+                cmds.push(Command::SetChargeAuthorization(true));
+            }
+            if raw_atmega.sb == Some(false)
+                || matches!(raw_atmega.state.as_deref(), Some("M") | Some("P"))
+            {
+                cmds.push(Command::SetStartButton(true));
+            }
+            if raw_atmega.state.as_deref() == Some("Y") {
+                cmds.push(Command::SetSleep(false));
+            }
+            if raw_atmega.pa == Some(true) {
+                cmds.push(Command::SetPlanningAuthorization(false));
+            }
+            if raw_atmega.pafc == Some(true) {
+                cmds.push(Command::SetPlanningAutoForceCharge(false));
+            }
+            if raw_atmega.dec.is_some_and(|d| d > 0) {
+                cmds.push(Command::SetDeferredStartDelay(0));
+            }
+
+            // Preserve CC setpoint if FM:1 had to be issued (since FM:1 resets CC to CCS internally)
+            if exited_special_fm {
+                if let Some(cc_val) = prev_cc {
+                    if cc_val > 0 && cc_val < 32 {
+                        cmds.push(Command::SetDirectCurrentLimit(cc_val as u8));
+                    }
+                }
             }
         }
         _ => {}
@@ -1374,8 +1447,7 @@ mod tests {
         assert_eq!(snap.station.serial_number, "SIM01");
         assert!(snap.station.capabilities.as_ref().unwrap().has_tic);
         assert_eq!(snap.connectors[0].status.ocpp, OcppChargePointStatus::Available);
-        assert_eq!(snap.connectors[0].control.setpoint_amps, 16);
-        assert_eq!(snap.connectors[0].control.applied_limit_amps, 20);
+        assert_eq!(snap.connectors[0].control.setpoint_amps, 20);
     }
 
     #[tokio::test]
@@ -1632,6 +1704,96 @@ mod tests {
         });
         state.sync_from_driver();
         assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(32));
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_standalone_action_conditional_reset() {
+        assert_eq!(ChargeAction::from_api_str("standalone"), Some(ChargeAction::Standalone));
+        assert_eq!(ChargeAction::from_mqtt_str("standalone"), Some(ChargeAction::Standalone));
+
+        let (tx, mut rx) = mpsc::channel(32);
+        let state = Arc::new(AppState::new(tx));
+
+        // 1. Clean nominal state (FM:1, FM2:0, D:0, T2C:1, 2PC:1, T2F:0, 2PF:0, CAU:1, SB:1) -> sends zero commands
+        state.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            raw.state = Some("A".to_string());
+            raw.fm = Some("1".to_string());
+            raw.fm2 = Some(false);
+            raw.d = Some(false);
+            raw.t2c = Some(true);
+            raw.dom_2pc = Some(true);
+            raw.t2f = Some(false);
+            raw.dom_2pf = Some(false);
+            raw.cau = Some(true);
+            raw.sb = Some(true);
+            raw.pa = Some(false);
+            raw.pafc = Some(false);
+            raw.dec = Some(0);
+        });
+        let outcome = execute_charge_action(&state, ChargeAction::Standalone, "TEST").await;
+        assert_eq!(outcome, ChargeActionOutcome::Executed);
+        assert!(rx.try_recv().is_err());
+
+        // 2. All locks/overrides active (including FM:4, CAU=0 without TIC, Dec:180) in State:B -> restores everything + preserves CC=16
+        state.driver.update_raw(|raw| {
+            raw.state = Some("B".to_string());
+            raw.fm = Some("4".to_string());
+            raw.fm2 = Some(true);
+            raw.d = Some(true);
+            raw.t2f = Some(true);
+            raw.dom_2pf = Some(true);
+            raw.t2c = Some(false);
+            raw.dom_2pc = Some(false);
+            raw.cau = Some(false);
+            raw.sb = Some(false);
+            raw.pa = Some(true);
+            raw.pafc = Some(true);
+            raw.dec = Some(180);
+            raw.cc = Some(16);
+        });
+        state.sync_from_driver();
+        while rx.try_recv().is_ok() {}
+
+        let outcome = execute_charge_action(&state, ChargeAction::Standalone, "TEST").await;
+        assert_eq!(outcome, ChargeActionOutcome::Executed);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetFunctioningMode(FunctioningMode::DirectCharge));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::ForceType2(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::ForceDomestic(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::AuthorizeType2(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::AuthorizeDomestic(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetChargeAuthorization(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetStartButton(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetPlanningAuthorization(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetPlanningAutoForceCharge(false));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDeferredStartDelay(0));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDirectCurrentLimit(16));
+        assert!(rx.try_recv().is_err());
+
+        // 3. Sleep State:Y -> sends SNOK
+        state.driver.update_raw(|raw| {
+            raw.state = Some("Y".to_string());
+            raw.fm = Some("1".to_string());
+            raw.fm2 = Some(false);
+            raw.d = Some(false);
+            raw.t2f = Some(false);
+            raw.dom_2pf = Some(false);
+            raw.t2c = Some(true);
+            raw.dom_2pc = Some(true);
+            raw.cau = Some(true);
+            raw.sb = Some(true);
+            raw.pa = Some(false);
+            raw.pafc = Some(false);
+            raw.dec = Some(0);
+        });
+        state.sync_from_driver();
+        while rx.try_recv().is_ok() {}
+        let outcome = execute_charge_action(&state, ChargeAction::Standalone, "TEST").await;
+        assert_eq!(outcome, ChargeActionOutcome::Executed);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetSleep(false));
         assert!(rx.try_recv().is_err());
     }
 }

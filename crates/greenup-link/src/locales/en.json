@@ -82,6 +82,8 @@
     "setpoint_limit_tooltip": "Current setpoint requested by supervisor (CCEl)",
     "enable": "ENABLE",
     "disable": "DISABLE",
+    "standalone": "STANDALONE",
+    "standalone_tooltip": "Standalone charge: clears all charge locks and overrides",
     "pause": "PAUSE",
     "resume": "RESUME",
     "local_mode_notice": "Sniffer mode (listen-only): station operates autonomously. Commands are locked."

@@ -142,7 +142,6 @@ Three standard authentication methods are supported simultaneously against the s
         },
         "control": {
           "setpoint_amps": 16,
-          "applied_limit_amps": 16,
           "min_allowed_amps": 7,
           "max_hardware_amps": 32,
           "charge_authorized": true,
@@ -242,7 +241,6 @@ Three standard authentication methods are supported simultaneously against the s
     },
     "control": {
       "setpoint_amps": 16,
-      "applied_limit_amps": 16,
       "min_allowed_amps": 7,
       "max_hardware_amps": 32,
       "charge_authorized": true,
@@ -394,6 +392,7 @@ Three standard authentication methods are supported simultaneously against the s
 ##### 7.1 Universal Adaptive Supervisor Control (`FM2` + `D`) — *Recommended for EMS / EVCC / Home Assistant*
 - **`enable`** (`FM2:0` + `DOK` + adaptive unblock): Clears external dry-contact conditioning (`FM2:0`) and activates derogation (`DOK`). Automatically adds `T2COK` if Type 2 was disabled (`T2C:0`), `2PCOK` if domestic was disabled (`2PC:0`), and `CAUOK` if `CAU:0` while TIC is inactive. Overrides physical Linky TIC Peak Hours (HP) while keeping autonomous TIC load-shedding (`CCTIC`) active.
 - **`disable`** (`DNOK` + `FM2:1` + adaptive unforce): Clears derogation (`DNOK`) and asserts Contact 1 conditioning (`FM2:1`), ramping down via `State:W` and holding the vehicle locked in `State:B`. Automatically adds `T2FNOK` / `2PFNOK` if a forced override was active. If `local_override` (physical front-button long press) is active within the `local_override_disable_lock_secs` window, returns HTTP `200 OK` with `{ "status": "ignored", "reason": "local_override_active", "local_override": true, "lock_remaining_secs": ... }`.
+- **`standalone`** *(alias `autonomous`)*: Returns the station to native standalone / direct charging behavior without altering the `CC` current limit. Conditionally emits only the commands needed to clear active locks or overrides: `FM2:0` (if `FM2 != 0`), `DNOK` (if `D != 0` or `local_override`), `T2FNOK` / `2PFNOK` (if forced), `T2COK` / `2PCOK` (if disabled), `CAUOK` (if `CAU == 0` and TIC inactive), `SBOK` (if stopped in `State:M`/`P`), `SNOK` (if sleeping in `State:Y`), `PANOK` / `PAFCNOK` (if planning flags set), `Dec:0` (if deferred timer active), and `FM:1` (only if trapped in `FM:4`/`5`/`6`, preserving `CC`). Mapped to the Web UI **Autonome / Standalone** button.
 
 ##### 7.2 Clean Charge Suspension & Authorization (`CAU`) — *Session & Lock Preserved*
 - **`suspend`** (`CAUNOK`): Cleanly suspends charging (`State:W` $\le 6.1\text{ s}$ $\rightarrow$ `State:B` / `State:J` / `State:F`) without closing the ATmega session or unlocking the Type 2 cable. Blocks charging even if a physical Off-Peak dry contact (pin 27) or `DOK` is active.
@@ -423,7 +422,7 @@ Three standard authentication methods are supported simultaneously against the s
 - **`wake`** (`SNOK`): Wakes the station from deep sleep (`State:Y` $\rightarrow$ `State:A`).
 
 > [!NOTE]
-> Legacy `"pause"` and `"resume"` actions have been removed; use `"suspend"` / `"authorize"` for clean in-session pause/resume (cable locked) or `"stop_session"` / `"start_session"` to simulate the physical front Stop/Start button (session closed & cable unlocked, used by the Web UI Pause/Resume button). Note that `CAU` (`"suspend"` / `"authorize"`) is **not compatible** with a connected and active TIC interface and is rejected with `400 Bad Request` (`"not supported while TIC active"`).
+> Legacy `"pause"` and `"resume"` actions have been removed; use `"suspend"` / `"authorize"` for clean in-session pause/resume (cable locked) or `"stop_session"` / `"start_session"` to simulate the physical front Stop/Start button (session closed & cable unlocked). Note that `CAU` (`"suspend"` / `"authorize"`) is **not compatible** with a connected and active TIC interface and is rejected with `400 Bad Request` (`"not supported while TIC active"`).
 
 - **Typical Response**:
   ```json

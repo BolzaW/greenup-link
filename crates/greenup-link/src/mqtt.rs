@@ -373,10 +373,6 @@ pub fn generate_telemetry_topics(
             conn.control.setpoint_amps.to_string(),
         ));
         topics.push((
-            format!("{}/control/applied_limit_amps", prefix),
-            conn.control.applied_limit_amps.to_string(),
-        ));
-        topics.push((
             format!("{}/control/min_allowed_amps", prefix),
             conn.control.min_allowed_amps.to_string(),
         ));
@@ -643,22 +639,6 @@ pub fn generate_ha_discovery_payloads(
             "unique_id": format!("{}_point_{}_ocpp", clean_serial, id),
             "state_topic": format!("{}/status/ocpp_status", prefix),
             "icon": "mdi:ev-station",
-            "availability_topic": availability_topic,
-            "payload_available": "online",
-            "payload_not_available": "offline",
-            "device": device_obj,
-        });
-        configs.push((t, p.to_string()));
-
-        // Applied Limit Sensor
-        let t = format!("homeassistant/sensor/greenup_{}/point_{}_applied_limit/config", clean_serial, id);
-        let p = serde_json::json!({
-            "name": format!("{} Applied Limit", point_label),
-            "unique_id": format!("{}_point_{}_applied_limit", clean_serial, id),
-            "state_topic": format!("{}/control/applied_limit_amps", prefix),
-            "unit_of_measurement": "A",
-            "device_class": "current",
-            "icon": "mdi:speedometer",
             "availability_topic": availability_topic,
             "payload_available": "online",
             "payload_not_available": "offline",
@@ -1249,7 +1229,6 @@ mod tests {
                     },
                     control: ConnectorControl {
                         setpoint_amps: 16,
-                        applied_limit_amps: 16,
                         min_allowed_amps: 7,
                         max_hardware_amps: 32,
                         charge_authorized: true,
@@ -1292,7 +1271,6 @@ mod tests {
         assert_eq!(topic_map.get("greenup/connector/1/status/ocpp_status").map(String::as_str), Some("Available"));
         assert_eq!(topic_map.get("greenup/connector/1/meter/energy_total_kwh").map(String::as_str), Some("12.345"));
         assert_eq!(topic_map.get("greenup/connector/1/control/setpoint_amps").map(String::as_str), Some("16"));
-        assert_eq!(topic_map.get("greenup/connector/1/control/applied_limit_amps").map(String::as_str), Some("16"));
         assert_eq!(topic_map.get("greenup/connector/1/control/charge").map(String::as_str), Some("ON"));
     }
 
@@ -1334,7 +1312,6 @@ mod tests {
                     },
                     control: ConnectorControl {
                         setpoint_amps: 16,
-                        applied_limit_amps: 16,
                         min_allowed_amps: 7,
                         max_hardware_amps: 32,
                         charge_authorized: true,
@@ -1433,7 +1410,6 @@ mod tests {
                     },
                     control: ConnectorControl {
                         setpoint_amps: 16,
-                        applied_limit_amps: 16,
                         min_allowed_amps: 7,
                         max_hardware_amps: 32,
                         charge_authorized: true,
