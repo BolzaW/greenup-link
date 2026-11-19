@@ -50,6 +50,7 @@ Three standard authentication methods are supported simultaneously against the s
 | `POST` | `/api/init` | Relaunch startup sequence |
 | `POST` | `/api/reset` | ATmega board hardware restart (`Reset`) |
 | `POST` | `/api/tic/refresh` | TIC detection (only in `State:A`) |
+| `POST` | `/api/update/check` | Manually check GitHub for a newer Green'Up Link release (30s cooldown) |
 | `POST` | `/api/bluetooth` | Enable / disable Bluetooth |
 | `POST` | `/api/command` | Raw serial command (debug, strictly guarded) |
 
@@ -113,6 +114,15 @@ Three standard authentication methods are supported simultaneously against the s
         "sniffer_mode": false,
         "message": "USB serial link active - Station connected",
         "last_rx_secs_ago": 0
+      },
+      "update": {
+        "status": "up_to_date",
+        "update_available": false,
+        "current_version": "1.1.0-dev",
+        "latest_version": "1.0.0",
+        "release_url": "https://github.com/BolzaW/greenup-link/releases/tag/v1.0.0",
+        "published_at": "2026-11-18T12:00:00Z",
+        "last_checked": "2026-11-19T16:15:00+01:00"
       }
     },
     "connectors": [
@@ -193,6 +203,15 @@ Three standard authentication methods are supported simultaneously against the s
       "sniffer_mode": false,
       "message": "USB serial link active - Station connected",
       "last_rx_secs_ago": 0
+    },
+    "update": {
+      "status": "up_to_date",
+      "update_available": false,
+      "current_version": "1.1.0-dev",
+      "latest_version": "1.0.0",
+      "release_url": "https://github.com/BolzaW/greenup-link/releases/tag/v1.0.0",
+      "published_at": "2026-11-18T12:00:00Z",
+      "last_checked": "2026-11-19T16:15:00+01:00"
     }
   }
   ```
@@ -481,6 +500,34 @@ Three standard authentication methods are supported simultaneously against the s
 - **Typical Response (Success)**:
   ```json
   { "status": "success", "message": "TIC detection started" }
+  ```
+
+---
+
+### 12b. Check for Software Updates
+- **URL**: `/api/update/check`
+- **Method**: `POST`
+- **Description**: Manually queries the GitHub Releases API (`BolzaW/greenup-link`) to compare the running version against the latest published release. Green'Up Link **never downloads or installs binaries automatically**. Subject to a 30-second cooldown between manual requests (`429 Too Many Requests` if called too frequently).
+- **Status Values (`station.update.status`)**:
+  - `unknown`: GitHub unreachable, check disabled (`check_updates = false`), or not yet checked.
+  - `up_to_date`: Running version is up to date (or ahead of the latest release).
+  - `minor_available`: A newer minor or patch release is available (or final release for a `-dev` build).
+  - `major_available`: A newer major release is available.
+- **Typical Response (`200 OK`)**:
+  ```json
+  {
+    "status": "checked",
+    "update": {
+      "status": "minor_available",
+      "update_available": true,
+      "current_version": "1.1.0",
+      "latest_version": "1.2.0",
+      "release_url": "https://github.com/BolzaW/greenup-link/releases/tag/v1.2.0",
+      "published_at": "2026-11-19T14:00:00Z",
+      "release_notes": "...",
+      "last_checked": "2026-11-19T16:15:00+01:00"
+    }
+  }
   ```
 
 ---

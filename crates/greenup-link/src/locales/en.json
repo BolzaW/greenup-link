@@ -241,5 +241,28 @@
     "point_2": "Point 2 (Left)",
     "badge_side_1": "Point 1",
     "badge_side_2": "Point 2"
+  },
+  "update": {
+    "title": "Green'Up Link Update",
+    "status_unknown": "GitHub unreachable",
+    "status_up_to_date": "Up to date",
+    "status_minor_available": "Update available",
+    "status_major_available": "Major update available",
+    "desc_unknown": "Unable to reach GitHub to check the latest release. Local charging supervision is unaffected.",
+    "desc_up_to_date": "You are running the latest available version of Green'Up Link.",
+    "desc_minor_available": "A new minor or patch release is available on GitHub.",
+    "desc_major_available": "A new major release is available on GitHub. Review the release notes before upgrading.",
+    "current_label": "Installed version",
+    "latest_label": "Latest version",
+    "published_label": "Published",
+    "checked_label": "Last checked",
+    "notes_label": "Release notes",
+    "ssh_label": "Manual update (SSH on Raspberry Pi)",
+    "btn_download": "View & Download on GitHub",
+    "btn_check": "Check now",
+    "btn_checking": "Checking...",
+    "btn_close": "Close",
+    "btn_copied": "Copied!",
+    "cooldown_msg": "Please wait {secs}s before checking again."
   }
 }

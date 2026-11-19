@@ -88,6 +88,7 @@ pub fn build_router(station: SharedStation, config: HttpConfig) -> Router {
         .route("/api/init", post(init_sequence))
         .route("/api/reset", post(reset_board))
         .route("/api/tic/refresh", post(refresh_tic))
+        .route("/api/update/check", post(check_updates_handler))
         .route("/api/bluetooth", post(set_bluetooth))
         .route("/api/command", post(send_raw_command))
         .route("/api/voltage", post(set_voltage))
@@ -304,6 +305,32 @@ async fn get_station(
 ) -> impl IntoResponse {
     logger::debug("API", "🔍 GET request /api/station");
     Json(station.station_for_side(query.side))
+}
+
+/// POST /api/update/check
+/// Triggers an immediate GitHub release check (subject to a 30s cooldown).
+async fn check_updates_handler(State(station): State<SharedStation>) -> impl IntoResponse {
+    logger::debug("API", "🔄 POST request /api/update/check");
+    match station.update_manager().check_manual().await {
+        crate::update::ManualCheckResult::Checked(info) => (
+            StatusCode::OK,
+            Json(json!({
+                "status": "checked",
+                "update": info,
+            })),
+        ),
+        crate::update::ManualCheckResult::Cooldown {
+            remaining_secs,
+            info,
+        } => (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({
+                "status": "cooldown",
+                "retry_after_secs": remaining_secs,
+                "update": info,
+            })),
+        ),
+    }
 }
 
 /// GET /api/connectors

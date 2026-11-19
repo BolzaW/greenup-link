@@ -989,14 +989,25 @@ pub async fn execute_charge_action(
 pub struct StationManager {
     pub point1: SharedState,
     pub point2: RwLock<Option<SharedState>>,
+    pub update_manager: Arc<crate::update::UpdateManager>,
 }
 
 impl StationManager {
     pub fn new(point1: SharedState, point2: Option<SharedState>) -> Self {
+        let link_version = point1
+            .info
+            .lock()
+            .map(|i| i.link_version.clone())
+            .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
         Self {
             point1,
             point2: RwLock::new(point2),
+            update_manager: Arc::new(crate::update::UpdateManager::new(&link_version)),
         }
+    }
+
+    pub fn update_manager(&self) -> Arc<crate::update::UpdateManager> {
+        self.update_manager.clone()
     }
 
     /// Attaches the second charge point dynamically after startup.
@@ -1218,6 +1229,7 @@ impl StationManager {
             mac_address: p1_info.mac_address.clone(),
             capabilities: p1_info.capabilities.clone(),
             board_code: p1_info.board_code.clone(),
+            update: self.update_manager.snapshot(),
         };
 
         StationSnapshot {
@@ -1255,6 +1267,7 @@ impl StationManager {
             mac_address: info.mac_address.clone(),
             capabilities: info.capabilities.clone(),
             board_code: info.board_code.clone(),
+            update: self.update_manager.snapshot(),
         }
     }
 }

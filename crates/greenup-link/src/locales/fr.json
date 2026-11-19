@@ -241,5 +241,28 @@
     "point_2": "Point 2 (Gauche)",
     "badge_side_1": "Point 1",
     "badge_side_2": "Point 2"
+  },
+  "update": {
+    "title": "Mise à jour Green'Up Link",
+    "status_unknown": "GitHub inaccessible",
+    "status_up_to_date": "À jour",
+    "status_minor_available": "Mise à jour disponible",
+    "status_major_available": "Mise à jour majeure disponible",
+    "desc_unknown": "Impossible de joindre GitHub pour vérifier la dernière version. Le fonctionnement local de la borne n'est pas affecté.",
+    "desc_up_to_date": "Vous exécutez la dernière version disponible de Green'Up Link.",
+    "desc_minor_available": "Une nouvelle version mineure ou corrective est disponible sur GitHub.",
+    "desc_major_available": "Une nouvelle version majeure est disponible sur GitHub. Consultez les notes de version avant la mise à jour.",
+    "current_label": "Version installée",
+    "latest_label": "Dernière version",
+    "published_label": "Publiée le",
+    "checked_label": "Dernière vérification",
+    "notes_label": "Notes de version",
+    "ssh_label": "Mise à jour manuelle (SSH sur Raspberry Pi)",
+    "btn_download": "Voir & Télécharger sur GitHub",
+    "btn_check": "Vérifier maintenant",
+    "btn_checking": "Vérification...",
+    "btn_close": "Fermer",
+    "btn_copied": "Copié !",
+    "cooldown_msg": "Veuillez patienter {secs}s avant de revérifier."
   }
 }

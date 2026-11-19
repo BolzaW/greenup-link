@@ -73,6 +73,10 @@ sniffer_mode = false
 # - 0   : Never ignore `disable` commands (`local_override` remains informational only).
 local_override_disable_lock_secs = 30
 
+# Check GitHub releases for newer versions of Green'Up Link (read-only check, never auto-downloads).
+# Set to false on isolated offline/IoT VLANs. Default: true
+check_updates = true
+
 [mqtt]
 # Enable or disable the MQTT client:
 # - false : (Default) MQTT client is not started.

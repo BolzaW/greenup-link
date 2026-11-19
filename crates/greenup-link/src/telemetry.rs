@@ -248,6 +248,7 @@ impl Telemetry {
 }
 
 use crate::hardware_specs::HardwareCapabilities;
+use crate::update::UpdateInfo;
 
 #[derive(Default, Serialize, Deserialize, Clone, Debug)]
 pub struct BoardInfo {
@@ -369,6 +370,7 @@ pub struct StationData {
     pub capabilities: Option<HardwareCapabilities>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub board_code: Option<String>,
+    pub update: UpdateInfo,
 }
 
 /// Unified station snapshot aggregating station metadata and all active connectors.

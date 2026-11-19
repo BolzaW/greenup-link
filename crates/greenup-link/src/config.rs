@@ -72,6 +72,10 @@ sniffer_mode = false
 # - 0   : Never ignore `disable` commands (`local_override` remains informational only).
 local_override_disable_lock_secs = 30
 
+# Check GitHub releases for newer versions of Green'Up Link (read-only check, never auto-downloads).
+# Set to false on isolated offline/IoT VLANs. Default: true
+check_updates = true
+
 [mqtt]
 # Enable or disable the MQTT client:
 # - false : (Default) MQTT client is not started.
@@ -177,6 +181,7 @@ impl Default for SerialConfig {
 pub struct StationConfig {
     pub sniffer_mode: bool,
     pub local_override_disable_lock_secs: i64,
+    pub check_updates: bool,
 }
 
 impl Default for StationConfig {
@@ -184,6 +189,7 @@ impl Default for StationConfig {
         Self {
             sniffer_mode: false,
             local_override_disable_lock_secs: 30,
+            check_updates: true,
         }
     }
 }
@@ -386,6 +392,13 @@ impl AppConfig {
                                 if secs >= -1 {
                                     config.station.local_override_disable_lock_secs = secs;
                                 }
+                            }
+                        }
+                        "check_updates" => {
+                            match val.trim().to_lowercase().as_str() {
+                                "true" | "1" | "yes" => config.station.check_updates = true,
+                                "false" | "0" | "no" => config.station.check_updates = false,
+                                _ => {}
                             }
                         }
                         _ => {}

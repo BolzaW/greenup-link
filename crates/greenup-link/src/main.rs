@@ -6,6 +6,7 @@ pub mod mqtt;
 pub mod session;
 pub mod station;
 pub mod telemetry;
+pub mod update;
 
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -285,6 +286,16 @@ async fn main() {
             "⏳ Initializing station hardware (ATmega handshake, queries & Linky TIC)...",
         );
         wait_for_station_initialization(&station, Duration::from_secs(15)).await;
+    }
+
+    // Check GitHub for newer Green'Up Link releases in background after hardware init
+    if app_config.station.check_updates {
+        update::spawn_update_checker(station.update_manager());
+    } else {
+        greenup_driver::logger::log(
+            "SYS",
+            "🔄 Software update check: DISABLED (check_updates = false in greenup.toml)",
+        );
     }
 
     // Start MQTT background client service if enabled in configuration

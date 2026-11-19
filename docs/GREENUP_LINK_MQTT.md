@@ -84,6 +84,10 @@ All published telemetry topics have `retain: true` enabled.
 | `<base>/station/total_active_power_w` | `7360.0` | Total active power across all active connectors (W) |
 | `<base>/station/voltage_v` | `232.4` | Effective grid voltage (V) |
 | `<base>/station/voltage_source` | `default` / `external` | Voltage source (`default` = 230V, `external` = injected) |
+| `<base>/station/update/status` | `up_to_date` | Update status (`unknown`, `up_to_date`, `minor_available`, `major_available`) |
+| `<base>/station/update/available` | `false` / `true` | Boolean flag indicating whether a newer release is available |
+| `<base>/station/update/latest_version` | `1.2.0` | Latest published version on GitHub (defaults to current version if unreachable) |
+| `<base>/station/update/release_url` | `https://github.com/...` | Direct URL to the latest GitHub release page |
 
 ---
 
@@ -227,6 +231,8 @@ The device is automatically grouped under **Settings > Devices & Services > MQTT
    - `Station Total Power` (W)
    - `Grid Voltage Injection` Number (100V – 300V, step 0.5V)
    - `Station Sniffer Mode` Binary Sensor
+   - `Green'Up Link Update` Update Entity (`homeassistant/update/...`, diagnostic, native HA update banner & release link)
+   - `Station Update Status` Sensor (`homeassistant/sensor/...`, diagnostic: `unknown`, `up_to_date`, `minor_available`, `major_available`)
 
 > 📖 **Full Home Assistant Setup Guide:**  
 > For step-by-step instructions on verifying the discovered device in the UI, configuring the Energy Dashboard, and setting up automated grid voltage injection:  
