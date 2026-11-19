@@ -1,4 +1,4 @@
-use crate::engine::{AtmegaEngine, EngineState};
+use crate::engine::{AtmegaEngine, EngineConfig, EngineState};
 #[cfg(unix)]
 use crate::pty::PtyPair;
 #[cfg(unix)]
