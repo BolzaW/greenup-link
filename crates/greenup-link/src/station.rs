@@ -132,6 +132,7 @@ impl AppState {
     /// high-level [`BoardInfo`], [`Telemetry`], power/energy integration, and session events.
     pub fn apply_driver_snapshot(&self, snap: &DriverSnapshot) {
         let mut should_auto_start_tic = false;
+        let mut should_query_cau = false;
 
         {
             let mut cursor = self.cursor.lock().unwrap_or_else(|e| e.into_inner());
@@ -251,8 +252,8 @@ impl AppState {
                 if let Some(ref em) = raw.em {
                     tel.em_mask = Some(em.clone());
                 }
-                if let Some(sb) = raw.sb {
-                    tel.charge_paused = !sb;
+                if let Some(cau) = raw.cau {
+                    tel.charge_paused = !cau;
                 }
                 if let Some(fcs) = raw.fcs {
                     tel.charge_complete = fcs;
@@ -432,7 +433,7 @@ impl AppState {
                 let _ = self.serial_tx.try_send(Command::SetCurrentLimit(32));
             }
 
-            // 4. High-level automatic TIC detection check after driver init completes
+            // 4. High-level automatic TIC detection & safe CAU? check after driver init completes
             if !usb.init_completed {
                 cursor.auto_tic_triggered = false;
             } else if usb.init_completed
@@ -441,7 +442,22 @@ impl AppState {
             {
                 cursor.auto_tic_triggered = true;
                 should_auto_start_tic = true;
+                let is_charging_now = matches!(
+                    raw.state.as_deref(),
+                    Some("D") | Some("E") | Some("G") | Some("H")
+                );
+                if raw.cau.is_none() && !is_charging_now {
+                    should_query_cau = true;
+                }
             }
+        }
+
+        if should_query_cau {
+            logger::debug(
+                "SERIAL",
+                "🔍 Querying CAU? after init sequence (no active charge in progress)",
+            );
+            let _ = self.serial_tx.try_send(Command::GetChargeAuthorization);
         }
 
         if should_auto_start_tic {
@@ -643,10 +659,234 @@ pub async fn start_tic_detection(state: &SharedState) -> Result<(), TicStartErro
 }
 
 /// High-level initialization sequence: runs the low-level driver handshake + startup queries,
-/// and initiates TIC detection if the station hardware model supports TIC and is in `State:A`.
+/// safely queries `CAU?` when no active charge is in progress, and initiates TIC detection
+/// if the station hardware model supports TIC and is in `State:A`.
 pub async fn trigger_init_sequence(state: &SharedState) {
     greenup_driver::trigger_init_sequence(&state.driver).await;
+    if !state.sniffer_mode() {
+        let is_charging = state
+            .telemetry
+            .lock()
+            .map(|t| matches!(t.greenup_state.as_str(), "D" | "E" | "G" | "H"))
+            .unwrap_or(false);
+        if !is_charging {
+            let _ = state.serial_tx.send(Command::GetChargeAuthorization).await;
+        }
+    }
     let _ = start_tic_detection(state).await;
+}
+
+/// Supported charge and actuator control actions exposed via REST (`POST /api/charge`)
+/// and MQTT (`.../control/charge/set`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChargeAction {
+    /// Universal supervisor enable (`FM2:0` + `DOK`).
+    Enable,
+    /// Universal supervisor disable (`DNOK` + `FM2:1`), respecting `local_override`.
+    Disable,
+    /// Authorize / resume charging (`CAUOK`). Keeps cable locked and session open.
+    Authorize,
+    /// Cleanly suspend charging (`CAUNOK` -> `State:W` -> `State:B`/`J`/`F`). Keeps cable locked and session open.
+    Suspend,
+    /// Simulate physical Start button press (`SBOK`). Re-arms session from `State:M`/`P`.
+    StartSession,
+    /// Simulate physical Stop button press (`SBNOK`). Closes session (`WT/CT`) and unlocks T2S cable (`State:M`/`P`).
+    StopSession,
+    /// Enable the Type 2 socket (`T2COK`).
+    EnableType2,
+    /// Disable the Type 2 socket (`T2CNOK`). Aborts/unlocks any T2S session and freezes T2S detection in `State:A`.
+    DisableType2,
+    /// Enable the auxiliary domestic Schuko (2P+T) socket (`2PCOK`).
+    EnableDomestic,
+    /// Disable the auxiliary domestic Schuko (2P+T) socket (`2PCNOK`).
+    DisableDomestic,
+    /// Force immediate charging on Type 2 socket (`T2FOK`), bypassing schedules, `CAU`, and contact conditioning.
+    ForceType2,
+    /// Release forced Type 2 charging override (`T2FNOK`).
+    UnforceType2,
+    /// Force immediate charging on domestic Schuko socket (`2PFOK`), bypassing schedules, `CAU`, and contact conditioning.
+    ForceDomestic,
+    /// Release forced domestic charging override (`2PFNOK`).
+    UnforceDomestic,
+    /// Activate off-peak / schedule derogation (`DOK`) without modifying `FM2`.
+    EnableDerogation,
+    /// Deactivate off-peak / schedule derogation (`DNOK`) without modifying `FM2`.
+    DisableDerogation,
+    /// Stop any active charge (`State:W`), close session, and unlock the Type 2 cable (`Unlock`).
+    Unlock,
+    /// Put the station into persistent deep sleep (`SOK` -> `State:Y`, OCPP `Unavailable`).
+    Sleep,
+    /// Wake the station from deep sleep (`SNOK` -> `State:A`).
+    Wake,
+}
+
+impl ChargeAction {
+    /// Parses a REST API action string.
+    pub fn from_api_str(action: &str) -> Option<Self> {
+        match action.trim() {
+            "enable" => Some(Self::Enable),
+            "disable" => Some(Self::Disable),
+            "authorize" => Some(Self::Authorize),
+            "suspend" => Some(Self::Suspend),
+            "start_session" => Some(Self::StartSession),
+            "stop_session" => Some(Self::StopSession),
+            "enable_type2" => Some(Self::EnableType2),
+            "disable_type2" => Some(Self::DisableType2),
+            "enable_domestic" => Some(Self::EnableDomestic),
+            "disable_domestic" => Some(Self::DisableDomestic),
+            "force_type2" => Some(Self::ForceType2),
+            "unforce_type2" => Some(Self::UnforceType2),
+            "force_domestic" => Some(Self::ForceDomestic),
+            "unforce_domestic" => Some(Self::UnforceDomestic),
+            "enable_derogation" => Some(Self::EnableDerogation),
+            "disable_derogation" => Some(Self::DisableDerogation),
+            "unlock" => Some(Self::Unlock),
+            "sleep" => Some(Self::Sleep),
+            "wake" => Some(Self::Wake),
+            _ => None,
+        }
+    }
+
+    /// Parses an MQTT payload for `.../control/charge/set` (includes Home Assistant switch ON/OFF aliases).
+    pub fn from_mqtt_str(payload: &str) -> Option<Self> {
+        let lower = payload.trim().to_lowercase();
+        match lower.as_str() {
+            "on" | "1" | "true" => Some(Self::Enable),
+            "off" | "0" | "false" => Some(Self::Disable),
+            other => Self::from_api_str(other),
+        }
+    }
+
+    /// Returns the human-readable description and exact ATmega command sequence for this action.
+    pub fn commands(self) -> (&'static str, Vec<Command>) {
+        match self {
+            Self::Enable => (
+                "⚡ Charge enable (FM2:0 + DOK)",
+                vec![Command::SetExternalSignal(false), Command::SetDerogation(true)],
+            ),
+            Self::Disable => (
+                "🛑 Charge disable (DNOK + FM2:1)",
+                vec![Command::SetDerogation(false), Command::SetExternalSignal(true)],
+            ),
+            Self::Authorize => (
+                "▶ Charge authorize (CAUOK)",
+                vec![Command::SetChargeAuthorization(true)],
+            ),
+            Self::Suspend => (
+                "⏸ Charge suspend (CAUNOK)",
+                vec![Command::SetChargeAuthorization(false)],
+            ),
+            Self::StartSession => (
+                "▶ Start session / button press (SBOK)",
+                vec![Command::SetStartButton(true)],
+            ),
+            Self::StopSession => (
+                "⏹ Stop session & unlock / button press (SBNOK)",
+                vec![Command::SetStartButton(false)],
+            ),
+            Self::EnableType2 => (
+                "🔌 Enable Type 2 socket (T2COK)",
+                vec![Command::AuthorizeType2(true)],
+            ),
+            Self::DisableType2 => (
+                "🚫 Disable Type 2 socket (T2CNOK)",
+                vec![Command::AuthorizeType2(false)],
+            ),
+            Self::EnableDomestic => (
+                "🔌 Enable domestic Schuko socket (2PCOK)",
+                vec![Command::AuthorizeDomestic(true)],
+            ),
+            Self::DisableDomestic => (
+                "🚫 Disable domestic Schuko socket (2PCNOK)",
+                vec![Command::AuthorizeDomestic(false)],
+            ),
+            Self::ForceType2 => (
+                "⚡ Force Type 2 charge (T2FOK)",
+                vec![Command::ForceType2(true)],
+            ),
+            Self::UnforceType2 => (
+                "🔓 Unforce Type 2 charge (T2FNOK)",
+                vec![Command::ForceType2(false)],
+            ),
+            Self::ForceDomestic => (
+                "⚡ Force domestic Schuko charge (2PFOK)",
+                vec![Command::ForceDomestic(true)],
+            ),
+            Self::UnforceDomestic => (
+                "🔓 Unforce domestic Schuko charge (2PFNOK)",
+                vec![Command::ForceDomestic(false)],
+            ),
+            Self::EnableDerogation => (
+                "🔓 Enable off-peak derogation (DOK)",
+                vec![Command::SetDerogation(true)],
+            ),
+            Self::DisableDerogation => (
+                "🔒 Disable off-peak derogation (DNOK)",
+                vec![Command::SetDerogation(false)],
+            ),
+            Self::Unlock => (
+                "🔓 Unlock Type 2 cable (Unlock)",
+                vec![Command::Unlock],
+            ),
+            Self::Sleep => (
+                "💤 Enter station deep sleep (SOK -> State:Y)",
+                vec![Command::SetSleep(true)],
+            ),
+            Self::Wake => (
+                "☀ Wake station from deep sleep (SNOK -> State:A)",
+                vec![Command::SetSleep(false)],
+            ),
+        }
+    }
+}
+
+/// Outcome of executing a [`ChargeAction`] on a charge point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChargeActionOutcome {
+    Executed,
+    IgnoredLocalOverride { remaining_secs: i64 },
+    SerialError,
+}
+
+/// Executes a [`ChargeAction`] on the given [`AppState`], enforcing `local_override` protection on `Disable`.
+pub async fn execute_charge_action(
+    point: &AppState,
+    action: ChargeAction,
+    log_source: &str,
+) -> ChargeActionOutcome {
+    if action == ChargeAction::Disable {
+        if let Some(remaining) = point.is_disable_locked_by_local_override() {
+            let lock_desc = if remaining < 0 {
+                "locked until end of charge".to_string()
+            } else {
+                format!("{}s remaining", remaining)
+            };
+            logger::log(
+                log_source,
+                &format!(
+                    "🛡️ Side {}: Charge disable ignored (local_override active: {})",
+                    point.side(),
+                    lock_desc
+                ),
+            );
+            return ChargeActionOutcome::IgnoredLocalOverride {
+                remaining_secs: remaining,
+            };
+        }
+        point.clear_local_override();
+    }
+
+    let (desc, cmds) = action.commands();
+    logger::log(
+        log_source,
+        &format!("Point {}: {}", point.side(), desc),
+    );
+    for cmd in cmds {
+        if point.serial_tx.send(cmd).await.is_err() {
+            return ChargeActionOutcome::SerialError;
+        }
+    }
+    ChargeActionOutcome::Executed
 }
 
 /// Manages multi-point charging stations (1 or 2 charge points).
@@ -1149,5 +1389,55 @@ mod tests {
         assert_eq!(s2.serial_number, "015185");
         assert_ne!(s2.board_code, s1.board_code);
         assert!(s2.board_code.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_cau_mapped_to_paused_and_queried_safely_after_init() {
+        let (tx, rx) = mpsc::channel(32);
+        let state = Arc::new(AppState::new(tx));
+
+        // 1. CAU=false maps to status.paused=true; CAU=true maps to status.paused=false
+        state.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            raw.state = Some("B".to_string());
+            raw.cau = Some(false);
+        });
+        assert!(state.to_connector_data().status.paused);
+
+        state.driver.update_raw(|raw| {
+            raw.cau = Some(true);
+        });
+        assert!(!state.to_connector_data().status.paused);
+
+        // 2. When init completes while charging (State:D), CAU? must NOT be queried
+        let (tx_chg, mut rx_chg) = mpsc::channel(32);
+        let state_chg = Arc::new(AppState::new(tx_chg));
+        state_chg.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            usb.init_completed = true;
+            raw.state = Some("D".to_string());
+        });
+        state_chg.sync_from_driver();
+        assert!(rx_chg.try_recv().is_err());
+
+        // 3. When init completes while idle (State:B) and cau is None, CAU? IS queried
+        let (tx_idle, mut rx_idle) = mpsc::channel(32);
+        let state_idle = Arc::new(AppState::new(tx_idle));
+        state_idle.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            usb.init_completed = true;
+            raw.state = Some("B".to_string());
+        });
+        state_idle.sync_from_driver();
+        assert_eq!(rx_idle.recv().await.unwrap(), Command::GetChargeAuthorization);
+
+        // 4. Legacy pause/resume are not accepted by ChargeAction
+        assert_eq!(ChargeAction::from_api_str("pause"), None);
+        assert_eq!(ChargeAction::from_api_str("resume"), None);
+        assert_eq!(ChargeAction::from_mqtt_str("pause"), None);
+        assert_eq!(ChargeAction::from_mqtt_str("resume"), None);
+        assert_eq!(ChargeAction::from_mqtt_str("ON"), Some(ChargeAction::Enable));
+        assert_eq!(ChargeAction::from_mqtt_str("OFF"), Some(ChargeAction::Disable));
+        drop(rx);
     }
 }

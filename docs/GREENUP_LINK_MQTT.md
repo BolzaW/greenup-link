@@ -10,7 +10,7 @@ Green'up Link features a built-in, fully autonomous **MQTT 3.1.1 client** design
 - **Unified Authentication**: Uses the existing `http.api_token` as the MQTT password (with optional configurable `username`).
 - **Atomic Unitary Topics (`Report-by-Exception`)**: Every electrical, state, and control metric is published on its own dedicated topic as a raw scalar value (e.g. `greenup/connector/1/meter/active_power_w` -> `7360.0`). Topics are updated instantly on state changes and fully refreshed every 60 seconds with `retain: true`.
 - **Home Assistant MQTT Auto-Discovery**: Automatically exposes the charging station and all active connectors to Home Assistant as a clean device with sensors, switches, numbers, and binary sensors. Zero manual YAML configuration required in Home Assistant!
-- **Remote Control Topics (`.../set`)**: Start, stop, pause, adjust current setpoints (7–32A), and inject external grid voltage via MQTT.
+- **Remote Control Topics (`.../set`)**: Enable/disable charging, suspend/authorize (`CAU`), simulate Start/Stop button (`SB`), toggle sockets (`T2C`/`2PC`), unlock, sleep, adjust current setpoints (`CCEl`), and inject external grid voltage via MQTT.
 - **Hardware Protection & Safety**:
   - Respects **Sniffer Mode**: all TX control commands are rejected if passive monitoring is enabled.
   - State A Synchronization: automatically keeps `CCEl` and `CC` synchronized when in `State:A`, and never overrides ATmega minimum current logic in other states.
@@ -100,7 +100,7 @@ All published telemetry topics have `retain: true` enabled.
 | `<base>/connector/<id>/status/raw_code` | `D`, `A`, `B`, `J`, ... | Raw Legrand internal state machine letter |
 | `<base>/connector/<id>/status/vehicle_connected` | `true` / `false` | Vehicle plugged into the socket |
 | `<base>/connector/<id>/status/charging` | `true` / `false` | Active power delivery in progress |
-| `<base>/connector/<id>/status/paused` | `true` / `false` | Charge paused via software button |
+| `<base>/connector/<id>/status/paused` | `true` / `false` | Charge suspended via `CAUNOK` (`CAU:0`) |
 | `<base>/connector/<id>/status/charge_complete` | `true` / `false` | Battery full / charging ended by EV |
 | `<base>/connector/<id>/status/local_override` | `true` / `false` | Forced charge triggered locally via the station's physical button (`EM:XX1`) |
 | `<base>/connector/<id>/status/error_code` | `0000` | ATmega hardware fault code |
@@ -121,7 +121,6 @@ All published telemetry topics have `retain: true` enabled.
 | Topic | Unit | Example Value | Description |
 | :--- | :--- | :--- | :--- |
 | `<base>/connector/<id>/control/charge` | - | `ON` / `OFF` | Master charge authorization switch state |
-| `<base>/connector/<id>/control/pause` | - | `true` / `false` | Temporary pause button state |
 | `<base>/connector/<id>/control/setpoint_amps` | A | `16` | Current setpoint configured (`CCEl`) |
 | `<base>/connector/<id>/control/applied_limit_amps` | A | `16` | Effective current limit applied by ATmega (`CC`) |
 | `<base>/connector/<id>/control/min_allowed_amps` | A | `7` | Minimum allowed current (Legrand standard: 7A) |
@@ -148,26 +147,27 @@ All published telemetry topics have `retain: true` enabled.
 
 Publishing to these topics allows external systems to pilot the charging station.
 
-### 4.1 Master Charge Switch
+### 4.1 Centralized Charge & Actuator Control
 
 **Topic**: `<base>/connector/<id>/control/charge/set`
 
-| Payload | Action |
-| :--- | :--- |
-| `enable`, `ON`, `1`, `true`, `resume` | Authorizes charging (`AuthorizeType2(true) + SetDerogation(true)`) |
-| `disable`, `OFF`, `0`, `false` | Disables charging (`SetExternalSignal(true) + SetDerogation(false)`) |
-| `pause` | Pauses charging (`SetStartButton(false)`) |
+| Payload | ATmega Command(s) | Behavior |
+| :--- | :--- | :--- |
+| `enable`, `ON`, `1`, `true` | `FM2:0` + `DOK` | Universal supervisor enable (overrides HP/contact conditioning; keeps `T2C` untouched) |
+| `disable`, `OFF`, `0`, `false` | `DNOK` + `FM2:1` | Universal supervisor disable (`State:W` $\rightarrow$ `State:B`, respects `local_override` lock) |
+| `authorize` | `CAUOK` | Restores charge authorization (`CAU:1`, `status/paused` = `false`) |
+| `suspend` | `CAUNOK` | Cleanly suspends charge (`State:W` $\rightarrow$ `State:B`/`J`/`F`), keeps cable locked & session open (`status/paused` = `true`) |
+| `start_session` | `SBOK` | Simulates Start button press (exits `State:M`/`P`, re-locks T2S, opens new session) |
+| `stop_session` | `SBNOK` | Simulates Stop button press (`State:W`, closes session `WT/CT`, unlocks T2S, parks in `State:M`/`P`) |
+| `enable_type2` / `disable_type2` | `T2COK` / `T2CNOK` | Enables or disables the Type 2 socket (aborts/unlocks T2S and freezes detection in `State:A`) |
+| `enable_domestic` / `disable_domestic` | `2PCOK` / `2PCNOK` | Enables or disables the auxiliary domestic Schuko (2P+T) socket |
+| `force_type2` / `unforce_type2` | `T2FOK` / `T2FNOK` | Forces or unforces immediate Type 2 charging (bypasses schedules, `CAU`, `FM2`) |
+| `force_domestic` / `unforce_domestic` | `2PFOK` / `2PFNOK` | Forces or unforces immediate domestic Schuko charging |
+| `enable_derogation` / `disable_derogation` | `DOK` / `DNOK` | Toggles off-peak / schedule derogation without modifying `FM2` |
+| `unlock` | `Unlock` | Cleanly stops charge (`State:W`), closes session, and unlocks Type 2 cable |
+| `sleep` / `wake` | `SOK` / `SNOK` | Enters (`State:Y`, OCPP `Unavailable`) or exits (`State:A`) persistent deep sleep |
 
-### 4.2 Pause / Resume Switch
-
-**Topic**: `<base>/connector/<id>/control/pause/set`
-
-| Payload | Action |
-| :--- | :--- |
-| `true`, `ON`, `1`, `pause` | Pauses charging (`SetStartButton(false)`) |
-| `false`, `OFF`, `0`, `resume` | Resumes charging (`SetStartButton(true)`) |
-
-### 4.3 Current Limit Setpoint
+### 4.2 Current Limit Setpoint
 
 **Topic**: `<base>/connector/<id>/control/setpoint_amps/set`
 
@@ -221,7 +221,6 @@ The device is automatically grouped under **Settings > Devices & Services > MQTT
    - `Session Active` (icon: `mdi:progress-clock`)
 3. **Controls (Switches & Numbers)**:
    - `Charge` Switch (`ON` / `OFF`)
-   - `Pause` Switch (`true` / `false`)
    - `Current Setpoint` Number Slider (7A – 32A, step 1A)
 4. **Station Level Controls**:
    - `Station Total Power` (W)

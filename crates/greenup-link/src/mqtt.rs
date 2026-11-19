@@ -32,10 +32,6 @@ pub enum MqttCommand {
         side: u8,
         action: String,
     },
-    SetPause {
-        side: u8,
-        paused: bool,
-    },
     SetCurrentLimit {
         side: u8,
         amps: f64,
@@ -118,15 +114,6 @@ pub fn parse_command_topic(
                 side,
                 action: payload.to_string(),
             })
-        }
-        ["connector", id_str, "control", "pause", "set"] => {
-            let side = id_str.parse::<u8>().ok()?;
-            let paused = match payload.to_lowercase().as_str() {
-                "true" | "1" | "on" | "pause" => true,
-                "false" | "0" | "off" | "resume" => false,
-                _ => return None,
-            };
-            Some(MqttCommand::SetPause { side, paused })
         }
         ["connector", id_str, "control", "setpoint_amps", "set"] => {
             let side = id_str.parse::<u8>().ok()?;
@@ -352,10 +339,6 @@ pub fn generate_telemetry_topics(
         topics.push((
             format!("{}/control/charge", prefix),
             charge_payload.to_string(),
-        ));
-        topics.push((
-            format!("{}/control/pause", prefix),
-            conn.status.paused.to_string(),
         ));
         topics.push((
             format!("{}/control/setpoint_amps", prefix),
@@ -705,23 +688,6 @@ pub fn generate_ha_discovery_payloads(
         });
         configs.push((t, p.to_string()));
 
-        // Pause Switch
-        let t = format!("homeassistant/switch/greenup_{}/point_{}_pause/config", clean_serial, id);
-        let p = serde_json::json!({
-            "name": format!("{} Pause", point_label),
-            "unique_id": format!("{}_point_{}_pause", clean_serial, id),
-            "state_topic": format!("{}/control/pause", prefix),
-            "command_topic": format!("{}/control/pause/set", prefix),
-            "payload_on": "true",
-            "payload_off": "false",
-            "icon": "mdi:pause-circle",
-            "availability_topic": availability_topic,
-            "payload_available": "online",
-            "payload_not_available": "offline",
-            "device": device_obj,
-        });
-        configs.push((t, p.to_string()));
-
         // Current Setpoint Number
         let max_amps = conn.control.max_hardware_amps.max(32);
         let t = format!("homeassistant/number/greenup_{}/point_{}_setpoint/config", clean_serial, id);
@@ -773,72 +739,13 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
                 return;
             }
 
-            match action.to_lowercase().as_str() {
-                "enable" | "resume" | "on" | "1" | "true" => {
-                    logger::log("MQTT", &format!("⚡ Point {}: Charge enable requested via MQTT", side));
-                    let _ = point.serial_tx.send(Command::AuthorizeType2(true)).await;
-                    let _ = point.serial_tx.send(Command::SetExternalSignal(false)).await;
-                    let _ = point.serial_tx.send(Command::SetDerogation(true)).await;
+            match crate::station::ChargeAction::from_mqtt_str(&action) {
+                Some(parsed_action) => {
+                    let _ = crate::station::execute_charge_action(&point, parsed_action, "MQTT").await;
                 }
-                "disable" | "off" | "0" | "false" => {
-                    if let Some(remaining) = point.is_disable_locked_by_local_override() {
-                        let lock_desc = if remaining < 0 {
-                            "locked until end of charge".to_string()
-                        } else {
-                            format!("{}s remaining", remaining)
-                        };
-                        logger::log(
-                            "MQTT",
-                            &format!(
-                                "🛡️ Point {}: Charge disable ignored via MQTT (local_override active: {})",
-                                side, lock_desc
-                            ),
-                        );
-                        return;
-                    }
-                    point.clear_local_override();
-                    logger::log("MQTT", &format!("🛑 Point {}: Charge disable requested via MQTT", side));
-                    let _ = point.serial_tx.send(Command::SetDerogation(false)).await;
-                    let _ = point.serial_tx.send(Command::SetExternalSignal(true)).await;
+                None => {
+                    logger::warn("MQTT", &format!("⚠️ Point {}: Unknown charge action '{}' via MQTT", side, action));
                 }
-                "pause" => {
-                    logger::log("MQTT", &format!("⏸ Point {}: Charge pause requested via MQTT", side));
-                    let _ = point.serial_tx.send(Command::SetStartButton(false)).await;
-                }
-                other => {
-                    logger::warn("MQTT", &format!("⚠️ Point {}: Unknown charge action '{}' via MQTT", side, other));
-                }
-            }
-        }
-        MqttCommand::SetPause { side, paused } => {
-            let point = station.get_point(Some(side));
-            if point.sniffer_mode() {
-                logger::warn(
-                    "MQTT",
-                    &format!(
-                        "⛔ Rejecting MQTT pause action on Side {}: sniffer mode active",
-                        side
-                    ),
-                );
-                return;
-            }
-            if !point.is_serial_connected() {
-                logger::warn(
-                    "MQTT",
-                    &format!(
-                        "⛔ Rejecting MQTT pause action on Side {}: USB serial link disconnected",
-                        side
-                    ),
-                );
-                return;
-            }
-
-            if paused {
-                logger::log("MQTT", &format!("⏸ Point {}: Pause requested via MQTT", side));
-                let _ = point.serial_tx.send(Command::SetStartButton(false)).await;
-            } else {
-                logger::log("MQTT", &format!("▶ Point {}: Resume requested via MQTT", side));
-                let _ = point.serial_tx.send(Command::SetStartButton(true)).await;
             }
         }
         MqttCommand::SetCurrentLimit { side, amps } => {
@@ -1037,7 +944,6 @@ async fn run_mqtt_loop(
                     // Subscribe to incoming command topics
                     let cmd_patterns = [
                         format!("{}/connector/+/control/charge/set", base_topic_el),
-                        format!("{}/connector/+/control/pause/set", base_topic_el),
                         format!("{}/connector/+/control/setpoint_amps/set", base_topic_el),
                         format!("{}/station/voltage/set", base_topic_el),
                         format!("{}/connector/+/meter/voltage_v/set", base_topic_el),
@@ -1203,19 +1109,19 @@ mod tests {
     fn test_parse_command_topic() {
         let base = "greenup";
 
-        // Charge control
+        // Charge control (centralized)
         let c1 = parse_command_topic(base, "greenup/connector/1/control/charge/set", "enable");
         assert_eq!(c1, Some(MqttCommand::SetCharge { side: 1, action: "enable".to_string() }));
 
         let c2 = parse_command_topic(base, "greenup/connector/2/control/charge/set", "OFF");
         assert_eq!(c2, Some(MqttCommand::SetCharge { side: 2, action: "OFF".to_string() }));
 
-        // Pause control
-        let p1 = parse_command_topic(base, "greenup/connector/1/control/pause/set", "true");
-        assert_eq!(p1, Some(MqttCommand::SetPause { side: 1, paused: true }));
+        let c3 = parse_command_topic(base, "greenup/connector/1/control/charge/set", "suspend");
+        assert_eq!(c3, Some(MqttCommand::SetCharge { side: 1, action: "suspend".to_string() }));
 
-        let p2 = parse_command_topic(base, "greenup/connector/1/control/pause/set", "0");
-        assert_eq!(p2, Some(MqttCommand::SetPause { side: 1, paused: false }));
+        // Removed pause topic
+        let p_removed = parse_command_topic(base, "greenup/connector/1/control/pause/set", "true");
+        assert_eq!(p_removed, None);
 
         // Setpoint current limit (integer and decimal)
         let s1 = parse_command_topic(base, "greenup/connector/1/control/setpoint_amps/set", "16");

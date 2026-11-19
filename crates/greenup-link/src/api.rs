@@ -766,71 +766,38 @@ async fn set_charge_state(
     if let Err(res) = check_serial_connected(&state) {
         return res;
     }
-    match payload.action.as_str() {
-        "enable" => {
-            logger::log("API", "⚡ Charge enable requested (T2COK + FM2:0 + DOK)");
-            let _ = state.serial_tx.send(Command::AuthorizeType2(true)).await;
-            let _ = state.serial_tx.send(Command::SetExternalSignal(false)).await;
-            if state.serial_tx.send(Command::SetDerogation(true)).await.is_ok() {
-                (StatusCode::OK, Json(json!({"status": "success"})))
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
-            }
-        },
-        "disable" => {
-            if let Some(remaining) = state.is_disable_locked_by_local_override() {
-                let lock_desc = if remaining < 0 {
-                    "locked until end of charge".to_string()
-                } else {
-                    format!("{}s remaining", remaining)
-                };
-                logger::log(
-                    "API",
-                    &format!(
-                        "🛡️ Charge disable ignored on Side {}: local_override active ({})",
-                        state.side(),
-                        lock_desc
-                    ),
-                );
-                return (
-                    StatusCode::OK,
-                    Json(json!({
-                        "status": "ignored",
-                        "reason": "local_override_active",
-                        "local_override": true,
-                        "lock_remaining_secs": remaining
-                    })),
-                );
-            }
-            state.clear_local_override();
-            logger::log("API", "🛑 Charge disable requested (DNOK + FM2:1)");
-            let _ = state.serial_tx.send(Command::SetDerogation(false)).await;
-            if state.serial_tx.send(Command::SetExternalSignal(true)).await.is_ok() {
-                (StatusCode::OK, Json(json!({"status": "success"})))
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
-            }
-        },
-        "pause" => {
-            logger::log("API", "⏸ Charge pause requested (SBNOK)");
-            if state.serial_tx.send(Command::SetStartButton(false)).await.is_ok() {
-                (StatusCode::OK, Json(json!({"status": "success"})))
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
-            }
-        },
-        "resume" => {
-            logger::log("API", "▶ Charge resume requested (SBOK)");
-            if state.serial_tx.send(Command::SetStartButton(true)).await.is_ok() {
-                (StatusCode::OK, Json(json!({"status": "success"})))
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Serial error"})))
-            }
-        },
-        _ => {
-            logger::log("API", &format!("⚠️ Invalid charge action received: '{}'", payload.action));
-            (StatusCode::BAD_REQUEST, Json(json!({"error": "Invalid action"})))
+
+    let action = match crate::station::ChargeAction::from_api_str(&payload.action) {
+        Some(a) => a,
+        None => {
+            logger::log(
+                "API",
+                &format!("⚠️ Invalid charge action received: '{}'", payload.action),
+            );
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Invalid action"})),
+            );
         }
+    };
+
+    match crate::station::execute_charge_action(&state, action, "API").await {
+        crate::station::ChargeActionOutcome::Executed => {
+            (StatusCode::OK, Json(json!({"status": "success"})))
+        }
+        crate::station::ChargeActionOutcome::IgnoredLocalOverride { remaining_secs } => (
+            StatusCode::OK,
+            Json(json!({
+                "status": "ignored",
+                "reason": "local_override_active",
+                "local_override": true,
+                "lock_remaining_secs": remaining_secs
+            })),
+        ),
+        crate::station::ChargeActionOutcome::SerialError => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Serial error"})),
+        ),
     }
 }
 
@@ -1395,16 +1362,20 @@ mod tests {
             tel.serial.status = SerialStatus::UsbConnected;
         }
 
-        // 2. Invalid action -> 400
+        // 2. Invalid & removed legacy actions -> 400
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "invalid_action".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+        let res_pause = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "pause".to_string() })).await.into_response();
+        assert_eq!(res_pause.status(), StatusCode::BAD_REQUEST);
+        let res_resume = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "resume".to_string() })).await.into_response();
+        assert_eq!(res_resume.status(), StatusCode::BAD_REQUEST);
 
-        // 3. Action enable -> sends AuthorizeType2(true), SetExternalSignal(false), SetDerogation(true)
+        // 3. Action enable -> sends SetExternalSignal(false), SetDerogation(true) (NO AuthorizeType2)
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "enable".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
-        assert_eq!(rx.recv().await.unwrap(), Command::AuthorizeType2(true));
         assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(false));
         assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(true));
+        assert!(rx.try_recv().is_err());
 
         // 4. Action disable -> sends SetDerogation(false), SetExternalSignal(true)
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "disable".to_string() })).await.into_response();
@@ -1412,17 +1383,47 @@ mod tests {
         assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(false));
         assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
 
-        // 5. Action pause -> sends SetStartButton(false)
-        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "pause".to_string() })).await.into_response();
+        // 5. Action suspend / authorize -> sends SetChargeAuthorization(false / true)
+        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "suspend".to_string() })).await.into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetChargeAuthorization(false));
+
+        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "authorize".to_string() })).await.into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetChargeAuthorization(true));
+
+        // 6. Action stop_session / start_session -> sends SetStartButton(false / true)
+        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "stop_session".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(rx.recv().await.unwrap(), Command::SetStartButton(false));
 
-        // 6. Action resume -> sends SetStartButton(true)
-        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "resume".to_string() })).await.into_response();
+        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "start_session".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(rx.recv().await.unwrap(), Command::SetStartButton(true));
 
-        // 7. Action disable while local_override is active -> 200 OK ignored, no serial command sent
+        // 7. Hardware socket / override / unlock / sleep actions
+        let extra_cases = [
+            ("enable_type2", Command::AuthorizeType2(true)),
+            ("disable_type2", Command::AuthorizeType2(false)),
+            ("enable_domestic", Command::AuthorizeDomestic(true)),
+            ("disable_domestic", Command::AuthorizeDomestic(false)),
+            ("force_type2", Command::ForceType2(true)),
+            ("unforce_type2", Command::ForceType2(false)),
+            ("force_domestic", Command::ForceDomestic(true)),
+            ("unforce_domestic", Command::ForceDomestic(false)),
+            ("enable_derogation", Command::SetDerogation(true)),
+            ("disable_derogation", Command::SetDerogation(false)),
+            ("unlock", Command::Unlock),
+            ("sleep", Command::SetSleep(true)),
+            ("wake", Command::SetSleep(false)),
+        ];
+        for (action_name, expected_cmd) in extra_cases {
+            let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: action_name.to_string() })).await.into_response();
+            assert_eq!(res.status(), StatusCode::OK, "action {}", action_name);
+            assert_eq!(rx.recv().await.unwrap(), expected_cmd, "action {}", action_name);
+        }
+
+        // 8. Action disable while local_override is active -> 200 OK ignored, no serial command sent
         point1.driver.update_both(|raw, usb| {
             usb.status = SerialStatus::UsbConnected;
             raw.state = Some("D".to_string());

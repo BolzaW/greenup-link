@@ -168,7 +168,7 @@ btnEnableDisable.addEventListener('click', () => {
 
 btnPauseResume.addEventListener('click', () => {
     if (window.isSnifferMode) return;
-    sendPostAction('/api/charge', { action: window.lastChargePaused ? 'resume' : 'pause' });
+    sendPostAction('/api/charge', { action: window.lastChargePaused ? 'authorize' : 'suspend' });
 });
 
 slider.addEventListener('mousedown', () => isDraggingSlider = true);

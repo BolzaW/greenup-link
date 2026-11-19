@@ -211,9 +211,10 @@ Derogation (`DOK` / `DNOK`) is a software flag placed in logical OR with the phy
 - `DOK` immediately lifts a Linky Peak-Hours (HP) lockout or an `FM2:1` conditioning block.
 
 #### To Start / Authorize Charge (`action: "enable"`):
-1. Sends `T2COK`: Ensures the Type 2 socket state machine is awake and operational.
-2. Sends `FM2:0`: Clears external simulated blocking signal (restores direct mode).
-3. Sends `DOK`: Activates Derogation.
+1. Sends `FM2:0`: Clears external simulated blocking signal (restores direct mode).
+2. Sends `DOK`: Activates Derogation.
+
+*(Note: `T2COK` is intentionally not sent by `enable`, so an explicit `disable_type2` lock is respected.)*
 
 **Why this combination is bulletproof:**
 - Clearing `FM2:0` and activating `DOK` transitions the station from `State:B` to active charge (**`State:E`**).
@@ -285,17 +286,24 @@ Derogation (`DOK` / `DNOK`) is a software flag placed in logical OR with the phy
 
 ---
 
-### 5.7 Soft Pause & Resume: The `SB` Button Mechanism (`pause` / `resume`)
+### 5.7 Clean Suspension (`suspend` / `authorize`) vs. Physical Button Simulation (`stop_session` / `start_session`)
 
-For transient pauses during an ongoing charging session (e.g. temporary solar dips or EVCC pause cycles), Green'Up Link simulates the station's physical Start/Stop push button:
-- **`action: "pause"`**: Sends `SBNOK` (simulates pressing the Stop button). Sets `SB` to `0`. The station safely ramps down current, passes through transient `State:W`, and stabilizes in **`State:M`** (`SB:0`).
-- **`action: "resume"`**: Sends `SBOK` (simulates pressing the Start button). Sets `SB` to `1`. The station returns to `SB:1` and resumes charging (`State:C` $\rightarrow$ `State:D`/`State:E`).
+Green'Up Link distinguishes two fundamentally different interruption mechanisms:
+
+1. **Clean In-Session Suspension (`CAUOK` / `CAUNOK`) — `action: "suspend"` / `"authorize"`** *(mapped to the UI Pause/Resume button)*:
+   - **`action: "suspend"`** (`CAUNOK`): Ramps down current through transient `State:W`, opens the contactor off-load, and holds the vehicle in **`State:B`** (or `State:J` / `State:F`). **The Type 2 cable stays locked**, **the internal ATmega session remains open** (no `WT/CT` ticket, no EEPROM history write), and **physical dry-contact / `DOK` bypasses are blocked**. Persists across cable unplug/replug.
+   - **`action: "authorize"`** (`CAUOK`): Restores charge authorization (`State:B` $\rightarrow$ `State:C` or `State:J` $\rightarrow$ `State:I`).
+   - At startup (or `POST /api/init`), Green'Up Link safely queries `CAU?` **only if no active charge is in progress** (`!D/E/G/H`) to synchronize `status.paused` without triggering the ATmega `CAU?` cutoff bug.
+
+2. **Front Panel Start/Stop Button Simulation (`SBOK` / `SBNOK`) — `action: "stop_session"` / `"start_session"`**:
+   - **`action: "stop_session"`** (`SBNOK`): Simulates pressing the physical Stop button. Ramps down via `State:W`, **closes the ATmega session** (`WT/CT` ticket + EEPROM write), **unlocks the Type 2 cable**, and stabilizes in **`State:M`** (`State:P` for domestic).
+   - **`action: "start_session"`** (`SBOK`): Simulates pressing the physical Start button. Exits `State:M`/`State:P` via `State:A`, re-locks the Type 2 cable, and starts a new session (`State:B`).
 
 > [!WARNING]
 > **Non-Blocking Behavior of `SB` upon Cable Replug:**  
-> Unlike `FM2:1`, the `SBNOK` pause state is **not persistent across physical connection events**.  
-> If the station is paused via `SBNOK` (`SB:0` in `State:M`), and the user **unplugs and replugs the charging cable into the vehicle**, the ATmega automatically resets `SB` back to `1` and clears the pause!  
-> For this reason, `pause`/`resume` should be reserved for temporary in-session pauses, while `enable`/`disable` is the authoritative session lock.
+> Unlike `FM2:1` and `CAUNOK`, the `SBNOK` stop state is **not persistent across physical connection events**.  
+> If the station is stopped in `State:M` via `SBNOK`, and the user **unplugs and replugs the charging cable into the vehicle**, the ATmega automatically resets `SB` back to `1` and starts a new session!  
+> For this reason, `suspend`/`authorize` (`CAUNOK`/`CAUOK`) is used for in-session pauses, `enable`/`disable` (`FM2`/`D`) is the authoritative supervisor control, and `stop_session`/`start_session` (`SBNOK`/`SBOK`) simulates the physical front button.
 
 ---
 
