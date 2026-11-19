@@ -20,7 +20,7 @@
         <div>
             <h1 class="text-lg md:text-2xl font-bold tracking-tight text-white leading-none">Green'Up <span class="text-sky-400">Link</span></h1>
             <div class="flex items-center space-x-1.5 mt-1">
-                <span class="text-[9px] md:text-xs text-slate-500"><span data-i18n="header.subtitle">Interface de contrôle locale</span> <span id="lblLinkVersion"></span></span>
+                <span class="text-[9px] md:text-xs text-slate-500"><span data-i18n="header.subtitle">Interface de contrôle locale</span> <button type="button" id="btnHdrUpdate" class="update-trigger inline-flex items-center gap-1.5 align-middle" title="Vérifier les mises à jour"><span id="lblLinkVersion"></span><span id="hdrVersionDot" class="sys-led sys-led-muted update-dot"></span></button></span>
             </div>
         </div>
     </div>
@@ -414,7 +414,10 @@
                         <div id="subInfo" class="sys-board-secondary">...</div>
                         <div class="sys-board-link-ver">
                             <span class="sys-kv-label" data-i18n="system.greenup_link_version">Version Green'Up Link :</span>
-                            <span id="cfgAppVersion" class="sys-board-primary text-sky-400 font-bold">--</span>
+                            <button type="button" id="btnSysUpdate" class="update-trigger inline-flex items-center gap-2" title="Vérifier les mises à jour">
+                                <span id="cfgAppVersion" class="sys-board-primary text-sky-400 font-bold">--</span>
+                                <span id="sysVersionDot" class="sys-led sys-led-muted update-dot"></span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -711,6 +714,64 @@
         <button id="btnOpenLanClose" class="w-full py-2.5 px-4 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all text-center" data-i18n="auth.open_lan_btn_close">
             J'ai compris
         </button>
+    </div>
+</div>
+
+<!-- Software Update Details Modal -->
+<div id="updateModal" class="auth-overlay hidden">
+    <div class="auth-card max-w-md text-left">
+        <div class="flex items-center justify-between gap-2 mb-3">
+            <div class="flex items-center gap-2.5">
+                <span id="updModalDot" class="sys-led sys-led-muted"></span>
+                <h3 class="text-base font-bold text-white" data-i18n="update.title">Mise à jour Green'Up Link</h3>
+            </div>
+            <span id="updModalStatusBadge" class="sys-badge sys-badge-muted">--</span>
+        </div>
+
+        <p id="updModalDesc" class="text-xs text-slate-300 leading-relaxed mb-4">--</p>
+
+        <div class="grid grid-cols-2 gap-2.5 mb-3">
+            <div class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800">
+                <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-0.5" data-i18n="update.current_label">Version installée</div>
+                <div id="updModalCurrent" class="text-sm font-mono font-bold text-sky-400">--</div>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800">
+                <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-0.5" data-i18n="update.latest_label">Dernière version</div>
+                <div id="updModalLatest" class="text-sm font-mono font-bold text-white">--</div>
+            </div>
+        </div>
+
+        <div id="updModalMeta" class="text-[11px] text-slate-400 mb-3 space-y-0.5"></div>
+
+        <div id="updModalNotesWrap" class="hidden mb-3">
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1" data-i18n="update.notes_label">Notes de version</div>
+            <pre id="updModalNotes" class="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 text-[11px] text-slate-300 font-sans whitespace-pre-wrap max-h-36 overflow-y-auto leading-relaxed"></pre>
+        </div>
+
+        <div id="updModalSshWrap" class="mb-4">
+            <div class="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1" data-i18n="update.ssh_label">Mise à jour manuelle (SSH sur Raspberry Pi)</div>
+            <div class="flex items-center gap-1.5 p-2 rounded-lg bg-slate-950/80 border border-slate-800">
+                <code id="updModalSshCmd" class="text-[10px] font-mono text-slate-300 truncate flex-1 select-all">curl -fsSL https://raw.githubusercontent.com/BolzaW/greenup-link/main/scripts/install.sh | sudo bash</code>
+                <button type="button" id="btnCopyUpdateSsh" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-semibold text-slate-200 transition-colors shrink-0">📋</button>
+            </div>
+        </div>
+
+        <div id="updModalFeedback" class="text-[11px] text-amber-400 mb-2 hidden"></div>
+
+        <div class="flex flex-col gap-2">
+            <a id="updModalDownloadLink" href="https://github.com/BolzaW/greenup-link/releases" target="_blank" rel="noopener noreferrer" class="w-full py-2.5 px-4 rounded-lg text-xs font-bold bg-sky-500 hover:bg-sky-400 text-slate-950 transition-all text-center inline-flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                <span data-i18n="update.btn_download">Voir & Télécharger sur GitHub</span>
+            </a>
+            <div class="flex gap-2">
+                <button type="button" id="btnUpdateCheckNow" class="flex-1 py-2 px-3 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 transition-all text-center" data-i18n="update.btn_check">
+                    Vérifier maintenant
+                </button>
+                <button type="button" id="btnUpdateModalClose" class="flex-1 py-2 px-3 rounded-lg text-xs font-semibold bg-slate-800/70 hover:bg-slate-700 text-slate-300 transition-all text-center" data-i18n="update.btn_close">
+                    Fermer
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 

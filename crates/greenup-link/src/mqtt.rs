@@ -253,6 +253,30 @@ pub fn generate_telemetry_topics(
         voltage_source.to_string(),
     ));
 
+    // Software Update status topics
+    topics.push((
+        format!("{}/station/update/status", base),
+        snapshot.station.update.status.as_str().to_string(),
+    ));
+    topics.push((
+        format!("{}/station/update/available", base),
+        snapshot.station.update.update_available.to_string(),
+    ));
+    let latest_ver = snapshot
+        .station
+        .update
+        .latest_version
+        .clone()
+        .unwrap_or_else(|| snapshot.station.update.current_version.clone());
+    topics.push((
+        format!("{}/station/update/latest_version", base),
+        latest_ver,
+    ));
+    topics.push((
+        format!("{}/station/update/release_url", base),
+        snapshot.station.update.release_url.clone(),
+    ));
+
     // 2. Connector-level topics
     for conn in &snapshot.connectors {
         let prefix = format!("{}/connector/{}", base, conn.id);
@@ -492,6 +516,37 @@ pub fn generate_ha_discovery_payloads(
         "device": device_obj,
     });
     configs.push((topic_sniffer, payload_sniffer.to_string()));
+
+    // 4. Station Software Update Entity (native HA `update` platform)
+    let topic_update = format!("homeassistant/update/greenup_{}/station_update/config", clean_serial);
+    let payload_update = serde_json::json!({
+        "name": "Green'Up Link Update",
+        "unique_id": format!("{}_station_update", clean_serial),
+        "state_topic": format!("{}/station/link_version", base),
+        "latest_version_topic": format!("{}/station/update/latest_version", base),
+        "release_url": snapshot.station.update.release_url,
+        "entity_category": "diagnostic",
+        "availability_topic": availability_topic,
+        "payload_available": "online",
+        "payload_not_available": "offline",
+        "device": device_obj,
+    });
+    configs.push((topic_update, payload_update.to_string()));
+
+    // 5. Station Update Status Sensor (unknown / up_to_date / minor_available / major_available)
+    let topic_update_status = format!("homeassistant/sensor/greenup_{}/station_update_status/config", clean_serial);
+    let payload_update_status = serde_json::json!({
+        "name": "Station Update Status",
+        "unique_id": format!("{}_station_update_status", clean_serial),
+        "state_topic": format!("{}/station/update/status", base),
+        "entity_category": "diagnostic",
+        "icon": "mdi:package-up",
+        "availability_topic": availability_topic,
+        "payload_available": "online",
+        "payload_not_available": "offline",
+        "device": device_obj,
+    });
+    configs.push((topic_update_status, payload_update_status.to_string()));
 
     // Entities per Connector
     for conn in &snapshot.connectors {
@@ -1174,6 +1229,7 @@ mod tests {
                 mac_address: Some("AA:BB:CC:DD:EE:FF".to_string()),
                 capabilities: None,
                 board_code: None,
+                update: crate::update::UpdateInfo::initial("0.5.0"),
             },
             connectors: vec![
                 ConnectorData {
@@ -1227,6 +1283,9 @@ mod tests {
         assert_eq!(topic_map.get("greenup/station/serial/status").map(String::as_str), Some("usb_connected"));
         assert_eq!(topic_map.get("greenup/station/serial/sniffer_mode").map(String::as_str), Some("false"));
         assert_eq!(topic_map.get("greenup/station/voltage_v").map(String::as_str), Some("230.0"));
+        assert_eq!(topic_map.get("greenup/station/update/status").map(String::as_str), Some("unknown"));
+        assert_eq!(topic_map.get("greenup/station/update/available").map(String::as_str), Some("false"));
+        assert_eq!(topic_map.get("greenup/station/update/latest_version").map(String::as_str), Some("0.5.0"));
 
         assert_eq!(topic_map.get("greenup/connector/1/status/state").map(String::as_str), Some("A"));
         assert_eq!(topic_map.get("greenup/connector/1/status/local_override").map(String::as_str), Some("false"));
@@ -1255,6 +1314,7 @@ mod tests {
                 mac_address: None,
                 capabilities: None,
                 board_code: None,
+                update: crate::update::UpdateInfo::initial("0.5.0"),
             },
             connectors: vec![
                 ConnectorData {
@@ -1324,6 +1384,15 @@ mod tests {
         assert!(number_cfg.0.starts_with("homeassistant/number/greenup_059001A123/"));
         assert!(number_cfg.1.contains("\"min\":7"));
         assert!(number_cfg.1.contains("\"max\":32"));
+
+        // Verify HA native update entity and status sensor
+        let update_cfg = configs.iter().find(|(topic, _)| topic.contains("station_update/config")).expect("Station update entity missing");
+        assert!(update_cfg.0.starts_with("homeassistant/update/greenup_059001A123/"));
+        assert!(update_cfg.1.contains("\"latest_version_topic\":\"greenup/station/update/latest_version\""));
+
+        let update_status_cfg = configs.iter().find(|(topic, _)| topic.contains("station_update_status/config")).expect("Station update status sensor missing");
+        assert!(update_status_cfg.0.starts_with("homeassistant/sensor/greenup_059001A123/"));
+        assert!(update_status_cfg.1.contains("\"state_topic\":\"greenup/station/update/status\""));
     }
 
     #[test]
@@ -1344,6 +1413,7 @@ mod tests {
                 mac_address: None,
                 capabilities: None,
                 board_code: None,
+                update: crate::update::UpdateInfo::initial("0.5.0"),
             },
             connectors: vec![
                 ConnectorData {

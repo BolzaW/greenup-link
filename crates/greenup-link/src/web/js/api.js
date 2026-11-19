@@ -495,6 +495,10 @@ async function fetchInfo() {
             if (cfgVer) cfgVer.innerText = `v${station.link_version}`;
         }
 
+        if (station.update) {
+            updateVersionStatusUi(station.update);
+        }
+
         if (station.capabilities && station.capabilities.is_known && station.capabilities.has_tic) {
             window.stationCapabilities = station.capabilities;
             window.stationHasTic = true;
@@ -656,6 +660,10 @@ async function fetchTelemetry() {
 
         if (station && station.serial_connection) {
             updateUsbStatus(station.serial_connection);
+        }
+
+        if (station && station.update) {
+            updateVersionStatusUi(station.update);
         }
 
         // Auto-refresh board info if incomplete once USB communication is confirmed
@@ -868,3 +876,235 @@ async function sendPostAction(url, bodyObj = null) {
         fetchTelemetry();
     }, 1000);
 }
+
+// ---------------------------------------------------------------------------
+// Software Update Status & Modal
+// ---------------------------------------------------------------------------
+
+function getUpdateLedClass(status) {
+    switch (status) {
+        case 'up_to_date':
+            return 'sys-led sys-led-sky';
+        case 'minor_available':
+            return 'sys-led sys-led-amber';
+        case 'major_available':
+            return 'sys-led sys-led-rose';
+        default:
+            return 'sys-led sys-led-muted';
+    }
+}
+
+function getUpdateBadgeClass(status) {
+    switch (status) {
+        case 'up_to_date':
+            return 'sys-badge sys-badge-sky';
+        case 'minor_available':
+            return 'sys-badge sys-badge-amber';
+        case 'major_available':
+            return 'sys-badge sys-badge-rose';
+        default:
+            return 'sys-badge sys-badge-muted';
+    }
+}
+
+function getUpdateStatusLabel(status) {
+    if (typeof t === 'function') {
+        const key = `update.status_${status || 'unknown'}`;
+        const translated = t(key);
+        if (translated && translated !== key) return translated;
+    }
+    switch (status) {
+        case 'up_to_date': return 'À jour';
+        case 'minor_available': return 'Mise à jour disponible';
+        case 'major_available': return 'Mise à jour majeure';
+        default: return 'GitHub inaccessible';
+    }
+}
+
+function getUpdateStatusDesc(status) {
+    if (typeof t === 'function') {
+        const key = `update.desc_${status || 'unknown'}`;
+        const translated = t(key);
+        if (translated && translated !== key) return translated;
+    }
+    return '';
+}
+
+function updateVersionStatusUi(updateInfo) {
+    if (!updateInfo) return;
+    window.lastUpdateInfo = updateInfo;
+
+    const status = updateInfo.status || 'unknown';
+    const ledClass = `${getUpdateLedClass(status)} update-dot`;
+    const tooltip = getUpdateStatusLabel(status) + (updateInfo.latest_version ? ` (v${updateInfo.latest_version})` : '');
+
+    const hdrDot = document.getElementById('hdrVersionDot');
+    if (hdrDot) hdrDot.className = ledClass;
+
+    const sysDot = document.getElementById('sysVersionDot');
+    if (sysDot) sysDot.className = ledClass;
+
+    const btnHdr = document.getElementById('btnHdrUpdate');
+    if (btnHdr) btnHdr.title = tooltip;
+
+    const btnSys = document.getElementById('btnSysUpdate');
+    if (btnSys) btnSys.title = tooltip;
+
+    const modal = document.getElementById('updateModal');
+    if (modal && !modal.classList.contains('hidden')) {
+        renderUpdateModalContent(updateInfo);
+    }
+}
+
+function renderUpdateModalContent(info) {
+    const data = info || window.lastUpdateInfo || {
+        status: 'unknown',
+        current_version: window.linkVersion || '--',
+        release_url: 'https://github.com/BolzaW/greenup-link/releases'
+    };
+    const status = data.status || 'unknown';
+
+    const dot = document.getElementById('updModalDot');
+    if (dot) dot.className = getUpdateLedClass(status);
+
+    const badge = document.getElementById('updModalStatusBadge');
+    if (badge) {
+        badge.className = getUpdateBadgeClass(status);
+        badge.innerText = getUpdateStatusLabel(status);
+    }
+
+    const desc = document.getElementById('updModalDesc');
+    if (desc) desc.innerText = getUpdateStatusDesc(status);
+
+    const curEl = document.getElementById('updModalCurrent');
+    if (curEl) {
+        const cv = data.current_version || window.linkVersion || '--';
+        curEl.innerText = cv.startsWith('v') ? cv : `v${cv}`;
+    }
+
+    const latEl = document.getElementById('updModalLatest');
+    if (latEl) {
+        latEl.innerText = data.latest_version ? `v${data.latest_version}` : '--';
+        latEl.className = status === 'major_available'
+            ? 'text-sm font-mono font-bold text-rose-400'
+            : status === 'minor_available'
+                ? 'text-sm font-mono font-bold text-amber-400'
+                : status === 'up_to_date'
+                    ? 'text-sm font-mono font-bold text-sky-400'
+                    : 'text-sm font-mono font-bold text-slate-400';
+    }
+
+    const metaEl = document.getElementById('updModalMeta');
+    if (metaEl) {
+        const lines = [];
+        if (data.published_at) {
+            const pubLabel = typeof t === 'function' ? t('update.published_label') : 'Publiée le';
+            const d = new Date(data.published_at);
+            lines.push(`<div>${pubLabel} : <span class="text-slate-200 font-mono">${isNaN(d) ? data.published_at : d.toLocaleDateString()}</span></div>`);
+        }
+        if (data.last_checked) {
+            const chkLabel = typeof t === 'function' ? t('update.checked_label') : 'Dernière vérification';
+            const d = new Date(data.last_checked);
+            lines.push(`<div>${chkLabel} : <span class="text-slate-200 font-mono">${isNaN(d) ? data.last_checked : d.toLocaleString()}</span></div>`);
+        }
+        metaEl.innerHTML = lines.join('');
+    }
+
+    const notesWrap = document.getElementById('updModalNotesWrap');
+    const notesEl = document.getElementById('updModalNotes');
+    if (notesWrap && notesEl) {
+        if (data.release_notes) {
+            notesEl.textContent = data.release_notes;
+            notesWrap.classList.remove('hidden');
+        } else {
+            notesWrap.classList.add('hidden');
+        }
+    }
+
+    const linkEl = document.getElementById('updModalDownloadLink');
+    if (linkEl) {
+        linkEl.href = data.release_url || 'https://github.com/BolzaW/greenup-link/releases';
+    }
+}
+
+function openUpdateModal() {
+    const modal = document.getElementById('updateModal');
+    if (!modal) return;
+    const fb = document.getElementById('updModalFeedback');
+    if (fb) fb.classList.add('hidden');
+    renderUpdateModalContent(window.lastUpdateInfo);
+    modal.classList.remove('hidden');
+}
+
+function closeUpdateModal() {
+    const modal = document.getElementById('updateModal');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function triggerManualUpdateCheck() {
+    if (window.isAuthRequired && !window.isAuthenticated) {
+        closeUpdateModal();
+        if (typeof showAuthModal === 'function') showAuthModal(false);
+        return;
+    }
+    const btn = document.getElementById('btnUpdateCheckNow');
+    const fb = document.getElementById('updModalFeedback');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = typeof t === 'function' ? t('update.btn_checking') : 'Vérification...';
+    }
+    if (fb) fb.classList.add('hidden');
+
+    try {
+        const res = await apiFetch('/api/update/check', { method: 'POST' });
+        const payload = await res.json();
+        if (payload && payload.update) {
+            updateVersionStatusUi(payload.update);
+            renderUpdateModalContent(payload.update);
+        }
+        if (res.status === 429 && fb) {
+            const secs = payload.retry_after_secs || 30;
+            const tpl = typeof t === 'function' ? t('update.cooldown_msg') : 'Veuillez patienter {secs}s avant de revérifier.';
+            fb.innerText = tpl.replace('{secs}', secs);
+            fb.classList.remove('hidden');
+        }
+    } catch (e) {
+        console.error('Update check error:', e);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = typeof t === 'function' ? t('update.btn_check') : 'Vérifier maintenant';
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btnHdr = document.getElementById('btnHdrUpdate');
+    const btnSys = document.getElementById('btnSysUpdate');
+    const btnClose = document.getElementById('btnUpdateModalClose');
+    const btnCheck = document.getElementById('btnUpdateCheckNow');
+    const btnCopy = document.getElementById('btnCopyUpdateSsh');
+    const modal = document.getElementById('updateModal');
+
+    if (btnHdr) btnHdr.addEventListener('click', openUpdateModal);
+    if (btnSys) btnSys.addEventListener('click', openUpdateModal);
+    if (btnClose) btnClose.addEventListener('click', closeUpdateModal);
+    if (btnCheck) btnCheck.addEventListener('click', triggerManualUpdateCheck);
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeUpdateModal();
+        });
+    }
+    if (btnCopy) {
+        btnCopy.addEventListener('click', async () => {
+            const cmdEl = document.getElementById('updModalSshCmd');
+            if (!cmdEl) return;
+            try {
+                await navigator.clipboard.writeText(cmdEl.innerText);
+                const old = btnCopy.innerText;
+                btnCopy.innerText = typeof t === 'function' ? t('update.btn_copied') : 'Copié !';
+                setTimeout(() => { btnCopy.innerText = old; }, 1500);
+            } catch (_) {}
+        });
+    }
+});
