@@ -837,6 +837,16 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
         ProtocolEvent::SbfState(v) => {
             logger::debug("SERIAL", &format!("ℹ️ SBF (Front Stop Button) = {}", v));
         }
+        ProtocolEvent::EnergyManagementMask(mask) => {
+            logger::debug(
+                "SERIAL",
+                &format!("ℹ️ EM (Energy Management Mask) = {}", mask),
+            );
+            if !driver.sniffer_mode() {
+                let _ = driver.serial_tx.try_send(Command::GetDerogation);
+                let _ = driver.serial_tx.try_send(Command::GetExternalSignal);
+            }
+        }
         ProtocolEvent::SessionTicket(ticket) => {
             logger::debug(
                 "SERIAL",
@@ -1038,13 +1048,13 @@ mod tests {
         parse_incoming_line("State:B", &driver);
         assert_eq!(driver.get_raw_state().state.as_deref(), Some("B"));
 
-        // 2. Unmapped frame (e.g. EM:12345, RFIDId:ABCDEF) should log a warning
-        parse_incoming_line("EM:12345", &driver);
+        // 2. Unmapped frame (e.g. RFIDId:ABCDEF) should log a warning
+        parse_incoming_line("RFIDId:ABCDEF", &driver);
         let recent = logger::get_recent_logs();
         assert!(recent.iter().any(|entry| {
             entry.level == "WARN"
                 && entry.message.contains("Unmapped serial frame")
-                && entry.message.contains("EM:12345")
+                && entry.message.contains("RFIDId:ABCDEF")
         }));
 
         // 3. Completely unknown frame should log an unknown frame warning
@@ -1077,5 +1087,30 @@ mod tests {
         parse_incoming_line("SBF:0", &driver);
         assert_eq!(driver.get_raw_state().fm2, Some(true));
         assert_eq!(driver.get_raw_state().sb, Some(false));
+    }
+
+    #[tokio::test]
+    async fn test_parse_incoming_line_em_mask_triggers_d_and_fm2_queries() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(10);
+        let driver = Arc::new(DriverHandle::new(tx));
+
+        parse_incoming_line("EM:XX1", &driver);
+        let raw = driver.get_raw_state();
+        assert_eq!(raw.em.as_deref(), Some("XX1"));
+        // Raw D and FM2 must not be modified directly by EM:XX1
+        assert_eq!(raw.d, None);
+        assert_eq!(raw.fm2, None);
+
+        // Must systematically emit D? and FM2?
+        assert_eq!(rx.try_recv(), Ok(Command::GetDerogation));
+        assert_eq!(rx.try_recv(), Ok(Command::GetExternalSignal));
+        assert!(rx.try_recv().is_err());
+
+        // Sniffer mode: stores raw.em, emits zero TX commands
+        let (tx_sniff, mut rx_sniff) = tokio::sync::mpsc::channel(10);
+        let sniff_driver = Arc::new(DriverHandle::new_with_side_and_sniffer(1, true, tx_sniff));
+        parse_incoming_line("EM:XX0", &sniff_driver);
+        assert_eq!(sniff_driver.get_raw_state().em.as_deref(), Some("XX0"));
+        assert!(rx_sniff.try_recv().is_err());
     }
 }

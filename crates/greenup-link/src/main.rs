@@ -259,6 +259,19 @@ async fn main() {
         }
     };
 
+    station.set_local_override_disable_lock_secs(app_config.station.local_override_disable_lock_secs);
+    greenup_driver::logger::log(
+        "SYS",
+        &format!(
+            "🛡️ Local override disable lock: {}",
+            match app_config.station.local_override_disable_lock_secs {
+                -1 => "until end of charge (-1)".to_string(),
+                0 => "disabled (0s)".to_string(),
+                s => format!("{}s", s),
+            }
+        ),
+    );
+
     // Synchronous hardware initialization phase before opening Web and MQTT services
     if app_config.station.sniffer_mode {
         greenup_driver::logger::log(

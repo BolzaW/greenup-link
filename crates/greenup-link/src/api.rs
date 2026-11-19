@@ -788,6 +788,31 @@ async fn set_charge_state(
             }
         },
         "disable" => {
+            if let Some(remaining) = state.is_disable_locked_by_local_override() {
+                let lock_desc = if remaining < 0 {
+                    "locked until end of charge".to_string()
+                } else {
+                    format!("{}s remaining", remaining)
+                };
+                logger::log(
+                    "API",
+                    &format!(
+                        "🛡️ Charge disable ignored on Side {}: local_override active ({})",
+                        state.side(),
+                        lock_desc
+                    ),
+                );
+                return (
+                    StatusCode::OK,
+                    Json(json!({
+                        "status": "ignored",
+                        "reason": "local_override_active",
+                        "local_override": true,
+                        "lock_remaining_secs": remaining
+                    })),
+                );
+            }
+            state.clear_local_override();
             logger::log("API", "🛑 Charge disable requested (FM2:1 + DNOK)");
             let _ = state.serial_tx.send(Command::SetExternalSignal(true)).await;
             if state.serial_tx.send(Command::SetDerogation(false)).await.is_ok() {
@@ -1111,7 +1136,7 @@ mod tests {
             info2.serial_number = "DUAL2".to_string();
             let mut tel2 = point2.telemetry.lock().unwrap();
             tel2.serial.status = SerialStatus::UsbConnected;
-            tel2.greenup_state = "C".to_string();
+            tel2.greenup_state = "D".to_string();
             tel2.current = 16.0;
             tel2.power = 3680.0;
             tel2.voltage = 230.0;
@@ -1406,6 +1431,31 @@ mod tests {
         let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "resume".to_string() })).await.into_response();
         assert_eq!(res.status(), StatusCode::OK);
         assert_eq!(rx.recv().await.unwrap(), Command::SetStartButton(true));
+
+        // 7. Action disable while local_override is active -> 200 OK ignored, no serial command sent
+        point1.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            raw.state = Some("D".to_string());
+            raw.fm2 = Some(true);
+            raw.em = Some("XX1".to_string());
+        });
+        point1.set_local_override_disable_lock_secs(30);
+        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "disable".to_string() })).await.into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let json_val: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json_val["status"], "ignored");
+        assert_eq!(json_val["reason"], "local_override_active");
+        assert_eq!(json_val["local_override"], true);
+        assert!(rx.try_recv().is_err());
+
+        // 8. Setting lock to 0 allows disable and clears local_override
+        point1.set_local_override_disable_lock_secs(0);
+        let res = set_charge_state(State(station.clone()), Query(SideQuery { side: None }), Json(ChargeActionPayload { action: "disable".to_string() })).await.into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(rx.recv().await.unwrap(), Command::SetExternalSignal(true));
+        assert_eq!(rx.recv().await.unwrap(), Command::SetDerogation(false));
+        assert!(!point1.to_connector_data().status.local_override);
     }
 
     #[tokio::test]

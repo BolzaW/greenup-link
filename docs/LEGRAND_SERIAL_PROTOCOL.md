@@ -135,7 +135,7 @@ Commands to monitor active energy consumption and configure external RS485 bus p
 
 | Command (TX) | Expected Reply Prefix (RX) | Explanation |
 | :--- | :--- | :--- |
-| `EM?` | `EM:<pulses>` | **Energy Meter Pulse Count**: Returns the cumulative active energy pulse counter recorded from the internal/external energy meter. |
+| `EM?` | `EM:<mask>` | **Energy Management Mask**: 3-character status mask (`EM:0XX`, `EM:1XX`, `EM:X0X`, `EM:X1X`, `EM:XX0`, `EM:XX1`). Emitted spontaneously on physical long-press local derogation (`EM:XX1`) and when derogation is cleared (`EM:XX0`). |
 | `ModbusAddr?` | `ModbusAddr:<addr>` | Queries the station's slave address on the Modbus RS485 bus (default: `1`). |
 | `ModbusAddr:<addr>` | `ModbusAddr:ok*` | Configures the station's Modbus slave address in EEPROM. |
 | `ModbusEMA?` | `ModbusEMA:<addr>` | Queries the Modbus address assigned to the external Energy Meter (EM). |

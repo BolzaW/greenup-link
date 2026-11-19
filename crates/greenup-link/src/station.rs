@@ -11,7 +11,7 @@
 //! - Managing power/energy integration and driving [`crate::session`] CSV/TXT recording.
 
 use std::sync::{
-    atomic::{AtomicBool, AtomicU8, Ordering},
+    atomic::{AtomicBool, AtomicI64, AtomicU8, Ordering},
     Arc, Mutex, RwLock,
 };
 use tokio::sync::mpsc;
@@ -45,6 +45,9 @@ pub struct AppState {
     pub side: AtomicU8,
     /// Passive UART listen-only mode (`true` = Sniffer mode, zero TX commands).
     pub sniffer_mode: AtomicBool,
+    /// Duration (in seconds) to ignore external `disable` commands during `local_override`.
+    /// `-1` = locked until end of charge, `0` = disabled, `> 0` = grace period in seconds.
+    pub local_override_disable_lock_secs: AtomicI64,
     /// High-level interpreted telemetry (power, energy, IEC/OCPP state, external voltage).
     pub telemetry: Mutex<Telemetry>,
     /// High-level board metadata and hardware capabilities deduced from `Reference:`.
@@ -95,6 +98,7 @@ impl AppState {
             driver,
             side: AtomicU8::new(side),
             sniffer_mode: AtomicBool::new(sniffer_mode),
+            local_override_disable_lock_secs: AtomicI64::new(30),
             telemetry: Mutex::new(tel),
             info: Mutex::new(info),
             serial_tx,
@@ -233,6 +237,9 @@ impl AppState {
                 }
                 if let Some(d) = raw.d {
                     tel.d_state = Some(d);
+                }
+                if let Some(ref em) = raw.em {
+                    tel.em_mask = Some(em.clone());
                 }
                 if let Some(sb) = raw.sb {
                     tel.charge_paused = !sb;
@@ -425,6 +432,52 @@ impl AppState {
         self.sniffer_mode.load(Ordering::Relaxed)
     }
 
+    /// Configures the `local_override` disable lock duration in seconds (`-1`, `0`, or `> 0`).
+    pub fn set_local_override_disable_lock_secs(&self, secs: i64) {
+        self.local_override_disable_lock_secs
+            .store(secs, Ordering::Relaxed);
+    }
+
+    /// Checks whether an external `disable` command should be ignored due to `local_override`.
+    /// Returns `Some(-1)` if locked for the whole charge, `Some(remaining_secs)` if within the
+    /// grace period, or `None` if `disable` is allowed.
+    pub fn is_disable_locked_by_local_override(&self) -> Option<i64> {
+        self.sync_from_driver();
+        let lock_secs = self.local_override_disable_lock_secs.load(Ordering::Relaxed);
+        if lock_secs == 0 {
+            return None;
+        }
+        let tel = self.telemetry.lock().unwrap_or_else(|e| e.into_inner());
+        if !tel.local_override {
+            return None;
+        }
+        if lock_secs < 0 {
+            return Some(-1);
+        }
+        if let Some(started_at) = tel.local_override_started_at {
+            let elapsed = started_at.elapsed().as_secs() as i64;
+            if elapsed < lock_secs {
+                return Some(lock_secs - elapsed);
+            }
+        }
+        None
+    }
+
+    /// Clears `local_override` when an authorized software `disable` is executed.
+    pub fn clear_local_override(&self) {
+        if self.driver.get_raw_state().em.is_some() {
+            self.driver.update_raw(|raw| {
+                raw.em = None;
+            });
+        }
+        if let Ok(mut tel) = self.telemetry.lock() {
+            tel.em_mask = None;
+            tel.local_override = false;
+            tel.local_override_started_at = None;
+            tel.update_charge_status();
+        }
+    }
+
     /// Returns true if the USB serial link is active and actively communicating with the ATmega.
     pub fn is_serial_connected(&self) -> bool {
         self.sync_from_driver();
@@ -539,8 +592,22 @@ impl StationManager {
 
     /// Attaches the second charge point dynamically after startup.
     pub fn attach_point2(&self, p2: SharedState) {
+        let lock_secs = self
+            .point1
+            .local_override_disable_lock_secs
+            .load(Ordering::Relaxed);
+        p2.set_local_override_disable_lock_secs(lock_secs);
         let mut guard = self.point2.write().unwrap_or_else(|e| e.into_inner());
         *guard = Some(p2);
+    }
+
+    /// Configures `local_override_disable_lock_secs` on all active charge points.
+    pub fn set_local_override_disable_lock_secs(&self, secs: i64) {
+        self.point1.set_local_override_disable_lock_secs(secs);
+        let guard = self.point2.read().unwrap_or_else(|e| e.into_inner());
+        if let Some(ref p2) = *guard {
+            p2.set_local_override_disable_lock_secs(secs);
+        }
     }
 
     /// Watches Point 1's low-level driver via `tokio::sync::watch` and automatically requests
@@ -589,6 +656,9 @@ impl StationManager {
                                 },
                             );
                             let app_state_2 = Arc::new(AppState::from_driver(driver2, &link_version));
+                            app_state_2.set_local_override_disable_lock_secs(
+                                station.point1.local_override_disable_lock_secs.load(Ordering::Relaxed),
+                            );
                             app_state_2.start_driver_watcher();
                             station.attach_point2(app_state_2);
                             logger::set_dual_station(true);
@@ -821,5 +891,42 @@ mod tests {
         }
         assert_eq!(received.first(), Some(&Command::RaspberryPiModeOk));
         assert_eq!(received.last(), Some(&Command::SetTicTestMode(true)));
+    }
+
+    #[tokio::test]
+    async fn test_local_override_disable_lock_modes() {
+        let (tx, _rx) = mpsc::channel(16);
+        let state = Arc::new(AppState::new(tx));
+
+        // Activate local_override via driver raw state (State:D + EM:XX1 + FM2:1)
+        state.driver.update_both(|raw, usb| {
+            usb.status = SerialStatus::UsbConnected;
+            raw.state = Some("D".to_string());
+            raw.fm2 = Some(true);
+            raw.em = Some("XX1".to_string());
+        });
+
+        // 1. Default 30s lock -> locked
+        assert!(state.is_disable_locked_by_local_override().is_some());
+
+        // 2. 0s -> never locked
+        state.set_local_override_disable_lock_secs(0);
+        assert_eq!(state.is_disable_locked_by_local_override(), None);
+
+        // 3. -1 -> locked indefinitely until end of charge
+        state.set_local_override_disable_lock_secs(-1);
+        assert_eq!(state.is_disable_locked_by_local_override(), Some(-1));
+
+        // 4. Expired 30s grace period -> unlocked
+        state.set_local_override_disable_lock_secs(30);
+        if let Ok(mut tel) = state.telemetry.lock() {
+            tel.local_override_started_at =
+                Some(std::time::Instant::now() - std::time::Duration::from_secs(35));
+        }
+        assert_eq!(state.is_disable_locked_by_local_override(), None);
+
+        // 5. clear_local_override resets flag
+        state.clear_local_override();
+        assert!(!state.to_connector_data().status.local_override);
     }
 }

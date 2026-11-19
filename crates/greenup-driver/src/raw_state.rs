@@ -114,6 +114,7 @@ pub struct AtmegaRawState {
     pub dec: Option<u32>,
     pub fm: Option<String>,
     pub fm2: Option<bool>,
+    pub em: Option<String>,
     pub cau: Option<bool>,
 
     // --- 6. OCPP Status ---
@@ -331,6 +332,10 @@ impl AtmegaRawState {
             }
             ProtocolEvent::ExternalSignal(b) | ProtocolEvent::ExternalSignalForced(b) => {
                 self.fm2 = Some(*b);
+                true
+            }
+            ProtocolEvent::EnergyManagementMask(mask) => {
+                self.em = Some(mask.clone());
                 true
             }
             ProtocolEvent::EmergencyStop(b) => {

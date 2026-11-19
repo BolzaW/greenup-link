@@ -365,7 +365,7 @@ Three standard authentication methods are supported simultaneously against the s
 
 #### Actions detail:
 - **`enable`**: Authorizes and forces the charge. First sends `T2COK` to ensure the Type 2 port is active, then `FM2:0` to unblock any external restrictions, then activates Derogation (`DOK`). This overrides the physical TIC (Peak/Off-Peak) and the external signal (`FM2`) limitations, while keeping the local hardware load-balancing (Délestage) active to protect the main breaker. The station will report `State:D` (Derogation Charge) which is equivalent to `State:C`.
-- **`disable`**: Securely disables the charge. First sends `FM2:1` to firmly block the charge via the simulated external contact (preventing TIC from accidentally starting it during Off-Peak hours), then sends `DNOK` to release the derogation.
+- **`disable`**: Securely disables the charge. First sends `FM2:1` to firmly block the charge via the simulated external contact (preventing TIC from accidentally starting it during Off-Peak hours), then sends `DNOK` to release the derogation. If a local physical button forced charge (`local_override`) is active within the configured `local_override_disable_lock_secs` window (default `30s`, or `-1` for the whole session), the command is ignored with HTTP `200 OK` (`{ "status": "ignored", "reason": "local_override_active", "local_override": true, "lock_remaining_secs": ... }`).
 - **`pause`**: Pauses the charge naturally by simulating a press on the physical Stop button (`SBNOK`). This puts the station in a paused state (`SB:1`).
 - **`resume`**: Resumes the charge naturally by simulating a press on the physical Start button (`SBOK`), removing the paused state (`SB:0`).
 

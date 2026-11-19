@@ -66,6 +66,13 @@ watchdog_timeout_secs = 60
 # - true  : Sniffer mode — passive RX-only monitoring, zero TX commands are ever sent to the ATmega.
 sniffer_mode = false
 
+# Duration (in seconds) during which external `disable` commands (REST API & MQTT)
+# are ignored after a physical button forced charge (`local_override`) is triggered:
+# - > 0 : Grace period in seconds (Default: 30). Allows external managers (e.g. HA/EVCC) time to switch mode.
+# - -1  : Ignore `disable` commands until the end of the charge / unplug / physical button stop.
+# - 0   : Never ignore `disable` commands (`local_override` remains informational only).
+local_override_disable_lock_secs = 30
+
 [mqtt]
 # Enable or disable the MQTT client:
 # - false : (Default) MQTT client is not started.
