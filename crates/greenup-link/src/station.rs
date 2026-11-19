@@ -189,6 +189,13 @@ impl AppState {
                         info.capabilities = Some(spec);
                     }
                 }
+                info.board_code = compute_board_code(
+                    &info.week_year_production,
+                    &info.software_version,
+                    &info.serial_number,
+                    &info.hardware_version,
+                    &info.reference,
+                );
             }
 
             // 3. Update Telemetry, State transitions, Power/Energy, and Sessions
@@ -808,6 +815,7 @@ impl StationManager {
             bluetooth_enabled: p1_info.bluetooth_enabled,
             mac_address: p1_info.mac_address.clone(),
             capabilities: p1_info.capabilities.clone(),
+            board_code: p1_info.board_code.clone(),
         };
 
         StationSnapshot {
@@ -815,6 +823,108 @@ impl StationManager {
             connectors,
         }
     }
+
+    /// Produces `StationData` for a specific charge point side (`1` or `2`).
+    pub fn station_for_side(&self, requested_side: Option<u8>) -> StationData {
+        let point = self.get_point(requested_side);
+        let info = point.info.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let tel = point
+            .telemetry
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+
+        StationData {
+            vendor: "Legrand".to_string(),
+            model: info.reference.clone(),
+            serial_number: info.serial_number.clone(),
+            hardware_version: info.hardware_version.clone(),
+            firmware_version: info.software_version.clone(),
+            link_version: info.link_version.clone(),
+            serial_connection: tel.serial,
+            is_dual: self.is_dual(),
+            available_connectors: self.available_points(),
+            production_date: if info.week_year_production.is_empty() {
+                None
+            } else {
+                Some(info.week_year_production.clone())
+            },
+            bluetooth_enabled: info.bluetooth_enabled,
+            mac_address: info.mac_address.clone(),
+            capabilities: info.capabilities.clone(),
+            board_code: info.board_code.clone(),
+        }
+    }
+}
+
+fn crc16_modbus(data: &[u8]) -> u16 {
+    let mut crc: u16 = 0xFFFF;
+    for &b in data {
+        crc ^= b as u16;
+        for _ in 0..8 {
+            if (crc & 1) != 0 {
+                crc = (crc >> 1) ^ 0xA001;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    crc
+}
+
+fn normalize_version_string(v: &str) -> String {
+    let clean: String = v.trim().replace(':', "").replace(' ', "");
+    if clean.is_empty() {
+        return String::new();
+    }
+    if clean.starts_with('V') {
+        clean
+    } else if clean.contains('.') {
+        format!("V{}", clean)
+    } else if clean.len() == 6 {
+        format!("V{}.{}.{}", &clean[0..2], &clean[2..4], &clean[4..6])
+    } else {
+        format!("V{}", clean)
+    }
+}
+
+/// Computes the board identification CRC16 checksum from the hardware identity registers.
+pub fn compute_board_code(
+    week_year_production: &str,
+    software_version: &str,
+    serial_number: &str,
+    hardware_version: &str,
+    reference: &str,
+) -> Option<String> {
+    let prod = week_year_production.trim();
+    let sw = normalize_version_string(software_version);
+    let sn = serial_number.trim();
+    let hw = normalize_version_string(hardware_version);
+    let r = reference.trim();
+
+    if !prod.is_ascii() || !sw.is_ascii() || !sn.is_ascii() || !hw.is_ascii() || !r.is_ascii() {
+        return None;
+    }
+
+    let p = prod.as_bytes();
+    let s = sw.as_bytes();
+    let n = sn.as_bytes();
+    let h = hw.as_bytes();
+    let rf = r.as_bytes();
+
+    if p.len() < 5 || s.len() < 9 || n.len() < 6 || h.len() < 9 || rf.len() < 6 {
+        return None;
+    }
+
+    let buf = [
+        p[0], s[8], n[2], h[8], rf[1],
+        p[4], s[1], n[1], h[7], rf[3],
+        p[1], s[4], n[5], h[1], rf[4],
+        p[3], s[2], n[0], h[2], rf[5],
+        s[5], n[4], h[4], rf[2], s[7], n[3], h[5], rf[0],
+    ];
+
+    Some(crc16_modbus(&buf).to_string())
 }
 
 pub type SharedStation = Arc<StationManager>;
@@ -928,5 +1038,50 @@ mod tests {
         // 5. clear_local_override resets flag
         state.clear_local_override();
         assert!(!state.to_connector_data().status.local_override);
+    }
+
+    #[tokio::test]
+    async fn test_compute_board_code_and_station_for_side() {
+        assert_eq!(
+            compute_board_code("42W22", "V01.18.10", "015184", "V02.01.01", "058001").as_deref(),
+            Some("13862")
+        );
+        assert_eq!(
+            compute_board_code("42W22", "011810", "015184", "02.01.01", "058001").as_deref(),
+            Some("13862")
+        );
+        assert_eq!(
+            compute_board_code("", "V01.18.10", "015184", "V02.01.01", "058001"),
+            None
+        );
+
+        let (tx1, _rx1) = mpsc::channel(8);
+        let (tx2, _rx2) = mpsc::channel(8);
+        let p1 = Arc::new(AppState::new_with_side(1, tx1));
+        let p2 = Arc::new(AppState::new_with_side(2, tx2));
+
+        p1.driver.update_raw(|raw| {
+            raw.reference = Some("058001".to_string());
+            raw.serial_number = Some("015184".to_string());
+            raw.hardware_version = Some("V02.01.01".to_string());
+            raw.software_version = Some("V01.18.10".to_string());
+            raw.week_year_production = Some("42W22".to_string());
+        });
+        p2.driver.update_raw(|raw| {
+            raw.reference = Some("058001".to_string());
+            raw.serial_number = Some("015185".to_string());
+            raw.hardware_version = Some("V02.01.01".to_string());
+            raw.software_version = Some("V01.18.10".to_string());
+            raw.week_year_production = Some("42W22".to_string());
+        });
+
+        let manager = StationManager::new(p1, Some(p2));
+        let s1 = manager.station_for_side(Some(1));
+        let s2 = manager.station_for_side(Some(2));
+        assert_eq!(s1.serial_number, "015184");
+        assert_eq!(s1.board_code.as_deref(), Some("13862"));
+        assert_eq!(s2.serial_number, "015185");
+        assert_ne!(s2.board_code, s1.board_code);
+        assert!(s2.board_code.is_some());
     }
 }

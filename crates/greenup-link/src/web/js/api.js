@@ -484,6 +484,7 @@ async function fetchInfo() {
         let line2 = [];
         if (station.serial_number) line2.push(`SN: ${station.serial_number}`);
         if (prodDate) line2.push(`Prod: ${prodDate}`);
+        if (station.board_code) line2.push(`Code: ${station.board_code}`);
         subInfo.innerText = line2.length > 0 ? line2.join(' | ') : '';
 
         if (station.link_version) {

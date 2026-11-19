@@ -225,6 +225,8 @@ pub struct BoardInfo {
     pub side: Option<u8>,
     pub link_version: String,
     pub capabilities: Option<HardwareCapabilities>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub board_code: Option<String>,
     #[serde(default)]
     pub is_dual: bool,
     #[serde(default)]
@@ -328,6 +330,8 @@ pub struct StationData {
     pub mac_address: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<HardwareCapabilities>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub board_code: Option<String>,
 }
 
 /// Unified station snapshot aggregating station metadata and all active connectors.

@@ -1266,6 +1266,7 @@ mod tests {
                 bluetooth_enabled: Some(true),
                 mac_address: Some("AA:BB:CC:DD:EE:FF".to_string()),
                 capabilities: None,
+                board_code: None,
             },
             connectors: vec![
                 ConnectorData {
@@ -1345,6 +1346,7 @@ mod tests {
                 bluetooth_enabled: None,
                 mac_address: None,
                 capabilities: None,
+                board_code: None,
             },
             connectors: vec![
                 ConnectorData {
@@ -1432,6 +1434,7 @@ mod tests {
                 bluetooth_enabled: None,
                 mac_address: None,
                 capabilities: None,
+                board_code: None,
             },
             connectors: vec![
                 ConnectorData {

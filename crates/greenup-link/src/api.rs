@@ -295,9 +295,12 @@ async fn get_state(State(station): State<SharedStation>) -> impl IntoResponse {
 
 /// GET /api/station
 /// Returns the station hardware identity and system status.
-async fn get_station(State(station): State<SharedStation>) -> impl IntoResponse {
+async fn get_station(
+    State(station): State<SharedStation>,
+    Query(query): Query<SideQuery>,
+) -> impl IntoResponse {
     logger::debug("API", "🔍 GET request /api/station");
-    Json(station.snapshot().station)
+    Json(station.station_for_side(query.side))
 }
 
 /// GET /api/connectors
@@ -1177,7 +1180,7 @@ mod tests {
         assert_eq!(res_state.status(), StatusCode::OK);
 
         // 2. GET /api/station
-        let res_station = get_station(State(station.clone())).await.into_response();
+        let res_station = get_station(State(station.clone()), Query(SideQuery::default())).await.into_response();
         assert_eq!(res_station.status(), StatusCode::OK);
 
         // 3. GET /api/connectors
