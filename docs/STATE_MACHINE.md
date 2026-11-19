@@ -210,20 +210,24 @@ The primary charge gatekeeper in Green'Up Link uses a combination of Derogation 
 Derogation (`DOK` / `DNOK`) is a software flag placed in logical OR with the physical Off-Peak dry contact (Contact 1) and the Linky TIC Off-Peak signal (`Contact_HC || TIC_HC || Derogation`).
 - `DOK` immediately lifts a Linky Peak-Hours (HP) lockout or an `FM2:1` conditioning block.
 
-#### To Start / Authorize Charge (`action: "enable"`):
-1. Sends `FM2:0`: Clears external simulated blocking signal (restores direct mode).
-2. Sends `DOK`: Activates Derogation.
-
-*(Note: `T2COK` is intentionally not sent by `enable`, so an explicit `disable_type2` lock is respected.)*
+#### Adaptive Charge Start / Enable (`action: "enable"`):
+When invoking `enable` via REST (`POST /api/charge`) or MQTT (`.../control/charge/set` with `"on"` / `"enable"`), Green'Up Link executes an **adaptive command sequence**:
+1. **Core Enablement**: Sends `FM2:0` (clears external conditioning block) followed by `DOK` (asserts software derogation).
+2. **Self-Healing Sockets**: If the Type 2 socket was previously disabled (`t2c == Some(false)`), `enable` automatically issues `T2COK`. Similarly, if the auxiliary domestic socket was inhibited (`dom_2pc == Some(false)`), it automatically issues `2PCOK`.
+3. **Restoring Authorization**: If `CAU` was suspended (`cau == Some(false)`) and no active TIC interface is present, `enable` automatically sends `CAUOK` to restore authorization.
 
 **Why this combination is bulletproof:**
-- Clearing `FM2:0` and activating `DOK` transitions the station from `State:B` to active charge (**`State:E`**).
+- Transitions the station reliably from `State:B` to active charge (**`State:E`**).
 - **Overrides TIC Peak Hours:** If a physical TIC is wired, `DOK` overrides the Peak-Hours (HP) restriction, allowing immediate charging.
 - **Preserves Autonomous Load-Balancing:** Physical TIC load-shedding remains active under Derogation; `CCTIC` will still throttle the charge if household consumption spikes.
+- **Resolves Inconsistent Sub-States:** Users or automations do not get stuck if a previous action had left `T2CNOK` or `CAUNOK` engaged.
 
-#### To Stop / Block Charge (`action: "disable"`):
-1. Sends `FM2:1`: Asserts Contact 1 conditioning (Peak-Hours simulation), blocking automatic charge initiation.
-2. Sends `DNOK`: Releases the derogation flag.
+#### Charge Stop / Block (`action: "disable"`):
+When invoking `disable` (or MQTT `"off"`):
+1. **Local Override Guard**: Checks if a local button override is active (`local_override`). If active, the command is ignored (returns `409 Conflict` with remaining cooldown seconds or `-1` if locked for the whole session).
+2. **Core Inhibition**: Sends `DNOK` (releases derogation) followed by `FM2:1` (asserts Contact 1 conditioning, simulating peak hours).
+3. **Releases Forced Flags**: If manual forcing was engaged (`T2FOK` or `2PFOK`), sends `T2FNOK` / `2PFNOK` to clear them.
+4. **Clears Local Override**: Once the disable is accepted, any pending local override flag is cleared.
 
 **Why this combination is safe:**
 - `FM2:1` holds the station in `State:B` without opening contactors under load.
@@ -235,8 +239,9 @@ Derogation (`DOK` / `DNOK`) is a software flag placed in logical OR with the phy
 
 `CAU` stands for **Charge AUthorization**:
 - **Clean Deceleration & Cutoff (`CAUNOK`)**: Ramps down charging current via deceleration state **`State:W`** (PWM to 0 A), opens the contactor off-load, and holds the vehicle plugged and locked in **`State:B`**. *(In `State:D`, `CAUNOK` requires `RaspberryPiModeOK` to be active).*
-- **Restoring Authorization (`CAUOK`)**: Re-arms charge authorization.
-- **Avoid `CAU?` Query**: `CAU?` compares the T2S and Domestic authorization flags; if they differ (which occurs during TIC load-shedding or single-socket sessions), `CAU?` resets both to `0` and **abruptly cuts off active charging**.
+- **Restoring Authorization (`CAUOK`)**: Re-arms charge authorization (`State:B` $\rightarrow$ `State:C` or `State:J` $\rightarrow$ `State:I`).
+- **Incompatible with Active TIC**: The ATmega firmware cannot reliably arbitrate `CAU` while its internal TIC demodulator and load-shedding engine are active in `FM:2`. Invoking `suspend` (`CAUNOK`) or `authorize` (`CAUOK`) when a TIC interface is detected (`1200` or `9600` bauds) is rejected by Green'Up Link (`not supported while TIC active`).
+- **Avoid `CAU?` Query**: `CAU?` compares the T2S and Domestic authorization flags; if they differ (which occurs during TIC load-shedding or single-socket sessions), `CAU?` resets both to `0` and **abruptly cuts off active charging**. Green'Up Link queries `CAU?` only at boot/init when the station is strictly idle (`!D/E/G/H`) and no TIC is detected.
 
 ---
 
@@ -248,16 +253,24 @@ Derogation (`DOK` / `DNOK`) is a software flag placed in logical OR with the phy
 
 ---
 
-### 5.4 Front Panel Push Button & Asynchronous `EM:` Push Notifications
+### 5.4 Front Panel Push Button, Asynchronous `EM:` Notifications & Local Override
 
+The front panel button interaction on Green'Up Premium generates spontaneous events and hardware overrides:
 - **Short Press (< ~1 s)**: Toggles the session Start/Stop flag (`SB`), emitting `SBF:1` or `SBF:0` (and clearing any active `Dec:` timer on stop).
-- **Long Press (> ~1 s)**: Toggles the hardware derogation state (equivalent to `DOK` / `DNOK`).
+- **Long Press (> ~1 s)**: Toggles the hardware derogation state (equivalent to `DOK` / `DNOK`), broadcasting an asynchronous `EM:` notification.
 - **Continuous Hold (in `FM:1` plastic enclosure)**: Cycles through deferred start delays (`180` $\rightarrow$ `360` $\rightarrow$ `540` $\rightarrow$ `0` min) every 2 s and emits `Dec:<min>` on release.
 - **Spontaneous `EM:` Notifications**:
   - Emitted asynchronously **only when `FM:2` (`FM2:1..3`) and `RaspberryPiModeOK` are active**:
   - **`EM:1XX` / `EM:0XX`**: Contact 2 state.
-  - **`EM:X1X` / `EM:X0X`**: Contact 1 state.
-  - **`EM:XX1` / `EM:XX0`**: Derogation state.
+  - **`EM:X1X` / `EM:X0X`**: Contact 1 state (off-peak dry contact or physical TIC off-peak window).
+  - **`EM:XX1` / `EM:XX0`**: Derogation state (toggled by front button long press or `DOK`/`DNOK`).
+
+#### Software Handling of `local_override`:
+When a user physically triggers a long press on the front button to force charging during peak hours:
+1. The ATmega broadcasts `EM:XX1`.
+2. Green'Up Link captures this frame and asserts `control.local_override = true` and `status.local_override = true`.
+3. An anti-disruption guard (`local_override_disable_lock_secs`, default 30s, or `-1` for full charge session) blocks external automated EMS or solar controllers (like EVCC) from immediately canceling the charge with an automated `disable` command.
+4. When the session finishes (vehicle unplugged `State:A` / `State:L`) or when an explicit authorized software `disable` is issued after the lock expires, Green'Up Link clears the derogation bit (`EM:XX0`) and resets `local_override` to `false`.
 
 ---
 
@@ -286,30 +299,47 @@ Derogation (`DOK` / `DNOK`) is a software flag placed in logical OR with the phy
 
 ---
 
-### 5.7 Clean Suspension (`suspend` / `authorize`) vs. Physical Button Simulation (`stop_session` / `start_session`)
+### 5.7 In-Session Suspension (`suspend` / `authorize`) vs. Session Stop Button (`stop_session` / `start_session`)
 
 Green'Up Link distinguishes two fundamentally different interruption mechanisms:
 
-1. **Clean In-Session Suspension (`CAUOK` / `CAUNOK`) — `action: "suspend"` / `"authorize"`** *(mapped to the UI Pause/Resume button)*:
+1. **Front Panel Start/Stop Button Simulation (`SBOK` / `SBNOK`) — `action: "stop_session"` / `"start_session"`** *(mapped to Web UI Pause/Resume)*:
+   - **`action: "stop_session"`** (`SBNOK`): Simulates pressing the physical Stop button. Ramps down via transient `State:W`, **closes the ATmega session** (`WT/CT` ticket + EEPROM write), **unlocks the Type 2 cable**, and stabilizes in **`State:M`** (`State:P` for domestic). Green'Up Link reports **`status.session_stopped = true`**. Works across all installations regardless of TIC status.
+   - **`action: "start_session"`** (`SBOK`): Simulates pressing the physical Start button. Exits `State:M`/`State:P` via `State:A`, re-locks the Type 2 cable, resets `session_stopped = false`, and starts a new session (`State:B`).
+
+2. **Clean In-Session Suspension (`CAUOK` / `CAUNOK`) — `action: "suspend"` / `"authorize"`**:
    - **`action: "suspend"`** (`CAUNOK`): Ramps down current through transient `State:W`, opens the contactor off-load, and holds the vehicle in **`State:B`** (or `State:J` / `State:F`). **The Type 2 cable stays locked**, **the internal ATmega session remains open** (no `WT/CT` ticket, no EEPROM history write), and **physical dry-contact / `DOK` bypasses are blocked**. Persists across cable unplug/replug.
    - **`action: "authorize"`** (`CAUOK`): Restores charge authorization (`State:B` $\rightarrow$ `State:C` or `State:J` $\rightarrow$ `State:I`).
-   - At startup (or `POST /api/init`), Green'Up Link safely queries `CAU?` **only if no active charge is in progress** (`!D/E/G/H`) to synchronize `status.paused` without triggering the ATmega `CAU?` cutoff bug.
-
-2. **Front Panel Start/Stop Button Simulation (`SBOK` / `SBNOK`) — `action: "stop_session"` / `"start_session"`**:
-   - **`action: "stop_session"`** (`SBNOK`): Simulates pressing the physical Stop button. Ramps down via `State:W`, **closes the ATmega session** (`WT/CT` ticket + EEPROM write), **unlocks the Type 2 cable**, and stabilizes in **`State:M`** (`State:P` for domestic).
-   - **`action: "start_session"`** (`SBOK`): Simulates pressing the physical Start button. Exits `State:M`/`State:P` via `State:A`, re-locks the Type 2 cable, and starts a new session (`State:B`).
+   - **Constraint**: Only available when physical TIC is not active.
 
 > [!WARNING]
 > **Non-Blocking Behavior of `SB` upon Cable Replug:**  
 > Unlike `FM2:1` and `CAUNOK`, the `SBNOK` stop state is **not persistent across physical connection events**.  
 > If the station is stopped in `State:M` via `SBNOK`, and the user **unplugs and replugs the charging cable into the vehicle**, the ATmega automatically resets `SB` back to `1` and starts a new session!  
-> For this reason, `suspend`/`authorize` (`CAUNOK`/`CAUOK`) is used for in-session pauses, `enable`/`disable` (`FM2`/`D`) is the authoritative supervisor control, and `stop_session`/`start_session` (`SBNOK`/`SBOK`) simulates the physical front button.
->
-> **TIC Compatibility**: `CAU` (`suspend`/`authorize`) is **not compatible** with a connected and active TIC interface in `FM:2` and is rejected by the API (`not supported while TIC active`). The Web UI Pause/Resume button maps to `stop_session`/`start_session` (`SBNOK`/`SBOK`), and `status.session_stopped` is `true` in `State:M` and `State:P` (replacing legacy `paused`). `status.active_socket` reports `"none"`, `"t2s"`, or `"domestic"`.
+> For this reason, `enable`/`disable` (`FM2`/`D`) remains the authoritative supervisor gatekeeper for external automated EMS (EVCC / Home Assistant), while `stop_session`/`start_session` (`SBNOK`/`SBOK`) provides immediate user-facing pause and cable release.
 
 ---
 
-### 5.8 Current Setpoints: Protocol Formatting, Safety Clamping & `CC` vs `CCEl` (EEPROM Wear)
+### 5.8 High-Level State Synthesis: `charge_authorized` & `active_socket`
+
+Rather than exposing fragmented internal hardware registers, Green'Up Link continuously synthesizes two high-level state attributes from the raw ATmega state:
+
+#### 1. Authorization Matrix (`control.charge_authorized`)
+A charging session is reported as authorized (`charge_authorized: true`) only when all hardware and software gates are aligned:
+- **Socket Gate**: The active socket must be enabled (`t2c != false` for Type 2, `dom_2pc != false` for domestic).
+- **Conditioning Gate**: Either direct mode is asserted (`!fm2`), software derogation is active (`d`), local override is active (`local_override`), or the off-peak contact is closed (`em_mask` Contact 1 bit `== '1'`).
+- **Authorization Gate**: Either an active TIC is running (supervising authorization autonomously) or software authorization is not inhibited (`cau != false`).
+- **Force Override**: If manual forcing is engaged (`t2f == true` or `dom_2pf == true`), all gates are bypassed and `charge_authorized` is immediately `true`.
+
+#### 2. Active Socket Identification (`status.active_socket`)
+Green'Up Link maps the physical socket currently involved in the session directly from the FSM:
+- **`"t2s"`**: States `B`, `C`, `D`, `E`, `I`, `J`, `K`, `M`, `N`.
+- **`"domestic"`**: States `F`, `G`, `H`, `O`, `P`.
+- **`"none"`**: Idle, fault, disconnected, or sleep states (`A`, `L`, `R`, `S`, `T`, `U`, `V`, `W`, `X`, `Y`, `Z`).
+
+---
+
+### 5.9 Current Setpoints: Protocol Formatting, Safety Clamping & `CC` vs `CCEl` (EEPROM Wear)
 
 When modulating charging current limits via `POST /api/current/:amps` or MQTT:
 
