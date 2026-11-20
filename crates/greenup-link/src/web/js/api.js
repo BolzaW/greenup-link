@@ -677,7 +677,9 @@ async function fetchTelemetry() {
 
         window.lastConnector = conn;
 
+        const appliedAmps = conn.control.applied_limit_amps ?? conn.control.setpoint_amps;
         const setpointAmps = conn.control.setpoint_amps;
+        window.lastAppliedLimitAmps = appliedAmps;
         window.lastSetpointAmps = setpointAmps;
 
         // Adapter object so existing UI helpers & session logic retain seamless access
@@ -691,6 +693,7 @@ async function fetchTelemetry() {
             energy: conn.meter.energy_total_wh,
             error_code: conn.status.error_code,
             eliot_limit_amps: conn.control.setpoint_amps,
+            applied_limit_amps: appliedAmps,
             greenup_state: conn.status.raw_code,
             iec_state: conn.status.iec,
             charge_authorized: conn.control.charge_authorized,
@@ -710,6 +713,9 @@ async function fetchTelemetry() {
             valCurrent.innerText = '--';
             valPower.innerText = '--';
             valEnergy.innerText = '--';
+            if (typeof updateAppliedLimitBadge === 'function') {
+                updateAppliedLimitBadge(null, null);
+            }
         } else {
             valVoltage.innerText = conn.meter.voltage_v.toFixed(1);
             if (conn.meter.voltage_source === 'external') {
@@ -738,6 +744,10 @@ async function fetchTelemetry() {
         if (conn.control.setpoint_amps && !isDraggingSlider && !isActionPending) {
             slider.value = conn.control.setpoint_amps;
             lblSlider.innerText = conn.control.setpoint_amps + " A";
+        }
+        if (typeof updateAppliedLimitBadge === 'function') {
+            const currentTarget = isDraggingSlider ? Number(slider.value) : conn.control.setpoint_amps;
+            updateAppliedLimitBadge(appliedAmps, currentTarget);
         }
 
         lastReportedState = conn.status.raw_code;
