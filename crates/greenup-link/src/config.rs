@@ -38,6 +38,12 @@ log_dir = "logs"
 # Default: "sessions" (or "/var/lib/greenup-link/sessions")
 sessions_dir = "sessions"
 
+# Maximum number of saved charging sessions to keep on disk.
+# - > 0 : Keep at most N sessions (Default: 365). Oldest sessions are automatically
+#         deleted at startup and every 24 hours when this limit is exceeded.
+# - -1  : Keep all sessions indefinitely (never delete automatically).
+max_sessions = 365
+
 # Logging verbosity level:
 # Options: "ERROR", "WARN", "INFO", "DEBUG", "TRACE"
 # Default: "INFO"
@@ -117,11 +123,14 @@ impl Default for HttpConfig {
     }
 }
 
+pub const DEFAULT_MAX_SESSIONS: i64 = 365;
+
 #[derive(Debug, Clone)]
 pub struct StorageConfig {
     pub log_dir: String,
     pub sessions_dir: String,
     pub log_level: Option<String>,
+    pub max_sessions: i64,
 }
 
 impl Default for StorageConfig {
@@ -130,6 +139,7 @@ impl Default for StorageConfig {
             log_dir: "logs".to_string(),
             sessions_dir: "sessions".to_string(),
             log_level: None,
+            max_sessions: DEFAULT_MAX_SESSIONS,
         }
     }
 }
@@ -344,6 +354,13 @@ impl AppConfig {
                                 config.storage.log_level = Some(trimmed.to_string());
                             }
                         }
+                        "max_sessions" => {
+                            if let Ok(max_sessions) = val.trim().parse::<i64>() {
+                                if max_sessions == -1 || max_sessions > 0 {
+                                    config.storage.max_sessions = max_sessions;
+                                }
+                            }
+                        }
                         _ => {}
                     }
                 } else if current_section == "serial" {
@@ -508,6 +525,7 @@ mod tests {
         assert!(!cfg.station.sniffer_mode, "Default sniffer_mode should be false");
         assert_eq!(cfg.storage.log_dir, "logs");
         assert_eq!(cfg.storage.sessions_dir, "sessions");
+        assert_eq!(cfg.storage.max_sessions, DEFAULT_MAX_SESSIONS);
         assert!(!cfg.mqtt.enabled, "Default mqtt.enabled should be false");
         assert_eq!(cfg.mqtt.broker, "127.0.0.1:1883");
         assert_eq!(cfg.mqtt.username, None);
@@ -692,6 +710,42 @@ mod tests {
                 .station
                 .local_override_disable_lock_secs,
             30
+        );
+    }
+
+    #[test]
+    fn test_storage_max_sessions_parsing() {
+        let default_cfg = AppConfig::default();
+        assert_eq!(default_cfg.storage.max_sessions, DEFAULT_MAX_SESSIONS);
+
+        let toml_unlimited = r#"
+        [storage]
+        max_sessions = -1
+        "#;
+        assert_eq!(AppConfig::parse_toml(toml_unlimited).storage.max_sessions, -1);
+
+        let toml_custom = r#"
+        [storage]
+        max_sessions = 120
+        "#;
+        assert_eq!(AppConfig::parse_toml(toml_custom).storage.max_sessions, 120);
+
+        let toml_zero = r#"
+        [storage]
+        max_sessions = 0
+        "#;
+        assert_eq!(
+            AppConfig::parse_toml(toml_zero).storage.max_sessions,
+            DEFAULT_MAX_SESSIONS
+        );
+
+        let toml_invalid = r#"
+        [storage]
+        max_sessions = -42
+        "#;
+        assert_eq!(
+            AppConfig::parse_toml(toml_invalid).storage.max_sessions,
+            DEFAULT_MAX_SESSIONS
         );
     }
 }

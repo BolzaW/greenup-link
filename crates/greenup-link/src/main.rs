@@ -163,12 +163,23 @@ async fn main() {
         );
     }
 
+    // Enforce max_sessions retention policy at startup and schedule daily checks (every 24h)
+    session::enforce_max_sessions(app_config.storage.max_sessions);
+    session::spawn_session_cleanup_task(app_config.storage.max_sessions);
+
+    let max_sessions_desc = if app_config.storage.max_sessions <= 0 {
+        "unlimited (-1)".to_string()
+    } else {
+        app_config.storage.max_sessions.to_string()
+    };
+
     greenup_driver::logger::log(
         "SYS",
         &format!(
-            "📁 Storage paths: logs = {}, sessions = {} (log_level: {})",
+            "📁 Storage paths: logs = {}, sessions = {} (max_sessions: {}, log_level: {})",
             app_config.storage.log_dir,
             app_config.storage.sessions_dir,
+            max_sessions_desc,
             greenup_driver::logger::get_log_level().as_str()
         ),
     );
