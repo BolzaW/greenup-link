@@ -478,7 +478,7 @@ pub fn log_with_level(category: &str, level: LogLevel, message: &str) {
 pub fn log_side(category: &str, side: u8, message: &str) {
     let level = match category {
         "TRACE" => LogLevel::Trace,
-        "DEBUG" => LogLevel::Debug,
+        "DEBUG" | "SERIAL_TX" | "SERIAL_RX" => LogLevel::Debug,
         "WARN" => LogLevel::Warn,
         "ERROR" => LogLevel::Error,
         _ => LogLevel::Info,
@@ -514,7 +514,7 @@ pub fn trace(category: &str, message: &str) {
 /// Writes an entry to stdout, daily log file, ring buffer, and live SSE broadcast (inferring level from category/content).
 pub fn log(category: &str, message: &str) {
     let level_enum = match category {
-        "DEBUG" => LogLevel::Debug,
+        "DEBUG" | "SERIAL_TX" | "SERIAL_RX" => LogLevel::Debug,
         "TRACE" => LogLevel::Trace,
         "ERROR" => LogLevel::Error,
         "WARN" => LogLevel::Warn,

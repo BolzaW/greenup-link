@@ -227,7 +227,7 @@ pub fn send_command_sync(
         let tx_level = if cmd == Command::Ping {
             logger::LogLevel::Trace
         } else {
-            logger::LogLevel::Info
+            logger::LogLevel::Debug
         };
         logger::log_with_level_side("SERIAL_TX", Some(driver.side()), tx_level, encoded.trim());
 
@@ -670,10 +670,11 @@ pub fn reset_serial_filters() {
 }
 
 /// Determines the logging category/level for an incoming serial line:
-/// - `CCI:xx`: logged in INFO (`"SERIAL_RX"`) only if variation >= 0.8A (otherwise `"TRACE"`)
-/// - `CC:xx`: logged in INFO (`"SERIAL_RX"`) only if variation >= 1A (otherwise `"TRACE"`)
-/// - `CPh:xx`: logged in INFO (`"SERIAL_RX"`) on first reception or value change (otherwise `"DEBUG"`)
-/// - Other frames: logged in INFO (`"SERIAL_RX"`)
+/// - `CCI:xx`: logged in DEBUG (`"SERIAL_RX"`) only if variation >= 0.8A (otherwise `"TRACE"`)
+/// - `CC:xx`: logged in DEBUG (`"SERIAL_RX"`) only if variation >= 1A (otherwise `"TRACE"`)
+/// - `CPh:xx`: logged in DEBUG (`"SERIAL_RX"`) on first reception or value change (otherwise `"TRACE"`)
+/// - `pong`: logged in TRACE (`"TRACE"`)
+/// - Other frames: logged in DEBUG (`"SERIAL_RX"`)
 pub fn determine_rx_log_category(line: &str) -> &'static str {
     if let Some(val_str) = line.strip_prefix("CCI:") {
         let first_val = val_str.split(';').next().unwrap_or(val_str).trim();
@@ -722,7 +723,7 @@ pub fn determine_rx_log_category(line: &str) -> &'static str {
             *last = Some(current_cph.to_string());
             "SERIAL_RX"
         } else {
-            "DEBUG"
+            "TRACE"
         }
     } else if line == "pong" {
         "TRACE"
@@ -739,8 +740,7 @@ pub fn parse_incoming_line(line: &str, driver: &SharedDriver) {
     let rx_category = determine_rx_log_category(line);
     let level = match rx_category {
         "TRACE" => logger::LogLevel::Trace,
-        "DEBUG" => logger::LogLevel::Debug,
-        _ => logger::LogLevel::Info,
+        _ => logger::LogLevel::Debug,
     };
     logger::log_with_level_side("SERIAL_RX", Some(side), level, line);
 
@@ -1014,7 +1014,7 @@ mod tests {
         assert_eq!(determine_rx_log_category("CC:23"), "SERIAL_RX");
 
         assert_eq!(determine_rx_log_category("CPh:Mono"), "SERIAL_RX");
-        assert_eq!(determine_rx_log_category("CPh:Mono"), "DEBUG");
+        assert_eq!(determine_rx_log_category("CPh:Mono"), "TRACE");
         assert_eq!(determine_rx_log_category("CPh:Tri"), "SERIAL_RX");
 
         assert_eq!(determine_rx_log_category("CCI:16.00"), "SERIAL_RX");
