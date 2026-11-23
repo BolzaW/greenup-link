@@ -542,6 +542,7 @@ async fn set_current(
         ),
     );
     if state.serial_tx.send(Command::SetDirectCurrentLimit(validated_amps)).await.is_ok() {
+        state.set_desired_limit_amps(validated_amps as u32);
         (
             StatusCode::OK,
             Json(json!({

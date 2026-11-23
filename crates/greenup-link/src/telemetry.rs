@@ -56,6 +56,8 @@ pub struct Telemetry {
     pub frequency: f32,
     pub error_code: String,
     pub limit_amps: u32,
+    #[serde(default)]
+    pub desired_limit_amps: Option<u32>,
     pub eliot_limit_amps: Option<u32>,
     pub cp_voltage: Option<u32>,
     #[serde(skip)]
@@ -105,6 +107,7 @@ impl Default for Telemetry {
             greenup_state: String::from("DISCONNECTED"),
             error_code: String::new(),
             limit_amps: 16, // 16A by default
+            desired_limit_amps: None,
             eliot_limit_amps: None,
             cp_voltage: None,
             t2c_enabled: None,
@@ -305,6 +308,7 @@ pub struct ConnectorStatus {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ConnectorControl {
     pub setpoint_amps: u32,
+    pub applied_limit_amps: u32,
     pub min_allowed_amps: u32,
     pub max_hardware_amps: u32,
     pub charge_authorized: bool,
@@ -471,10 +475,14 @@ impl Telemetry {
             .unwrap_or(false);
         let min_allowed = if is_three_phase { 13 } else { 7 };
         let max_hardware = info.capabilities.as_ref().map(|c| c.max_current_amps as u32).unwrap_or(32);
-        let setpoint = self.limit_amps.clamp(min_allowed, max_hardware);
+        let setpoint = self
+            .desired_limit_amps
+            .unwrap_or(self.limit_amps)
+            .clamp(min_allowed, max_hardware);
 
         let control = ConnectorControl {
             setpoint_amps: setpoint,
+            applied_limit_amps: self.limit_amps,
             min_allowed_amps: min_allowed,
             max_hardware_amps: max_hardware,
             charge_authorized: self.charge_authorized,

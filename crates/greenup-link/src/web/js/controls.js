@@ -45,11 +45,48 @@ function updateControlButtons(charge_authorized) {
     }
 }
 
+function updateAppliedLimitBadge(appliedAmps, setpointAmps) {
+    const box = document.getElementById('boxAppliedValue');
+    const lbl = document.getElementById('lblAppliedLimit');
+    if (!box || !lbl) return;
+
+    if (!window.isUsbConnected || appliedAmps == null) {
+        lbl.innerText = '--';
+        box.className = 'limit-badge-applied slider-disabled';
+        lbl.className = 'slider-disabled';
+        return;
+    }
+
+    const applied = Number(appliedAmps);
+    const setpoint = Number(setpointAmps);
+    lbl.innerText = `${applied} A`;
+
+    const tooltipBase = (typeof t === 'function' ? t('controls.applied_limit_tooltip') : 'Consigne réellement appliquée par la borne (CC)') || 'Consigne réellement appliquée par la borne (CC)';
+    box.title = `${tooltipBase} : ${applied} A`;
+
+    box.className = 'limit-badge-applied';
+    lbl.className = '';
+    if (window.isSnifferMode) {
+        box.classList.add('slider-disabled');
+        lbl.classList.add('slider-disabled');
+    }
+    if (applied === setpoint) {
+        box.classList.add('state-equal');
+    } else if (applied < setpoint) {
+        box.classList.add('state-lower');
+    } else {
+        box.classList.add('state-higher');
+    }
+}
+window.updateAppliedLimitBadge = updateAppliedLimitBadge;
+
 function updateControlsForMode(isSniffer) {
     const notice = typeof t === 'function' ? t('controls.local_mode_notice') : "Commandes verrouillées : mode Sniffer actif (écoute seule)";
     const sliderBox = document.getElementById('sliderBox');
     const boxSliderValue = document.getElementById('boxSliderValue');
     const lblSlider = document.getElementById('lblSlider');
+    const boxAppliedValue = document.getElementById('boxAppliedValue');
+    const lblAppliedLimit = document.getElementById('lblAppliedLimit');
     const btnInit = document.getElementById('btnSerialInit');
     const btnReset = document.getElementById('btnSerialReset');
     const btToggle = document.getElementById('btToggle');
@@ -60,6 +97,8 @@ function updateControlsForMode(isSniffer) {
         if (sliderBox) sliderBox.classList.add('slider-disabled');
         if (boxSliderValue) boxSliderValue.classList.add('slider-disabled');
         if (lblSlider) lblSlider.classList.add('slider-disabled');
+        if (boxAppliedValue) boxAppliedValue.classList.add('slider-disabled');
+        if (lblAppliedLimit) lblAppliedLimit.classList.add('slider-disabled');
         if (btnEnableDisable) {
             btnEnableDisable.disabled = true;
             btnEnableDisable.title = notice;
@@ -80,6 +119,8 @@ function updateControlsForMode(isSniffer) {
         if (sliderBox) sliderBox.classList.remove('slider-disabled');
         if (boxSliderValue) boxSliderValue.classList.remove('slider-disabled');
         if (lblSlider) lblSlider.classList.remove('slider-disabled');
+        if (boxAppliedValue) boxAppliedValue.classList.remove('slider-disabled');
+        if (lblAppliedLimit) lblAppliedLimit.classList.remove('slider-disabled');
         if (btnEnableDisable && window.isUsbConnected) {
             btnEnableDisable.disabled = false;
             btnEnableDisable.removeAttribute('title');
@@ -118,6 +159,9 @@ slider.addEventListener('touchend', () => isDraggingSlider = false);
 
 slider.addEventListener('input', (e) => {
     lblSlider.innerText = e.target.value + " A";
+    if (window.lastAppliedLimitAmps != null) {
+        updateAppliedLimitBadge(window.lastAppliedLimitAmps, Number(e.target.value));
+    }
 });
 slider.addEventListener('change', (e) => {
     if (window.isSnifferMode) return;

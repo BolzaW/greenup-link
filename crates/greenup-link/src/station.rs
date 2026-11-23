@@ -234,6 +234,9 @@ impl AppState {
 
                 if let Some(cc) = raw.cc {
                     tel.limit_amps = cc;
+                    if tel.desired_limit_amps.is_none() {
+                        tel.desired_limit_amps = Some(cc);
+                    }
                 }
                 if let Some(cc_el) = raw.cc_el {
                     tel.eliot_limit_amps = Some(cc_el);
@@ -442,7 +445,11 @@ impl AppState {
                         raw.cc.unwrap_or(0)
                     ),
                 );
-                let _ = self.serial_tx.try_send(Command::SetDirectCurrentLimit(32));
+                if self.serial_tx.try_send(Command::SetDirectCurrentLimit(32)).is_ok() {
+                    if let Ok(mut tel) = self.telemetry.lock() {
+                        tel.desired_limit_amps = Some(32);
+                    }
+                }
             }
 
             // Ensure EEPROM-backed CCEl stays non-limiting at 32A (retry with 5s cooldown until confirmed)
@@ -552,6 +559,13 @@ impl AppState {
     pub fn set_side(&self, s: u8) {
         self.side.store(s, Ordering::Relaxed);
         self.driver.set_side(s);
+    }
+
+    /// Records the desired current setpoint (from TX `CC:XX`).
+    pub fn set_desired_limit_amps(&self, amps: u32) {
+        if let Ok(mut tel) = self.telemetry.lock() {
+            tel.desired_limit_amps = Some(amps);
+        }
     }
 
     /// Returns `true` if the station is operating in Sniffer mode (passive listen-only, zero TX).
@@ -1447,7 +1461,8 @@ mod tests {
         assert_eq!(snap.station.serial_number, "SIM01");
         assert!(snap.station.capabilities.as_ref().unwrap().has_tic);
         assert_eq!(snap.connectors[0].status.ocpp, OcppChargePointStatus::Available);
-        assert_eq!(snap.connectors[0].control.setpoint_amps, 20);
+        assert_eq!(snap.connectors[0].control.applied_limit_amps, 20);
+        assert_eq!(snap.connectors[0].control.setpoint_amps, 32);
     }
 
     #[tokio::test]
@@ -1795,5 +1810,37 @@ mod tests {
         assert_eq!(outcome, ChargeActionOutcome::Executed);
         assert_eq!(rx.recv().await.unwrap(), Command::SetSleep(false));
         assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn test_desired_and_applied_limit_amps_lifecycle() {
+        let (tx, _rx) = tokio::sync::mpsc::channel(16);
+        let state = Arc::new(AppState::new_with_side(1, tx));
+        let manager = StationManager::new(state.clone(), None);
+
+        // 1. At startup, desired_limit_amps is None; first RX CC:14 initializes both setpoint and applied_limit
+        state.driver.update_raw(|raw| {
+            raw.state = Some("C".to_string());
+            raw.cc = Some(14);
+        });
+        state.sync_from_driver();
+        let snap1 = manager.snapshot();
+        assert_eq!(snap1.connectors[0].control.setpoint_amps, 14);
+        assert_eq!(snap1.connectors[0].control.applied_limit_amps, 14);
+
+        // 2. TX CC:20 sets setpoint_amps to 20 while applied_limit_amps remains 14 until RX confirms
+        state.set_desired_limit_amps(20);
+        let snap2 = manager.snapshot();
+        assert_eq!(snap2.connectors[0].control.setpoint_amps, 20);
+        assert_eq!(snap2.connectors[0].control.applied_limit_amps, 14);
+
+        // 3. RX CC:10 (station clamped) updates applied_limit_amps to 10 while setpoint_amps stays 20
+        state.driver.update_raw(|raw| {
+            raw.cc = Some(10);
+        });
+        state.sync_from_driver();
+        let snap3 = manager.snapshot();
+        assert_eq!(snap3.connectors[0].control.setpoint_amps, 20);
+        assert_eq!(snap3.connectors[0].control.applied_limit_amps, 10);
     }
 }
