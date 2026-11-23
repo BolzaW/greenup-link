@@ -12,6 +12,7 @@ let commandHistory = [];
 let commandHistoryIndex = -1;
 let logEventSource = null;
 let isStartingLogStream = false;
+let lastLogFetchTimestamp = 0;
 let isSendingCommand = false;
 let consoleDomListenersAttached = false;
 let sseReconnectTimer = null;
@@ -75,7 +76,15 @@ function startLogStream() {
     if (logEventSource || isStartingLogStream) return;
     if (!window.canReadData || !window.canReadData()) return;
 
+    // If we already have log entries in memory, don't refetch the entire buffer; just reconnect SSE
+    if (logEntries.length > 0) {
+        renderLogs();
+        connectSse();
+        return;
+    }
+
     isStartingLogStream = true;
+    lastLogFetchTimestamp = Date.now();
     apiFetch('/api/logs')
         .then(res => res.ok ? res.json() : [])
         .then(logs => {
@@ -159,6 +168,16 @@ function refreshLogsAndReconnect() {
     if (!window.canReadData || !window.canReadData()) return;
     const consolePanel = document.getElementById('consolePanel');
     if (!consolePanel || consolePanel.classList.contains('hidden')) return;
+
+    // Debounce to prevent burst calls from concurrent visibilitychange + focus events
+    const now = Date.now();
+    if (now - lastLogFetchTimestamp < 2000) {
+        if (!logEventSource || logEventSource.readyState === EventSource.CLOSED) {
+            connectSse();
+        }
+        return;
+    }
+    lastLogFetchTimestamp = now;
 
     if (sseReconnectTimer) {
         clearTimeout(sseReconnectTimer);
