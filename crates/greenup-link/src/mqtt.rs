@@ -893,7 +893,7 @@ async fn handle_mqtt_command(station: &SharedStation, command: MqttCommand) {
             }
 
             let ttl = ttl_seconds.unwrap_or(60);
-            logger::debug(
+            logger::trace(
                 "MQTT",
                 &format!("⚡ External grid voltage updated via MQTT → {:.1}V (TTL: {}s)", voltage, ttl),
             );
@@ -1020,9 +1020,15 @@ async fn run_mqtt_loop(
                 Ok(Event::Incoming(Packet::Publish(publish))) => {
                     let topic = &publish.topic;
                     let payload_str = String::from_utf8_lossy(&publish.payload);
-                    logger::debug("MQTT", &format!("📩 Incoming message on '{}': {}", topic, payload_str.trim()));
+                    let cmd = parse_command_topic(&base_topic_el, topic, &payload_str);
 
-                    if let Some(cmd) = parse_command_topic(&base_topic_el, topic, &payload_str) {
+                    if matches!(cmd, Some(MqttCommand::SetVoltage { .. })) {
+                        logger::trace("MQTT", &format!("📩 Incoming message on '{}': {}", topic, payload_str.trim()));
+                    } else {
+                        logger::debug("MQTT", &format!("📩 Incoming message on '{}': {}", topic, payload_str.trim()));
+                    }
+
+                    if let Some(cmd) = cmd {
                         handle_mqtt_command(&station_el, cmd).await;
                     }
                 }
