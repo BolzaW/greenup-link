@@ -228,7 +228,7 @@ async fn serve_js_console() -> impl IntoResponse {
 /// GET /api/logs
 async fn get_logs() -> impl IntoResponse {
     let logs = logger::get_recent_logs();
-    logger::debug("API", &format!("📋 Fetching recent logs buffer ({} entries)", logs.len()));
+    logger::trace("API", &format!("📋 Fetching recent logs buffer ({} entries)", logs.len()));
     Json(logs)
 }
 
