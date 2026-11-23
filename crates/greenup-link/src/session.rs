@@ -1186,7 +1186,11 @@ pub fn list_saved_sessions() -> Vec<SessionSummary> {
         }
     }
 
-    summaries.sort_by(|a, b| b.id.cmp(&a.id));
+    summaries.sort_by(|a, b| {
+        b.start_time
+            .cmp(&a.start_time)
+            .then_with(|| b.id.cmp(&a.id))
+    });
     summaries
 }
 
@@ -1306,6 +1310,61 @@ pub fn delete_session(session_id: &str) -> Result<bool, &'static str> {
     } else {
         Ok(false)
     }
+}
+
+/// Deletes the oldest saved sessions when the total number of saved sessions exceeds `max_sessions`.
+/// If `max_sessions <= 0` (e.g. `-1`), all sessions are preserved and nothing is deleted.
+/// Returns the number of deleted sessions.
+pub fn enforce_max_sessions(max_sessions: i64) -> usize {
+    if max_sessions <= 0 {
+        return 0;
+    }
+
+    let limit = max_sessions as usize;
+    let sessions = list_saved_sessions();
+    let total = sessions.len();
+    if total <= limit {
+        return 0;
+    }
+
+    let excess = total - limit;
+    let mut deleted = 0usize;
+
+    // `list_saved_sessions()` returns newest first, so iterating in reverse deletes oldest first.
+    for summary in sessions.iter().rev().take(excess) {
+        logger::warn(
+            "SESSION",
+            &format!(
+                "Session limit ({}) exceeded ({} saved): deleting oldest session '{}'",
+                limit, total, summary.id
+            ),
+        );
+        match delete_session(&summary.id) {
+            Ok(true) => deleted += 1,
+            Ok(false) => {}
+            Err(e) => logger::warn(
+                "SESSION",
+                &format!("Could not delete old session '{}': {}", summary.id, e),
+            ),
+        }
+    }
+
+    deleted
+}
+
+/// Spawns a background task that checks and enforces `max_sessions` every 24 hours.
+/// Does nothing when `max_sessions <= 0` (unlimited).
+pub fn spawn_session_cleanup_task(max_sessions: i64) {
+    if max_sessions <= 0 {
+        return;
+    }
+
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(24 * 3600)).await;
+            enforce_max_sessions(max_sessions);
+        }
+    });
 }
 
 #[cfg(test)]
@@ -1871,6 +1930,53 @@ timestamp,elapsed_s,state,current_a,limit_a,voltage_v,power_w,energy_kwh\n\
         let saved = list_saved_sessions();
         assert_eq!(saved.len(), 1);
         assert!(saved[0].termination_reason.contains("Service stopped"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_enforce_max_sessions_deletes_oldest_and_respects_unlimited() {
+        let dir = setup_test_dir();
+
+        let fixtures = [
+            ("session_side1_2026-11-01_10-00-00", 1, "2026-11-01 10:00:00"),
+            ("session_side2_2026-11-02_10-00-00", 2, "2026-11-02 10:00:00"),
+            ("session_side1_2026-11-03_10-00-00", 1, "2026-11-03 10:00:00"),
+            ("session_side2_2026-11-04_10-00-00", 2, "2026-11-04 10:00:00"),
+        ];
+
+        for (id, side, start_time) in fixtures {
+            let txt = format!(
+                "Session ID:           {}\nCharge Point:         Side {}\nStart Time:           {}\nEnd Time:             {}\nTermination Reason:   Test\nTotal Energy:         1.000 kWh\n",
+                id, side, start_time, start_time
+            );
+            fs::write(dir.join(format!("{}.txt", id)), txt).unwrap();
+            fs::write(
+                dir.join(format!("{}.csv", id)),
+                "timestamp,elapsed_s,state,current_a,limit_a,voltage_v,power_w,energy_kwh\n",
+            )
+            .unwrap();
+        }
+
+        // -1 must keep all sessions
+        assert_eq!(enforce_max_sessions(-1), 0);
+        assert_eq!(list_saved_sessions().len(), 4);
+
+        // Limit higher than count must keep all sessions
+        assert_eq!(enforce_max_sessions(10), 0);
+        assert_eq!(list_saved_sessions().len(), 4);
+
+        // Limit of 2 must delete the 2 oldest (2026-11-01 and 2026-11-02)
+        assert_eq!(enforce_max_sessions(2), 2);
+        let remaining = list_saved_sessions();
+        assert_eq!(remaining.len(), 2);
+        assert_eq!(remaining[0].id, "session_side2_2026-11-04_10-00-00");
+        assert_eq!(remaining[1].id, "session_side1_2026-11-03_10-00-00");
+
+        assert!(!dir.join("session_side1_2026-11-01_10-00-00.txt").exists());
+        assert!(!dir.join("session_side1_2026-11-01_10-00-00.csv").exists());
+        assert!(!dir.join("session_side2_2026-11-02_10-00-00.txt").exists());
+        assert!(!dir.join("session_side2_2026-11-02_10-00-00.csv").exists());
 
         let _ = fs::remove_dir_all(&dir);
     }

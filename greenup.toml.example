@@ -39,6 +39,12 @@ log_dir = "logs"
 # Default: "sessions" (or "/opt/greenup-link/sessions")
 sessions_dir = "sessions"
 
+# Maximum number of saved charging sessions to keep on disk.
+# - > 0 : Keep at most N sessions (Default: 365). Oldest sessions are automatically
+#         deleted at startup and every 24 hours when this limit is exceeded.
+# - -1  : Keep all sessions indefinitely (never delete automatically).
+max_sessions = 365
+
 # Logging verbosity level:
 # Options: "ERROR", "WARN", "INFO", "DEBUG", "TRACE"
 # Default: "INFO"
