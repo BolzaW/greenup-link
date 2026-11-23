@@ -43,22 +43,27 @@ async fn security_headers_middleware(req: Request, next: Next) -> Response {
     response
 }
 
-/// Axum middleware logging API requests at DEBUG level (or TRACE for high-frequency polling).
+/// Axum middleware logging API requests at DEBUG level (or TRACE for read-only GET requests).
 async fn api_debug_logger(req: Request, next: Next) -> Response {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
+    let is_read_only = method == axum::http::Method::GET;
 
-    // High frequency polling endpoints are logged at TRACE to avoid cluttering DEBUG logs
-    if path == "/api/state" || path == "/api/logs/stream" {
-        logger::trace("API", &format!("{} {}", method, path));
+    if is_read_only || path == "/api/voltage" {
+        logger::trace("API", &format!("→ {} {}", method, path));
     } else {
         logger::debug("API", &format!("→ {} {}", method, path));
     }
 
     let response = next.run(req).await;
+    let status = response.status();
 
-    if path != "/api/state" && path != "/api/logs/stream" {
-        logger::debug("API", &format!("← {} {} [{}]", method, path, response.status()));
+    if status.is_client_error() || status.is_server_error() {
+        logger::debug("API", &format!("← {} {} [{}]", method, path, status));
+    } else if is_read_only || path == "/api/voltage" {
+        logger::trace("API", &format!("← {} {} [{}]", method, path, status));
+    } else {
+        logger::debug("API", &format!("← {} {} [{}]", method, path, status));
     }
 
     response
@@ -293,7 +298,7 @@ async fn set_log_level_handler(Json(payload): Json<LogLevelPayload>) -> impl Int
 /// GET /api/state
 /// Returns the full unified station snapshot (OCPP 1.6-J & EVCC aligned).
 async fn get_state(State(station): State<SharedStation>) -> impl IntoResponse {
-    logger::debug("API", "🔍 GET request /api/state");
+    logger::trace("API", "🔍 GET request /api/state");
     Json(station.snapshot())
 }
 
@@ -303,7 +308,7 @@ async fn get_station(
     State(station): State<SharedStation>,
     Query(query): Query<SideQuery>,
 ) -> impl IntoResponse {
-    logger::debug("API", "🔍 GET request /api/station");
+    logger::trace("API", "🔍 GET request /api/station");
     Json(station.station_for_side(query.side))
 }
 
@@ -336,7 +341,7 @@ async fn check_updates_handler(State(station): State<SharedStation>) -> impl Int
 /// GET /api/connectors
 /// Returns all charge point connectors and their current states.
 async fn get_connectors(State(station): State<SharedStation>) -> impl IntoResponse {
-    logger::debug("API", "🔍 GET request /api/connectors");
+    logger::trace("API", "🔍 GET request /api/connectors");
     Json(station.snapshot().connectors)
 }
 
@@ -346,7 +351,7 @@ async fn get_connector_by_id(
     State(station): State<SharedStation>,
     axum::extract::Path(id): axum::extract::Path<u8>,
 ) -> impl IntoResponse {
-    logger::debug("API", &format!("🔍 GET request /api/connectors/{}", id));
+    logger::trace("API", &format!("🔍 GET request /api/connectors/{}", id));
     let snap = station.snapshot();
     if let Some(conn) = snap.connectors.into_iter().find(|c| c.id == id) {
         (StatusCode::OK, Json(json!(conn)))
@@ -716,7 +721,7 @@ async fn set_voltage(
     }
 
     let ttl = payload.ttl_seconds.unwrap_or(60);
-    logger::debug(
+    logger::trace(
         "API",
         &format!("⚡ External grid voltage updated → {:.1}V (TTL: {}s)", payload.voltage, ttl),
     );
