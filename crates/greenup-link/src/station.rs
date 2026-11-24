@@ -204,6 +204,7 @@ impl AppState {
             let mut should_clear_raw_em_derogation = false;
             let mut should_clear_raw_fcs = false;
             let mut should_reset_cc_to_max = false;
+            let mut state_transition: Option<(String, String)> = None;
             {
                 let mut tel = self.telemetry.lock().unwrap_or_else(|e| e.into_inner());
                 tel.side = side;
@@ -291,11 +292,13 @@ impl AppState {
                 // State machine transition handling
                 if let Some(ref state_val) = raw.state {
                     if *state_val != cursor.last_state {
+                        let prev_state = cursor.last_state.clone();
                         let was_charging =
                             matches!(tel.greenup_state.as_str(), "D" | "E" | "G" | "H");
                         let is_charging = matches!(state_val.as_str(), "D" | "E" | "G" | "H");
                         tel.greenup_state = state_val.clone();
                         cursor.last_state = state_val.clone();
+                        state_transition = Some((prev_state, state_val.clone()));
 
                         if is_charging && !was_charging {
                             tel.last_power_update = Some(std::time::Instant::now());
@@ -413,6 +416,19 @@ impl AppState {
                         crate::session::record_ticket_for_side(side, ticket);
                     }
                 }
+            }
+
+            if let Some((prev_state, new_state)) = state_transition {
+                let status = self.to_connector_data().status;
+                logger::log_with_level_side(
+                    "SERIAL",
+                    Some(side),
+                    logger::LogLevel::Info,
+                    &format!(
+                        "🔄 State transition: {} → {} (Legrand: {}, IEC: {}, OCPP: {:?})",
+                        prev_state, new_state, status.raw_code, status.iec, status.ocpp
+                    ),
+                );
             }
 
             if should_clear_raw_em_derogation || (should_clear_raw_fcs && raw.fcs.is_some()) {
