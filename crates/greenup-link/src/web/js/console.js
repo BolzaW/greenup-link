@@ -262,8 +262,21 @@ function matchesFilter(entry) {
         if (entrySeverity < minSeverity) return false;
     }
     if (currentSearchTerm) {
-        const full = (entry.timestamp + " " + entry.category + " " + entry.message).toLowerCase();
-        if (!full.includes(currentSearchTerm)) return false;
+        const full = (entry.timestamp + " " + entry.category + " " + entry.level + " " + entry.message).toLowerCase();
+        const orBranches = currentSearchTerm
+            .split('|')
+            .map(b => b.trim())
+            .filter(Boolean);
+        if (orBranches.length > 0) {
+            const matched = orBranches.some(branch => {
+                const andTerms = branch
+                    .split('&')
+                    .map(t => t.trim())
+                    .filter(Boolean);
+                return andTerms.length > 0 && andTerms.every(term => full.includes(term));
+            });
+            if (!matched) return false;
+        }
     }
     return true;
 }
