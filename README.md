@@ -31,6 +31,7 @@ It communicates with the charging station's power board via an internal USB cabl
 - **Experimental dual charge point support** with automatic USB discovery, dynamic serial workers, and independent loadpoint controls (*theoretical, untested on real hardware* — see [Hardware Compatibility Matrix](docs/COMPATIBLE_HARDWARE.md)).
 - Native **MQTT client** with **Home Assistant MQTT Auto-Discovery**: instant plug-and-play integration with sensors, switches, current sliders, and Energy Dashboard without any manual YAML configuration (see [Home Assistant Integration Guide](docs/HOME_ASSISTANT_INTEGRATION.md) and [MQTT Guide](docs/GREENUP_LINK_MQTT.md)).
 - Full compatibility with **EVCC** via MQTT or HTTP REST for solar smart charging and dynamic load balancing (see [EVCC Integration Guide](docs/EVCC_INTEGRATION.md)).
+- **Raspberry Pi OverlayFS support** out of the box through configurable storage options (`max_sessions = 0`, `log_retention_days = 0`, `log_level = "WARN"`) that completely prevent disk writes and avoid RAM saturation on read-only systems.
 
 *(Experimental / PoC)*: A standalone `greenup-everest` module is included as an experimental proof of concept to interface with the open-source EVerest framework via MQTT (not the core focus of this project; see also [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
 
@@ -104,18 +105,6 @@ For full environment setup details, see the [Compilation Environment Guide](docs
 > [!TIP]
 > **Recommended OS Setup for Long-Term Use:**  
 > While running Green'Up Link directly on the official Legrand OS image is fully supported and encouraged for testing or quick evaluation (without touching the original SD card), **installing Green'Up Link on a clean, modern, and up-to-date Raspberry Pi OS 64-bit Lite image (on a fresh microSD card) is strongly recommended for long-term production use**. This provides an actively maintained Linux kernel, modern security patches, and optimal 64-bit performance.
-
-> [!NOTE]
-> **Raspberry Pi OverlayFS (Read-Only Filesystem) Support:**  
-> Green'Up Link is compatible with Raspberry Pi OS **OverlayFS** mode (`raspi-config` → *Performance Options* → *Overlay File System*), which protects the microSD card against wear and sudden power losses by redirecting writes to RAM (`tmpfs`).  
-> To avoid saturating RAM over time, configure the following options in `/opt/greenup-link/greenup.toml` **before** enabling OverlayFS:
-> ```toml
-> [storage]
-> max_sessions = 0        # Disable CSV/TXT session files on disk (live RAM metrics stay active for Web UI & MQTT)
-> log_retention_days = 0  # Disable daily .log files on disk (or set to 1; Web console 500-line RAM buffer stays active)
-> log_level = "WARN"      # Limit verbosity (WARN/ERROR recommended, INFO at most — avoid DEBUG/TRACE)
-> ```
-> *Note: Under OverlayFS, any files written to the overlay layer (logs, sessions) are volatile and cleared on reboot.*
 
 > **WARNING:** Always backup your official Legrand SD card image before making any changes so that you can revert if needed.
 >
