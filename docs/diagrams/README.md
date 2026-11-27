@@ -3,11 +3,6 @@
 Detailed, firmware-verified state transition diagrams derived from the ATmega power board firmware (`greenup-heart`).  
 These diagrams cover the most common **home automation / EMS** scenarios (Type 2, domestic 2P+T socket, three-phase load modulation, TIC Linky load-shedding, stops/suspensions, and hardware faults).
 
-> [!NOTE]
-> All diagrams use native GitHub **Mermaid** (`stateDiagram-v2`) with explicit high-contrast state colors for both light and dark themes.
->
-> **Legend:** 🟢 Idle (`A`) · 🔵 Waiting / Paused (`B`, `C`, `F`, `I`, `J`) · 🟠 Charging (`D`, `E`, `G`, `H`) · 🟣 Stopping / Sleep (`L`, `M`, `N`, `P`, `W`, `Y`) · 🟡 Pitfall (`A`) · 🔴 Fault / Power Loss (`R`, `S`, `T`, `U`, `V`, `X`)
-
 ---
 
 ## Table of Contents
