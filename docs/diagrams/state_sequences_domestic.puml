@@ -1,0 +1,75 @@
+@startuml
+title Domestic Socket (2P+T / Schuko) & T2S Priority (ATmega Firmware)
+
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam state {
+  BackgroundColor #F5F7FA
+  BorderColor #455A64
+  BackgroundColor<<idle>> #E8F5E9
+  BorderColor<<idle>> #2E7D32
+  BackgroundColor<<wait>> #E3F2FD
+  BorderColor<<wait>> #1565C0
+  BackgroundColor<<charge>> #FFF3E0
+  BorderColor<<charge>> #EF6C00
+  BackgroundColor<<stop>> #F3E5F5
+  BorderColor<<stop>> #6A1B9A
+  ArrowColor #37474F
+}
+
+state "1. Domestic Direct Charge (FM2:0, No Derogation)" as S1 {
+  state "A : Idle" as A1 <<idle>>
+  state "F : Schuko Plugged" as F1 <<wait>>
+  state "H : Domestic Charging" as H1 <<charge>>
+
+  [*] --> A1
+  A1 --> F1 : Insert Schuko plug (DOM=1, 2PC=1)\nSBF:1, Start, State:F
+  F1 --> H1 : After 4.5 s (or Dec expiry → Dec:0)\n6 mA test OK, Contactor 2 closes (16 A)\nState:H
+  H1 --> H1 : 1 Hz telemetry (Phase 1 CT)\nCPh:Mono, CCI:<I1> (or <I1>;0.00;0.00)
+  H1 --> A1 : Unplug Schuko (DOM=0)\nContactor 2 opens\nWT:..:CT:..:DOMplug:.., State:A, SBF:0
+  A1 --> [*]
+}
+
+state "2. Domestic Conditioned / Derogation (FM2:1 + DOK/DNOK)" as S2 {
+  state "A : Idle (FM2:1)" as A2 <<idle>>
+  state "F : Held by EMS / HP" as F2 <<wait>>
+  state "G : Domestic Charging (Cond.)" as G2 <<charge>>
+  state "H : Domestic Charging (Forced)" as H2 <<charge>>
+
+  [*] --> A2 : Pre-armed FM2:1 + DNOK
+  A2 --> F2 : Insert Schuko (DOM=1)\nSBF:1, Start, State:F
+  F2 --> F2 : Held indefinitely (Contactor 2 open)
+  F2 --> G2 : DOK (D:1), Contact 1 closes (EM:X1X)\nor button long press (EM:XX1)\nContactor 2 closes, State:G
+  G2 --> F2 : DNOK (D:0) or CAUNOK (Contact 1 open)\nContactor 2 opens, session stays open\nSBF:1, State:F
+  F2 --> H2 : Manual force 2PFOK (2PF:1)\nBypasses FM2:1 / CAU / Dec\nContactor 2 closes, State:H
+  F2 --> A2 : Unplug Schuko (DOM=0)\nWT:..:DOMplug:.., SBF:0, State:A
+  G2 --> A2 : Unplug Schuko (DOM=0)\nContactor 2 opens, WT:..:DOMplug:..\nState:A, SBF:0
+}
+
+state "3. Domestic Local Stop (SBNOK) & Invalidation (2PCNOK)" as S3 {
+  state "G/H : Domestic Charging" as GH3 <<charge>>
+  state "P : Local Stop (Dom)" as P3 <<stop>>
+  state "A : Idle" as A3 <<idle>>
+
+  [*] --> GH3
+  GH3 --> P3 : SBNOK (SB:0) or short press (SBF:0)\nContactor 2 opens\nWT:..:CT:..:DOMplug:.., State:P
+  P3 --> P3 : Stable paused state (DOM=1)
+  P3 --> A3 : Unplug Schuko (DOM=0) or SBOK (SB:1)\nState:A (restarts in F if still plugged on SBOK)
+  GH3 --> A3 : 2PCNOK (2PC:0)\nContactor 2 opens, WT/CT → State:P → State:A\n(DOM ignored until 2PCOK)
+}
+
+state "4. Absolute Type 2 Priority over Domestic Socket" as S4 {
+  state "G/H : Domestic Charging" as GH4 <<charge>>
+  state "B : Preempted by T2S" as B4 <<wait>>
+  state "D/E : EV Charging" as DE4 <<charge>>
+  state "I : EV Paused / Full" as I4 <<wait>>
+  state "F : Domestic Resumes" as F4 <<wait>>
+
+  [*] --> GH4 : Schuko active (DOM=1)
+  GH4 --> B4 : Plug EV into T2S (T2C=1, lock OK)\nContactor 2 opens immediately!\nDomestic session paused, State:B
+  B4 --> DE4 : Authorization OK → C → D/E\nEV charges with priority
+  DE4 --> I4 : EV stops / full (CP 9V), State:I
+  I4 --> F4 : DOM still plugged (DOM=1, 2PC=1, CAU=1)\nAuto-switch back to Domestic, State:F
+  F4 --> GH4 : Contactor 2 closes, State:G/H\n(if EV unplugged during F/G/H:\nT2S unlocks & emits EVplug ticket silently)
+}
+@enduml

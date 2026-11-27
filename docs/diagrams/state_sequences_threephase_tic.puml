@@ -1,0 +1,67 @@
+@startuml
+title Three-Phase Modulation & TIC Linky Load-Shedding (ATmega Firmware)
+
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam state {
+  BackgroundColor #F5F7FA
+  BorderColor #455A64
+  BackgroundColor<<idle>> #E8F5E9
+  BorderColor<<idle>> #2E7D32
+  BackgroundColor<<wait>> #E3F2FD
+  BorderColor<<wait>> #1565C0
+  BackgroundColor<<charge>> #FFF3E0
+  BorderColor<<charge>> #EF6C00
+  BackgroundColor<<stop>> #F3E5F5
+  BorderColor<<stop>> #6A1B9A
+  BackgroundColor<<fault>> #FFEBEE
+  BorderColor<<fault>> #C62828
+  ArrowColor #37474F
+}
+
+state "1. Three-Phase Charge & Dynamic Current Modulation (11–22 kW)" as S1 {
+  state "A : Idle (3-Phase Board)" as A1 <<idle>>
+  state "B : Plugged" as B1 <<wait>>
+  state "C : PWM Ready" as C1 <<wait>>
+  state "D/E : Charging (3-Ph)" as DE1 <<charge>>
+
+  [*] --> A1 : Station 3-phase (g_flag_02fd=0)
+  A1 --> B1 : Plug EV (lock OK)\nCCCa:32, CCS:32, SBF:1, Start, State:B
+  B1 --> C1 : Authorized\nEffective = min(CCS, CCCa, CCEl, CCCo, CCTIC)\nCC:xx, State:C
+  C1 --> DE1 : EV draws (CP 6V ≥ 500 ms)\nContactor 1 closes, State:D/E
+  DE1 --> DE1 : 3-phase EV (I1, I2, I3 > 0):\nCPh:Tri (60 s), CCI:<I1>;<I2>;<I3> (1 s)\nPWM floor = 22% (13.2 A) → safe min CC:13
+  DE1 --> DE1 : EMS sends CC:13..32 (RAM only, 0 EEPROM)\nImmediate PWM update, echoes CC:<eff>
+  DE1 --> DE1 : 1-phase EV on 3-phase station (I2=I3=0):\nCPh:Mono, CCI:<I1>;0.00;0.00\nPWM floor drops to 12% (7.2 A)
+}
+
+state "2. Hardware PWM Floor Trap → Overcurrent Reboot (E:0010)" as S2 {
+  state "D/E : Charging" as DE2 <<charge>>
+  state "R : Overcurrent Fault" as R2 <<fault>>
+  state "X : Watchdog Reboot" as X2 <<fault>>
+  state "A : Idle (Post-Reboot)" as A2 <<idle>>
+
+  [*] --> DE2
+  DE2 --> DE2 : Setpoint too low:\n• 3-phase: CC ≤ 11 A (PWM clamped 13.2 A)\n• 1-phase: CC ≤ 5 A (PWM clamped 7.2 A)\nAny phase I ≥ 1.2 × CC for 8 s
+  DE2 --> R2 : E:0010, State:R\nPWM → +12V (≤ 500 ms), Contactor 1 opens\nWT:..:CT:..:EVplug:.., unlocks T2S
+  R2 --> X2 : After 5 s (fault_count < 4)\nState:X (WDT reset)
+  X2 --> A2 : MCU reboots → State:A\n(CCCo reset to CCS)
+}
+
+state "3. TIC Linky Off-Peak (HP/HC) & Autonomous Load-Shedding" as S3 {
+  state "B : Waiting Off-Peak / TIC" as B3 <<wait>>
+  state "C : PWM Ready (CCTIC)" as C3 <<wait>>
+  state "E/D : Charging (TIC)" as ED3 <<charge>>
+  state "W : Ramp-Down" as W3 <<stop>>
+  state "I : Paused by EV" as I3 <<wait>>
+  state "J : Shed from I" as J3 <<wait>>
+
+  [*] --> B3 : EV plugged during Peak Hours (HP)\nTIC sets CAU_t2s=0, held in State:B
+  B3 --> C3 : Linky switches to Off-Peak (HC)\nOR EMS sends DOK (overrides HP only)\n& CCTIC ≥ 8 A (1-ph) / ≥ 13 A (3-ph)\nCC:<CCTIC>, State:C
+  C3 --> ED3 : EV draws (CP 6V), State:E (or D if FM2:1)\nCCTIC refreshed every 10 s (0.85 × Isub)
+  ED3 --> W3 : Peak Hours return OR overload (≥ 125%)\nOR CCTIC < min threshold\nState:W (≤ 6.1 s)
+  W3 --> B3 : Contactor 1 opens, State:B\n(Load-shedding enforces 10-min penalty\nbefore allowing B → C resume!)
+  ED3 --> I3 : EV stops (CP 9V), State:I
+  I3 --> J3 : Peak Hours return / TIC shed\nPWM → +12V, State:J
+  J3 --> I3 : HC returns & 10-min penalty elapsed\nCC:<CCTIC>, State:I
+}
+@enduml

@@ -1,0 +1,89 @@
+@startuml
+title Stops, Suspensions, Traps & Deep Sleep (T2S — ATmega Firmware)
+
+skinparam shadowing false
+skinparam defaultFontName SansSerif
+skinparam state {
+  BackgroundColor #F5F7FA
+  BorderColor #455A64
+  BackgroundColor<<idle>> #E8F5E9
+  BorderColor<<idle>> #2E7D32
+  BackgroundColor<<wait>> #E3F2FD
+  BorderColor<<wait>> #1565C0
+  BackgroundColor<<charge>> #FFF3E0
+  BorderColor<<charge>> #EF6C00
+  BackgroundColor<<stop>> #F3E5F5
+  BorderColor<<stop>> #6A1B9A
+  BackgroundColor<<warn>> #FFFDE7
+  BorderColor<<warn>> #F9A825
+  ArrowColor #37474F
+}
+
+state "1. Clean In-Session Suspension (CAUNOK / CAUOK, No TIC)" as S1 {
+  state "D/E : Charging" as DE1 <<charge>>
+  state "W : Ramp-Down" as W1 <<stop>>
+  state "B : Suspended (Locked)" as B1 <<wait>>
+  state "I : Paused by EV" as I1 <<wait>>
+  state "J : Suspended from I" as J1 <<wait>>
+  state "C : PWM Ready" as C1 <<wait>>
+
+  [*] --> DE1
+  DE1 --> W1 : CAUNOK (CAU:0)\nPWM → +12V, wait CP≠6V (≤ 6.1 s)\nState:W
+  W1 --> B1 : Contactor 1 opens, cable stays locked\nNo WT/CT ticket, no EEPROM write\nState:B
+  B1 --> C1 : CAUOK (CAU:1)\nCC:xx, State:C
+  C1 --> DE1 : EV resumes (CP 6V), State:D/E
+
+  DE1 --> I1 : EV stops (CP 9V), State:I
+  I1 --> J1 : CAUNOK under FM2:1\nPWM → +12V, State:J
+  J1 --> I1 : CAUOK (CAU:1)\nCC:xx, State:I
+  I1 --> B1 : CAUNOK under FM2:0\nState:B
+}
+
+state "2. Local Stop Button (SBNOK / SBOK or Short Press)" as S2 {
+  state "D/E : Charging" as DE2 <<charge>>
+  state "W : Ramp-Down" as W2 <<stop>>
+  state "M : Local Stop (Unlocked)" as M2 <<stop>>
+  state "A : Idle" as A2 <<idle>>
+  state "B : New Session" as B2 <<wait>>
+
+  [*] --> DE2
+  DE2 --> W2 : SBNOK (SB:0) or short press (SBF:0)\nPWM → +12V, wait CP≠6V (≤ 6.1 s)\nState:W
+  W2 --> M2 : Contactor 1 opens, closes session\nWT:..:CT:..:EVplug:..\nUnlocks T2S, State:M
+  M2 --> M2 : Stable paused state\n(cable unlocked, no auto-restart)
+  M2 --> A2 : Unplug cable (CP = 12V)\nState:A
+  M2 --> A2 : SBOK (SB:1) or short press (SBF:1)\nState:A
+  A2 --> B2 : Cable still plugged (or replugged)\nRe-locks T2S, SBF:1, Start, State:B
+}
+
+state "3. Pitfalls: T2CNOK Lockout & Unlock Restart Loop" as S3 {
+  state "E : Charging" as E3 <<charge>>
+  state "W : Ramp-Down" as W3 <<stop>>
+  state "M : Transient" as M3 <<stop>>
+  state "A : Frozen (T2C=0)" as A3_frozen <<warn>>
+  state "A : Idle (T2C=1)" as A3_loop <<warn>>
+  state "B : Auto-Restart" as B3 <<wait>>
+
+  [*] --> E3
+  E3 --> W3 : T2CNOK (T2C:0)\nState:W
+  W3 --> M3 : Opens contactor, WT/CT, unlocks\nState:M
+  M3 --> A3_frozen : T2C=0 forces immediate exit\nState:A
+  A3_frozen --> A3_frozen : FSM blind to cable plug/unplug\nuntil T2COK (T2C:1)
+
+  E3 --> A3_loop : Unlock command\nState:W → WT/CT → Unlock → State:A
+  A3_loop --> B3 : Cable still plugged & T2C=1\nImmediately re-locks & restarts!\nSBF:1, Start, State:B → C → E
+}
+
+state "4. Deep Sleep Mode (SOK / SNOK)" as S4 {
+  state "A/B/C/F : Waiting" as Idle4 <<wait>>
+  state "D/E : Charging" as DE4 <<charge>>
+  state "W : Ramp-Down" as W4 <<stop>>
+  state "Y : Deep Sleep" as Y4 <<stop>>
+  state "A : Idle" as A4 <<idle>>
+
+  Idle4 --> Y4 : SOK (Slp:1)\nCloses session, unlocks T2S, State:Y
+  DE4 --> W4 : SOK (Slp:1)\nPWM → +12V (≤ 6.1 s), State:W
+  W4 --> Y4 : Contactor 1 opens, WT/CT\nUnlocks T2S, State:Y
+  Y4 --> Y4 : Low-power standby\n(dim LED pulse every 5 s)
+  Y4 --> A4 : SNOK (Slp:0)\nState:A
+}
+@enduml

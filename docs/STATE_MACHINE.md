@@ -79,6 +79,18 @@ The semantics of these states were established through reverse-engineering of th
       [O] --> [A]              [P] --> [R] --> [A] ---------+
 ```
 
+### 2.1 Detailed State-Sequence Diagrams (PlantUML)
+
+Detailed, firmware-verified scenario diagrams covering common home-automation and EMS use cases (with exact serial frames, timers, and contactor/lock actions) are maintained as modular PlantUML files in [`docs/diagrams/`](diagrams/):
+
+| Diagram File | Covered Scenarios |
+| :--- | :--- |
+| [state_sequences_t2s_nominal.puml](diagrams/state_sequences_t2s_nominal.puml) | Type 2 direct charge (`FM2:0`), EMS smart-charging gate (`FM2:1` + `DOK`/`DNOK`, live `D ↔ E` switch), deferred start (`Dec:`), and 30 s EV wake-up pulse |
+| [state_sequences_stops_interruptions.puml](diagrams/state_sequences_stops_interruptions.puml) | Clean in-session suspension (`CAUNOK`/`CAUOK`), local Stop button (`SBNOK`/`SBOK`), `T2CNOK` lockout & `Unlock` auto-restart traps, and deep sleep (`SOK`/`SNOK`) |
+| [state_sequences_domestic.puml](diagrams/state_sequences_domestic.puml) | Domestic 2P+T Schuko direct charge (`A → F → H`), conditioned/derogation charge (`FM2:1` + `DOK`/`DNOK` → `G`, `2PFOK`), domestic stops (`SBNOK`/`2PCNOK`), and absolute Type 2 preemption over Schuko |
+| [state_sequences_threephase_tic.puml](diagrams/state_sequences_threephase_tic.puml) | Three-phase 11–22 kW charging (`CPh:Tri`, `CCI:i1;i2;i3`), RAM current modulation (`CC:xx`), hardware PWM floor overcurrent trap (`E:0010`), and TIC Linky Off-Peak (`HP/HC`) / autonomous load-shedding |
+| [state_sequences_faults.puml](diagrams/state_sequences_faults.puml) | Recoverable faults (`E:0001`/`E:0002`/`E:0008`/`E:0009`/`E:0010`/`E:0011` → `R` → `X` reboot), latched critical faults with MX shunt-trip (`E:0007`/`E:0015` → `S`), CP short-circuit (`T`) & ventilation (`N`), and mains power outage (`E:0012` → `U`/`V`) |
+
 ---
 
 ## 3. Standardized IEC 61851 & OCPP State Mapping in Green'Up Link
