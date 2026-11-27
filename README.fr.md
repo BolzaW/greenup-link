@@ -105,6 +105,18 @@ Pour le détail de l'environnement, consultez le [Guide d'environnement de compi
 > **Recommandation d'OS pour un usage pérenne :**  
 > Même si faire tourner Green'Up Link directement sur l'image d'usine Legrand est totalement supporté et encouragé pour tester ou faire un essai temporaire (sans toucher à la carte SD constructeur), **l'installation sur une image propre, récente et vierge de Raspberry Pi OS 64-bit Lite (sur une nouvelle carte microSD) est vivement recommandée pour une utilisation pérenne au quotidien**. Cela vous garantit un noyau Linux maintenu, des correctifs de sécurité modernes et les performances optimales du 64-bit.
 
+> [!NOTE]
+> **Support du mode OverlayFS (système en lecture seule) sur Raspberry Pi :**  
+> Green'Up Link est compatible avec le mode **OverlayFS** de Raspberry Pi OS (`raspi-config` → *Performance Options* → *Overlay File System*), qui protège la carte microSD contre l'usure et les coupures de courant en redirigeant les écritures en RAM (`tmpfs`).  
+> Pour éviter de saturer la RAM en écriture de fichiers, il est recommandé de configurer `/opt/greenup-link/greenup.toml` comme suit **avant** d'activer OverlayFS :
+> ```toml
+> [storage]
+> max_sessions = 0        # Désactive la création des fichiers de session CSV/TXT (les métriques live en RAM restent actives pour la Web UI et MQTT)
+> log_retention_days = 0  # Désactive l'écriture des fichiers .log quotidiens (ou 1 jour ; le buffer RAM de 500 lignes de la console Web reste actif)
+> log_level = "WARN"      # Limite les logs au maximum (WARN/ERROR recommandé, INFO au maximum — éviter DEBUG/TRACE)
+> ```
+> *Remarque : en mode OverlayFS, tous les fichiers écrits dans la couche RAM (logs, sessions) sont volatils et perdus à chaque redémarrage.*
+
 > **AVERTISSEMENT :** Faites une sauvegarde complète de la carte SD d'origine Legrand avant toute manipulation.
 >
 > ⚠️ **Important :** Toute intervention physique sur la borne doit obligatoirement se faire **hors tension (disjoncteur coupé)**.

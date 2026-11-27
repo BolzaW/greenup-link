@@ -5,7 +5,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicI64, AtomicU8, AtomicU64, Ordering},
     Mutex, OnceLock,
 };
 use tokio::sync::broadcast;
@@ -66,7 +66,18 @@ impl LogLevel {
     }
 }
 
-const RETENTION_DAYS: i64 = 7;
+pub const DEFAULT_LOG_RETENTION_DAYS: i64 = 7;
+static LOG_RETENTION_DAYS: AtomicI64 = AtomicI64::new(DEFAULT_LOG_RETENTION_DAYS);
+
+/// Returns the configured log file retention in days (`0` means file logging is disabled).
+pub fn get_log_retention_days() -> i64 {
+    LOG_RETENTION_DAYS.load(Ordering::Relaxed)
+}
+
+/// Sets the log file retention in days (`0` disables writing daily log files to disk).
+pub fn set_log_retention_days(days: i64) {
+    LOG_RETENTION_DAYS.store(days.max(0), Ordering::Relaxed);
+}
 /// Threshold in bytes before warning that a daily log file is growing large (10 MB).
 pub const LOG_WARN_THRESHOLD_BYTES: u64 = 10 * 1024 * 1024;
 
@@ -157,8 +168,11 @@ pub fn get_log_dir() -> String {
     "logs".to_string()
 }
 
-/// Returns the path of today's log file.
+/// Returns the path of today's log file, or `None` if file logging is disabled (`log_retention_days == 0`).
 pub fn get_log_file_path() -> Option<String> {
+    if get_log_retention_days() <= 0 {
+        return None;
+    }
     let today = Local::now().format("%Y-%m-%d").to_string();
     let dir = get_log_dir();
     Some(format!("{}/greenup_{}.log", dir, today))
@@ -168,11 +182,14 @@ pub fn get_log_file_path() -> Option<String> {
 pub fn get_current_log_content() -> (String, String) {
     let today = Local::now().format("%Y-%m-%d").to_string();
     let filename = format!("greenup_{}.log", today);
-    let dir = get_log_dir();
-    let path = format!("{}/{}", dir, filename);
 
-    if let Ok(content) = fs::read_to_string(&path) {
-        return (filename, content);
+    if get_log_retention_days() > 0 {
+        let dir = get_log_dir();
+        let path = format!("{}/{}", dir, filename);
+
+        if let Ok(content) = fs::read_to_string(&path) {
+            return (filename, content);
+        }
     }
 
     // Fallback: format recent in-memory logs
@@ -189,9 +206,13 @@ pub fn get_current_log_content() -> (String, String) {
     (filename, out)
 }
 
-/// Cleans up log files older than RETENTION_DAYS.
+/// Cleans up log files older than the configured retention period.
 fn cleanup_old_logs(log_dir: &str) {
-    let cutoff = Local::now().date_naive() - Duration::days(RETENTION_DAYS);
+    let retention_days = get_log_retention_days();
+    if retention_days <= 0 {
+        return;
+    }
+    let cutoff = Local::now().date_naive() - Duration::days(retention_days);
     if let Ok(entries) = fs::read_dir(log_dir) {
         for entry in entries.flatten() {
             if let Ok(file_name) = entry.file_name().into_string() {
@@ -360,9 +381,6 @@ pub fn preload_recent_logs_from_file(path: &str) {
 
 /// Initializes the logger and sets initial log level from environment.
 pub fn init() {
-    let dir = get_log_dir();
-    let _ = fs::create_dir_all(&dir);
-
     // Initialize level from GREENUP_LOG_LEVEL or GREENUP_DEBUG
     if let Ok(val) = std::env::var("GREENUP_LOG_LEVEL") {
         if let Some(level) = LogLevel::from_str_loose(&val) {
@@ -374,8 +392,25 @@ pub fn init() {
         set_log_level(LogLevel::Info);
     }
 
+    let retention_days = get_log_retention_days();
+    if retention_days <= 0 {
+        println!(
+            "[Logger] 📝 File logging disabled (log_retention_days=0, in-memory ring buffer & stdout only, level: {})",
+            get_log_level().as_str()
+        );
+        return;
+    }
+
+    let dir = get_log_dir();
+    let _ = fs::create_dir_all(&dir);
+
     let initial_path = get_or_rotate_daily_file();
-    println!("[Logger] 📝 Daily rolling log active: {} (level: {})", initial_path, get_log_level().as_str());
+    println!(
+        "[Logger] 📝 Daily rolling log active: {} (level: {}, retention: {}d)",
+        initial_path,
+        get_log_level().as_str(),
+        retention_days
+    );
 
     // Preload recent logs from daily log file so Web UI console has history after reboot/restart
     preload_recent_logs_from_file(&initial_path);
@@ -416,10 +451,10 @@ pub fn log_with_level_side(category: &str, side: Option<u8>, level: LogLevel, me
     // Console output
     println!("{}", entry_text);
 
-    // Daily file output
+    // Daily file output (skipped when log_retention_days == 0)
     let mut warning_to_emit: Option<(u64, f64)> = None;
 
-    {
+    if get_log_retention_days() > 0 {
         let _file_guard = LOG_FILE_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let path = get_or_rotate_daily_file();
         if let Ok(mut f) = OpenOptions::new().create(true).append(true).open(&path) {
@@ -638,5 +673,26 @@ mod tests {
         assert!(!logs.iter().any(|l| l.message == "Test filtered trace log message"));
         assert!(!logs.iter().any(|l| l.message == "Test filtered debug log message"));
         assert!(logs.iter().any(|l| l.message == "Test visible info log message"));
+    }
+
+    #[test]
+    fn test_log_retention_zero_disables_file_writing() {
+        let temp_dir = std::env::temp_dir().join("test_greenup_no_file_logs");
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        set_custom_log_dir(Some(temp_dir.to_string_lossy().to_string()));
+        set_log_retention_days(0);
+        set_log_level(LogLevel::Info);
+
+        assert_eq!(get_log_file_path(), None);
+        info("SYS", "In-memory only log message");
+
+        assert!(!temp_dir.exists(), "Log directory should not be created when log_retention_days is 0");
+        let logs = get_recent_logs();
+        assert!(logs.iter().any(|l| l.message == "In-memory only log message"));
+
+        // Restore defaults for other tests
+        set_log_retention_days(DEFAULT_LOG_RETENTION_DAYS);
+        set_custom_log_dir(None);
     }
 }

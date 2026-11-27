@@ -118,22 +118,19 @@ async fn wait_for_sniffer_usb_connection(station: &Arc<StationManager>, timeout:
 async fn main() {
     let pkg_version = env!("CARGO_PKG_VERSION");
 
-    // Initialize logger and print application banner first
-    greenup_driver::logger::init();
-    greenup_driver::logger::log("SYS", "===================================================");
-    greenup_driver::logger::log(
-        "SYS",
-        &format!("               GREEN'UP LINK v{:<15}     ", pkg_version),
-    );
-    greenup_driver::logger::log("SYS", "===================================================");
-
+    // Load configuration first so storage paths and retention policies apply before logger initialization
     let app_config = config::AppConfig::load();
 
-    // Configure storage directories from greenup.toml
+    // Configure storage directories & retention policies from greenup.toml
     greenup_driver::logger::set_custom_log_dir(Some(app_config.storage.log_dir.clone()));
+    greenup_driver::logger::set_log_retention_days(app_config.storage.log_retention_days);
     session::set_custom_sessions_dir(Some(std::path::PathBuf::from(
         &app_config.storage.sessions_dir,
     )));
+    session::set_session_files_enabled(app_config.storage.max_sessions != 0);
+
+    // Initialize logger and print application banner
+    greenup_driver::logger::init();
 
     // Configure log level from greenup.toml (unless overridden by GREENUP_LOG_LEVEL / GREENUP_DEBUG)
     if std::env::var("GREENUP_LOG_LEVEL").is_err() && std::env::var("GREENUP_DEBUG").is_err() {
@@ -148,6 +145,13 @@ async fn main() {
             }
         }
     }
+
+    greenup_driver::logger::log("SYS", "===================================================");
+    greenup_driver::logger::log(
+        "SYS",
+        &format!("               GREEN'UP LINK v{:<15}     ", pkg_version),
+    );
+    greenup_driver::logger::log("SYS", "===================================================");
 
     greenup_driver::logger::log(
         "SYS",
@@ -167,20 +171,29 @@ async fn main() {
     session::enforce_max_sessions(app_config.storage.max_sessions);
     session::spawn_session_cleanup_task(app_config.storage.max_sessions);
 
-    let max_sessions_desc = if app_config.storage.max_sessions <= 0 {
+    let max_sessions_desc = if app_config.storage.max_sessions == 0 {
+        "disabled (0)".to_string()
+    } else if app_config.storage.max_sessions < 0 {
         "unlimited (-1)".to_string()
     } else {
         app_config.storage.max_sessions.to_string()
     };
 
+    let log_retention_desc = if app_config.storage.log_retention_days == 0 {
+        "disabled (0)".to_string()
+    } else {
+        format!("{}d", app_config.storage.log_retention_days)
+    };
+
     greenup_driver::logger::log(
         "SYS",
         &format!(
-            "📁 Storage paths: logs = {}, sessions = {} (max_sessions: {}, log_level: {})",
+            "📁 Storage paths: logs = {} (retention: {}, level: {}), sessions = {} (max_sessions: {})",
             app_config.storage.log_dir,
+            log_retention_desc,
+            greenup_driver::logger::get_log_level().as_str(),
             app_config.storage.sessions_dir,
             max_sessions_desc,
-            greenup_driver::logger::get_log_level().as_str()
         ),
     );
     if app_config.http.api_token.is_some() {
