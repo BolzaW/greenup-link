@@ -124,6 +124,7 @@ async fn main() {
     // Configure storage directories & retention policies from greenup.toml
     greenup_driver::logger::set_custom_log_dir(Some(app_config.storage.log_dir.clone()));
     greenup_driver::logger::set_log_retention_days(app_config.storage.log_retention_days);
+    greenup_driver::logger::set_max_recent_logs(app_config.storage.max_console_logs);
     session::set_custom_sessions_dir(Some(std::path::PathBuf::from(
         &app_config.storage.sessions_dir,
     )));
@@ -188,9 +189,10 @@ async fn main() {
     greenup_driver::logger::log(
         "SYS",
         &format!(
-            "📁 Storage paths: logs = {} (retention: {}, level: {}), sessions = {} (max_sessions: {})",
+            "📁 Storage paths: logs = {} (retention: {}, max_console_logs: {}, level: {}), sessions = {} (max_sessions: {})",
             app_config.storage.log_dir,
             log_retention_desc,
+            app_config.storage.max_console_logs,
             greenup_driver::logger::get_log_level().as_str(),
             app_config.storage.sessions_dir,
             max_sessions_desc,

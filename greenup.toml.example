@@ -59,6 +59,12 @@ log_retention_days = 7
 # (Recommended value for OverlayFS configuration: "WARN" or "ERROR")
 log_level = "INFO"
 
+# Maximum number of recent log lines kept in RAM and displayed in the Web debug console.
+# - > 0 : Keep at most N log lines in RAM (Default: 500).
+# - 0   : Disable in-memory console logs (no logs shown in the Web console).
+# Note: Logs are always written to daily log files on disk regardless of this setting.
+max_console_logs = 500
+
 [serial]
 # Dual charge point mode:
 # - "auto"  : Automatically detects 1 or 2 charge points based on the station hardware reference (Default)

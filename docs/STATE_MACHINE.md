@@ -79,6 +79,18 @@ The semantics of these states were established through reverse-engineering of th
       [O] --> [A]              [P] --> [R] --> [A] ---------+
 ```
 
+### 2.1 Detailed State-Sequence Diagrams (Mermaid)
+
+Detailed, firmware-verified scenario diagrams covering common home-automation and EMS use cases (with exact serial frames, timers, and contactor/lock actions) are rendered directly on GitHub in [`docs/diagrams/README.md`](diagrams/README.md):
+
+| Section | Covered Scenarios |
+| :--- | :--- |
+| [1. Type 2 (T2S) — Nominal & Smart-Charging](diagrams/README.md#1-type-2-t2s--nominal--smart-charging-sequences) | Type 2 direct charge (`FM2:0`), EMS smart-charging gate (`FM2:1` + `DOK`/`DNOK`, live `D ↔ E` switch), deferred start (`Dec:`), and 30 s EV wake-up pulse |
+| [2. Stops, Suspensions, Traps & Deep Sleep](diagrams/README.md#2-stops-suspensions-traps--deep-sleep-t2s) | Clean in-session suspension (`CAUNOK`/`CAUOK`), local Stop button (`SBNOK`/`SBOK`), `T2CNOK` lockout & `Unlock` auto-restart traps, and deep sleep (`SOK`/`SNOK`) |
+| [3. Domestic Socket (2P+T / Schuko) & T2S Priority](diagrams/README.md#3-domestic-socket-2pt--schuko--t2s-priority) | Domestic 2P+T Schuko direct charge (`A → F → H`), conditioned/derogation charge (`FM2:1` + `DOK`/`DNOK` → `G`, `2PFOK`), domestic stops (`SBNOK`/`2PCNOK`), and absolute Type 2 preemption over Schuko |
+| [4. Three-Phase Modulation & TIC Linky Load-Shedding](diagrams/README.md#4-three-phase-modulation--tic-linky-load-shedding) | Three-phase 11–22 kW charging (`CPh:Tri`, `CCI:I1;I2;I3`), RAM current modulation (`CC:xx`), hardware PWM floor overcurrent trap (`E:0010`), and TIC Linky Off-Peak (`HP/HC`) / autonomous load-shedding |
+| [5. Hardware Faults, Safety Interlocks & Power Outage](diagrams/README.md#5-hardware-faults-safety-interlocks--power-outage) | Recoverable faults (`E:0001`/`E:0002`/`E:0008`/`E:0009`/`E:0010`/`E:0011` → `R` → `X` reboot), latched critical faults with MX shunt-trip (`E:0007`/`E:0015` → `S`), CP short-circuit (`T`) & ventilation (`N`), and mains power outage (`E:0012` → `U`/`V`) |
+
 ---
 
 ## 3. Standardized IEC 61851 & OCPP State Mapping in Green'Up Link
