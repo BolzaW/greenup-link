@@ -444,14 +444,21 @@ function onSessionSelected(id) {
         // Supprime toute référence aux données instantanées
         setElemText('sessionValEndTime', t('sessions.active_ongoing') || 'Session en cours');
 
-        if (btnZip) btnZip.disabled = false;
+        const hasCsv = act.has_csv !== false;
+        if (btnZip) btnZip.disabled = !hasCsv;
         if (btnDel) {
             btnDel.disabled = true;
             btnDel.title = t('sessions.delete_disabled_active') || "Impossible de supprimer la session en cours de charge";
         }
 
-        // Fetch active CSV data for live chart
-        loadAndDisplayChart(act.session_id);
+        // Fetch active CSV data for live chart (if file recording is enabled)
+        if (hasCsv) {
+            loadAndDisplayChart(act.session_id);
+        } else {
+            currentChartPoints = [];
+            drawChart([]);
+            setElemText('sessionChartStatus', '');
+        }
     } else {
         const savedList = sessionsCache.sessions || [];
         const s = savedList.find(item => item.id === id);

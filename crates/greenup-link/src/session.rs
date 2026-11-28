@@ -781,6 +781,8 @@ pub struct ActiveSessionSummary {
     pub phase: String,
     #[serde(default = "default_plug_type")]
     pub plug_type: String,
+    #[serde(default)]
+    pub has_csv: bool,
 }
 
 fn extract_seconds_in_parens(s: &str) -> u64 {
@@ -1293,6 +1295,7 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
                 }
             },
             plug_type: if s.plug_type.is_empty() { "Type 2".to_string() } else { s.plug_type.clone() },
+            has_csv: s.csv_writer.is_some(),
         }
     })
 }
