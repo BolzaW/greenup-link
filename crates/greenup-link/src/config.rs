@@ -49,6 +49,12 @@ max_sessions = 365
 # Default: "INFO"
 log_level = "INFO"
 
+# Maximum number of recent log lines kept in RAM and displayed in the Web debug console.
+# - > 0 : Keep at most N log lines in RAM (Default: 500).
+# - 0   : Disable in-memory console logs (no logs shown in the Web console).
+# Note: Logs are always written to daily log files on disk regardless of this setting.
+max_console_logs = 500
+
 [serial]
 # Dual charge point mode:
 # - "auto"  : Automatically detects 1 or 2 charge points based on the station hardware reference (Default)
@@ -124,6 +130,7 @@ impl Default for HttpConfig {
 }
 
 pub const DEFAULT_MAX_SESSIONS: i64 = 365;
+pub const DEFAULT_MAX_CONSOLE_LOGS: usize = 500;
 
 #[derive(Debug, Clone)]
 pub struct StorageConfig {
@@ -131,6 +138,7 @@ pub struct StorageConfig {
     pub sessions_dir: String,
     pub log_level: Option<String>,
     pub max_sessions: i64,
+    pub max_console_logs: usize,
 }
 
 impl Default for StorageConfig {
@@ -140,6 +148,7 @@ impl Default for StorageConfig {
             sessions_dir: "sessions".to_string(),
             log_level: None,
             max_sessions: DEFAULT_MAX_SESSIONS,
+            max_console_logs: DEFAULT_MAX_CONSOLE_LOGS,
         }
     }
 }
@@ -359,6 +368,11 @@ impl AppConfig {
                                 if max_sessions == -1 || max_sessions > 0 {
                                     config.storage.max_sessions = max_sessions;
                                 }
+                            }
+                        }
+                        "max_console_logs" => {
+                            if let Ok(max_logs) = val.trim().parse::<usize>() {
+                                config.storage.max_console_logs = max_logs;
                             }
                         }
                         _ => {}
@@ -746,6 +760,33 @@ mod tests {
         assert_eq!(
             AppConfig::parse_toml(toml_invalid).storage.max_sessions,
             DEFAULT_MAX_SESSIONS
+        );
+    }
+
+    #[test]
+    fn test_storage_max_console_logs_parsing() {
+        let default_cfg = AppConfig::default();
+        assert_eq!(default_cfg.storage.max_console_logs, DEFAULT_MAX_CONSOLE_LOGS);
+
+        let toml_zero = r#"
+        [storage]
+        max_console_logs = 0
+        "#;
+        assert_eq!(AppConfig::parse_toml(toml_zero).storage.max_console_logs, 0);
+
+        let toml_custom = r#"
+        [storage]
+        max_console_logs = 1200
+        "#;
+        assert_eq!(AppConfig::parse_toml(toml_custom).storage.max_console_logs, 1200);
+
+        let toml_invalid = r#"
+        [storage]
+        max_console_logs = -5
+        "#;
+        assert_eq!(
+            AppConfig::parse_toml(toml_invalid).storage.max_console_logs,
+            DEFAULT_MAX_CONSOLE_LOGS
         );
     }
 }

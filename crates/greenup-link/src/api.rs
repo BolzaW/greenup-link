@@ -273,8 +273,9 @@ pub struct LogLevelPayload {
 /// GET /api/logs/level
 async fn get_log_level_handler() -> impl IntoResponse {
     let current = logger::get_log_level();
+    let max_console_logs = logger::get_max_recent_logs();
     logger::debug("API", &format!("🎚️ Log level requested: {}", current.as_str()));
-    Json(json!({ "level": current.as_str() }))
+    Json(json!({ "level": current.as_str(), "max_console_logs": max_console_logs }))
 }
 
 /// POST /api/logs/level

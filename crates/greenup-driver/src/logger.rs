@@ -5,7 +5,7 @@ use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::sync::{
-    atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU8, AtomicU64, AtomicUsize, Ordering},
     Mutex, OnceLock,
 };
 use tokio::sync::broadcast;
@@ -103,7 +103,28 @@ static CONFIGURED_LOG_LEVEL: AtomicU8 = AtomicU8::new(LogLevel::Info as u8);
 static CURRENT_LOG_DATE: Mutex<Option<String>> = Mutex::new(None);
 static RECENT_LOGS: Mutex<VecDeque<LogEntry>> = Mutex::new(VecDeque::new());
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
-const MAX_RECENT_LOGS: usize = 500;
+pub const DEFAULT_MAX_RECENT_LOGS: usize = 500;
+static MAX_RECENT_LOGS: AtomicUsize = AtomicUsize::new(DEFAULT_MAX_RECENT_LOGS);
+
+/// Configures the maximum number of log entries kept in RAM for the Web console.
+/// When set to `0`, no logs are stored in RAM or broadcast to the Web console
+/// (logs are still written to disk files).
+pub fn set_max_recent_logs(max: usize) {
+    MAX_RECENT_LOGS.store(max, Ordering::Relaxed);
+    let mut guard = RECENT_LOGS.lock().unwrap_or_else(|e| e.into_inner());
+    if max == 0 {
+        guard.clear();
+    } else {
+        while guard.len() > max {
+            guard.pop_front();
+        }
+    }
+}
+
+/// Returns the configured maximum number of log entries kept in RAM for the Web console.
+pub fn get_max_recent_logs() -> usize {
+    MAX_RECENT_LOGS.load(Ordering::Relaxed)
+}
 
 /// Returns current configured log level.
 pub fn get_log_level() -> LogLevel {
@@ -342,8 +363,13 @@ pub fn preload_recent_logs_from_file(path: &str) {
         .filter(|l| !l.is_empty() && !l.starts_with("==="))
         .collect();
 
+    let max_recent = MAX_RECENT_LOGS.load(Ordering::Relaxed);
+    if max_recent == 0 {
+        return;
+    }
+
     if !valid_lines.is_empty() {
-        let start = valid_lines.len().saturating_sub(MAX_RECENT_LOGS);
+        let start = valid_lines.len().saturating_sub(max_recent);
         let slice = &valid_lines[start..];
 
         let mut guard = RECENT_LOGS.lock().unwrap_or_else(|e| e.into_inner());
@@ -439,26 +465,29 @@ pub fn log_with_level_side(category: &str, side: Option<u8>, level: LogLevel, me
         }
     }
 
-    let log_item = LogEntry {
-        id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
-        timestamp: time_str,
-        category: category.to_string(),
-        side,
-        level: level.as_str().to_string(),
-        message: message.to_string(),
-    };
+    let max_recent = MAX_RECENT_LOGS.load(Ordering::Relaxed);
+    if max_recent > 0 {
+        let log_item = LogEntry {
+            id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+            timestamp: time_str,
+            category: category.to_string(),
+            side,
+            level: level.as_str().to_string(),
+            message: message.to_string(),
+        };
 
-    // Store in in-memory ring buffer (up to 500 lines for the Web console)
-    {
-        let mut guard = RECENT_LOGS.lock().unwrap_or_else(|e| e.into_inner());
-        if guard.len() >= MAX_RECENT_LOGS {
-            guard.pop_front();
+        // Store in in-memory ring buffer (up to max_recent lines for the Web console)
+        {
+            let mut guard = RECENT_LOGS.lock().unwrap_or_else(|e| e.into_inner());
+            while guard.len() >= max_recent {
+                guard.pop_front();
+            }
+            guard.push_back(log_item.clone());
         }
-        guard.push_back(log_item.clone());
-    }
 
-    // Broadcast to SSE subscribers
-    let _ = get_broadcast_sender().send(log_item);
+        // Broadcast to SSE subscribers
+        let _ = get_broadcast_sender().send(log_item);
+    }
 
     if let Some((warned_mb, size_mb)) = warning_to_emit {
         let warn_msg = format!(
@@ -638,5 +667,17 @@ mod tests {
         assert!(!logs.iter().any(|l| l.message == "Test filtered trace log message"));
         assert!(!logs.iter().any(|l| l.message == "Test filtered debug log message"));
         assert!(logs.iter().any(|l| l.message == "Test visible info log message"));
+    }
+
+    #[test]
+    fn test_max_recent_logs_zero_disables_ram_buffer() {
+        set_log_level(LogLevel::Info);
+        set_max_recent_logs(0);
+
+        info("TEST_CAT", "Should not be stored in RAM");
+        assert!(get_recent_logs().is_empty());
+
+        // Restore default for subsequent tests
+        set_max_recent_logs(DEFAULT_MAX_RECENT_LOGS);
     }
 }

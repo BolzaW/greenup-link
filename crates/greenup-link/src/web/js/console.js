@@ -32,6 +32,16 @@ async function syncLogLevelFromServer() {
         const res = await apiFetch('/api/logs/level');
         if (res.ok) {
             const data = await res.json();
+            if (data && typeof data.max_console_logs === 'number') {
+                maxLogEntries = data.max_console_logs;
+                if (maxLogEntries === 0) {
+                    logEntries = [];
+                    seenLogIds.clear();
+                    stopLogStream();
+                } else if (logEntries.length > maxLogEntries) {
+                    logEntries = logEntries.slice(-maxLogEntries);
+                }
+            }
             if (data && data.level) {
                 const sLevel = data.level.toUpperCase();
                 currentLevelFilter = sLevel;
@@ -73,7 +83,7 @@ function setDebugMode(enabled) {
 }
 
 function startLogStream() {
-    if (logEventSource || isStartingLogStream) return;
+    if (logEventSource || isStartingLogStream || maxLogEntries === 0) return;
     if (!window.canReadData || !window.canReadData()) return;
 
     // If we already have log entries in memory, don't refetch the entire buffer; just reconnect SSE
@@ -165,6 +175,7 @@ function stopLogStream() {
 }
 
 function refreshLogsAndReconnect() {
+    if (maxLogEntries === 0) return;
     if (!window.canReadData || !window.canReadData()) return;
     const consolePanel = document.getElementById('consolePanel');
     if (!consolePanel || consolePanel.classList.contains('hidden')) return;
@@ -251,8 +262,21 @@ function matchesFilter(entry) {
         if (entrySeverity < minSeverity) return false;
     }
     if (currentSearchTerm) {
-        const full = (entry.timestamp + " " + entry.category + " " + entry.message).toLowerCase();
-        if (!full.includes(currentSearchTerm)) return false;
+        const full = (entry.timestamp + " " + entry.category + " " + entry.level + " " + entry.message).toLowerCase();
+        const orBranches = currentSearchTerm
+            .split('|')
+            .map(b => b.trim())
+            .filter(Boolean);
+        if (orBranches.length > 0) {
+            const matched = orBranches.some(branch => {
+                const andTerms = branch
+                    .split('&')
+                    .map(t => t.trim())
+                    .filter(Boolean);
+                return andTerms.length > 0 && andTerms.every(term => full.includes(term));
+            });
+            if (!matched) return false;
+        }
     }
     return true;
 }
