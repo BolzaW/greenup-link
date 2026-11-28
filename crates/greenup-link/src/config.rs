@@ -41,8 +41,14 @@ sessions_dir = "sessions"
 # Maximum number of saved charging sessions to keep on disk.
 # - > 0 : Keep at most N sessions (Default: 365). Oldest sessions are automatically
 #         deleted at startup and every 24 hours when this limit is exceeded.
+# - 0   : Disable session file recording completely (no CSV/TXT files written; live RAM metrics still active).
 # - -1  : Keep all sessions indefinitely (never delete automatically).
 max_sessions = 365
+
+# Daily log file retention in days:
+# - > 0 : Keep daily log files for N days (Default: 7).
+# - 0   : Disable writing log files to disk (in-memory Web console buffer & stdout only; ideal for overlayfs).
+log_retention_days = 7
 
 # Logging verbosity level:
 # Options: "ERROR", "WARN", "INFO", "DEBUG", "TRACE"
@@ -130,6 +136,7 @@ impl Default for HttpConfig {
 }
 
 pub const DEFAULT_MAX_SESSIONS: i64 = 365;
+pub const DEFAULT_LOG_RETENTION_DAYS: i64 = greenup_driver::logger::DEFAULT_LOG_RETENTION_DAYS;
 pub const DEFAULT_MAX_CONSOLE_LOGS: usize = 500;
 
 #[derive(Debug, Clone)]
@@ -138,6 +145,7 @@ pub struct StorageConfig {
     pub sessions_dir: String,
     pub log_level: Option<String>,
     pub max_sessions: i64,
+    pub log_retention_days: i64,
     pub max_console_logs: usize,
 }
 
@@ -148,6 +156,7 @@ impl Default for StorageConfig {
             sessions_dir: "sessions".to_string(),
             log_level: None,
             max_sessions: DEFAULT_MAX_SESSIONS,
+            log_retention_days: DEFAULT_LOG_RETENTION_DAYS,
             max_console_logs: DEFAULT_MAX_CONSOLE_LOGS,
         }
     }
@@ -365,8 +374,15 @@ impl AppConfig {
                         }
                         "max_sessions" => {
                             if let Ok(max_sessions) = val.trim().parse::<i64>() {
-                                if max_sessions == -1 || max_sessions > 0 {
+                                if max_sessions == -1 || max_sessions >= 0 {
                                     config.storage.max_sessions = max_sessions;
+                                }
+                            }
+                        }
+                        "log_retention_days" => {
+                            if let Ok(days) = val.trim().parse::<i64>() {
+                                if days >= 0 {
+                                    config.storage.log_retention_days = days;
                                 }
                             }
                         }
@@ -750,7 +766,7 @@ mod tests {
         "#;
         assert_eq!(
             AppConfig::parse_toml(toml_zero).storage.max_sessions,
-            DEFAULT_MAX_SESSIONS
+            0
         );
 
         let toml_invalid = r#"
@@ -760,6 +776,33 @@ mod tests {
         assert_eq!(
             AppConfig::parse_toml(toml_invalid).storage.max_sessions,
             DEFAULT_MAX_SESSIONS
+        );
+    }
+
+    #[test]
+    fn test_storage_log_retention_days_parsing() {
+        let default_cfg = AppConfig::default();
+        assert_eq!(default_cfg.storage.log_retention_days, DEFAULT_LOG_RETENTION_DAYS);
+
+        let toml_zero = r#"
+        [storage]
+        log_retention_days = 0
+        "#;
+        assert_eq!(AppConfig::parse_toml(toml_zero).storage.log_retention_days, 0);
+
+        let toml_custom = r#"
+        [storage]
+        log_retention_days = 2
+        "#;
+        assert_eq!(AppConfig::parse_toml(toml_custom).storage.log_retention_days, 2);
+
+        let toml_invalid = r#"
+        [storage]
+        log_retention_days = -3
+        "#;
+        assert_eq!(
+            AppConfig::parse_toml(toml_invalid).storage.log_retention_days,
+            DEFAULT_LOG_RETENTION_DAYS
         );
     }
 

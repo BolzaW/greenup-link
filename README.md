@@ -31,6 +31,7 @@ It communicates with the charging station's power board via an internal USB cabl
 - **Experimental dual charge point support** with automatic USB discovery, dynamic serial workers, and independent loadpoint controls (*theoretical, untested on real hardware* — see [Hardware Compatibility Matrix](docs/COMPATIBLE_HARDWARE.md)).
 - Native **MQTT client** with **Home Assistant MQTT Auto-Discovery**: instant plug-and-play integration with sensors, switches, current sliders, and Energy Dashboard without any manual YAML configuration (see [Home Assistant Integration Guide](docs/HOME_ASSISTANT_INTEGRATION.md) and [MQTT Guide](docs/GREENUP_LINK_MQTT.md)).
 - Full compatibility with **EVCC** via MQTT or HTTP REST for solar smart charging and dynamic load balancing (see [EVCC Integration Guide](docs/EVCC_INTEGRATION.md)).
+- **Raspberry Pi OverlayFS support** out of the box through configurable storage options (`max_sessions = 0`, `log_retention_days = 0`, `log_level = "WARN"`) that completely prevent disk writes and avoid RAM saturation on read-only systems.
 
 *(Experimental / PoC)*: A standalone `greenup-everest` module is included as an experimental proof of concept to interface with the open-source EVerest framework via MQTT (not the core focus of this project; see also [evorada/everest-greenup](https://github.com/evorada/everest-greenup)).
 

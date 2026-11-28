@@ -473,6 +473,25 @@ log_dir = "logs"
 # Default: "sessions" (or "/opt/greenup-link/sessions")
 sessions_dir = "sessions"
 
+# Maximum number of saved charging sessions to keep on disk.
+# - > 0 : Keep at most N sessions (Default: 365).
+# - 0   : Disable session file recording completely (live RAM metrics stay active).
+# - -1  : Keep all sessions indefinitely.
+# (Recommended value for OverlayFS configuration: 0)
+max_sessions = 365
+
+# Daily log file retention in days:
+# - > 0 : Keep daily log files for N days (Default: 7).
+# - 0   : Disable writing log files to disk (in-memory Web console buffer & stdout only).
+# (Recommended value for OverlayFS configuration: 0)
+log_retention_days = 7
+
+# Logging verbosity level:
+# Options: "ERROR", "WARN", "INFO", "DEBUG", "TRACE"
+# Default: "INFO"
+# (Recommended value for OverlayFS configuration: "WARN" or "ERROR")
+log_level = "INFO"
+
 [serial]
 # Dual charge point mode:
 # - "auto"  : Automatically detects 1 or 2 charge points based on the station hardware reference (Default)
@@ -557,6 +576,25 @@ log_dir = "logs"
 # Directory where charging sessions (CSV data and summaries) are stored.
 # Default: "sessions" (or "/opt/greenup-link/sessions")
 sessions_dir = "sessions"
+
+# Maximum number of saved charging sessions to keep on disk.
+# - > 0 : Keep at most N sessions (Default: 365).
+# - 0   : Disable session file recording completely (live RAM metrics stay active).
+# - -1  : Keep all sessions indefinitely.
+# (Recommended value for OverlayFS configuration: 0)
+max_sessions = 365
+
+# Daily log file retention in days:
+# - > 0 : Keep daily log files for N days (Default: 7).
+# - 0   : Disable writing log files to disk (in-memory Web console buffer & stdout only).
+# (Recommended value for OverlayFS configuration: 0)
+log_retention_days = 7
+
+# Logging verbosity level:
+# Options: "ERROR", "WARN", "INFO", "DEBUG", "TRACE"
+# Default: "INFO"
+# (Recommended value for OverlayFS configuration: "WARN" or "ERROR")
+log_level = "INFO"
 
 [serial]
 # Dual charge point mode:

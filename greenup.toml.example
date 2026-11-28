@@ -42,12 +42,21 @@ sessions_dir = "sessions"
 # Maximum number of saved charging sessions to keep on disk.
 # - > 0 : Keep at most N sessions (Default: 365). Oldest sessions are automatically
 #         deleted at startup and every 24 hours when this limit is exceeded.
+# - 0   : Disable session file recording completely (no CSV/TXT files written; live RAM metrics still active).
 # - -1  : Keep all sessions indefinitely (never delete automatically).
+# (Recommended value for OverlayFS configuration: 0)
 max_sessions = 365
+
+# Daily log file retention in days:
+# - > 0 : Keep daily log files for N days (Default: 7).
+# - 0   : Disable writing log files to disk (in-memory Web console buffer & stdout only; ideal for overlayfs).
+# (Recommended value for OverlayFS configuration: 0)
+log_retention_days = 7
 
 # Logging verbosity level:
 # Options: "ERROR", "WARN", "INFO", "DEBUG", "TRACE"
 # Default: "INFO"
+# (Recommended value for OverlayFS configuration: "WARN" or "ERROR")
 log_level = "INFO"
 
 # Maximum number of recent log lines kept in RAM and displayed in the Web debug console.

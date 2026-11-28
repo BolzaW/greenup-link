@@ -3,6 +3,7 @@ use chrono::{DateTime, Local};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -57,6 +58,18 @@ pub fn format_duration(seconds: u64) -> String {
 }
 
 static CUSTOM_SESSIONS_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+static SESSION_FILES_ENABLED: AtomicBool = AtomicBool::new(true);
+
+/// Enables or disables writing session CSV/TXT files to disk (`false` when `max_sessions == 0`).
+/// Live in-memory session tracking remains active for Web UI and MQTT telemetry.
+pub fn set_session_files_enabled(enabled: bool) {
+    SESSION_FILES_ENABLED.store(enabled, Ordering::Relaxed);
+}
+
+/// Returns true if session file recording to disk is enabled.
+pub fn are_session_files_enabled() -> bool {
+    SESSION_FILES_ENABLED.load(Ordering::Relaxed)
+}
 
 /// Overrides the sessions directory (primarily for testing or custom configuration).
 pub fn set_custom_sessions_dir(dir: Option<PathBuf>) {
@@ -246,10 +259,7 @@ pub fn start_session_for_side(side: u8, initial_state: &str, tel: &Telemetry) {
     }
 
     let sessions_dir = get_sessions_dir();
-    if let Err(e) = fs::create_dir_all(&sessions_dir) {
-        logger::error("SESSION", &format!("Failed to create sessions directory {:?}: {}", sessions_dir, e));
-        return;
-    }
+    let files_enabled = are_session_files_enabled();
 
     let now_local = Local::now();
     let now_instant = Instant::now();
@@ -257,25 +267,45 @@ pub fn start_session_for_side(side: u8, initial_state: &str, tel: &Telemetry) {
     let csv_path = sessions_dir.join(format!("{}.csv", session_id));
     let txt_path = sessions_dir.join(format!("{}.txt", session_id));
 
-    let mut writer = match OpenOptions::new().create(true).write(true).truncate(true).open(&csv_path) {
-        Ok(file) => Some(file),
-        Err(e) => {
-            logger::error("SESSION", &format!("Failed to create CSV file {:?}: {}", csv_path, e));
-            None
+    let writer = if files_enabled {
+        if let Err(e) = fs::create_dir_all(&sessions_dir) {
+            logger::error("SESSION", &format!("Failed to create sessions directory {:?}: {}", sessions_dir, e));
+            return;
         }
+
+        let mut file_writer = match OpenOptions::new().create(true).write(true).truncate(true).open(&csv_path) {
+            Ok(file) => Some(file),
+            Err(e) => {
+                logger::error("SESSION", &format!("Failed to create CSV file {:?}: {}", csv_path, e));
+                None
+            }
+        };
+
+        // Write standard CSV header (strictly numerical and time data, no metadata header)
+        if let Some(ref mut f) = file_writer {
+            let header = "timestamp,elapsed_s,state,current_a,limit_a,voltage_v,power_w,energy_kwh\n";
+            let _ = f.write_all(header.as_bytes());
+            let _ = f.flush();
+        }
+        file_writer
+    } else {
+        None
     };
 
-    // Write standard CSV header (strictly numerical and time data, no metadata header)
-    if let Some(ref mut f) = writer {
-        let header = "timestamp,elapsed_s,state,current_a,limit_a,voltage_v,power_w,energy_kwh\n";
-        let _ = f.write_all(header.as_bytes());
-        let _ = f.flush();
+    if files_enabled {
+        logger::info(
+            "SESSION",
+            &format!("Started charging session {} on Side {} (initial state: {})", session_id, side, initial_state),
+        );
+    } else {
+        logger::info(
+            "SESSION",
+            &format!(
+                "Started in-memory charging session {} on Side {} (initial state: {}, file recording disabled)",
+                session_id, side, initial_state
+            ),
+        );
     }
-
-    logger::info(
-        "SESSION",
-        &format!("Started charging session {} on Side {} (initial state: {})", session_id, side, initial_state),
-    );
 
     let initial_plug_type = if is_domestic_state(initial_state) {
         "Schuko"
@@ -526,6 +556,19 @@ pub fn end_session_for_side(side: u8, reason: &str, tel: &Telemetry) {
     let active_duration_secs = session.active_charging_duration_secs_f64.round() as u64;
     let total_duration_secs = now_instant.duration_since(session.start_instant).as_secs();
 
+    if !are_session_files_enabled() {
+        logger::info(
+            "SESSION",
+            &format!(
+                "Ended in-memory charging session {} ({:.3} kWh, {}) — file recording disabled",
+                session.session_id,
+                final_energy_kwh,
+                format_duration(total_duration_secs)
+            ),
+        );
+        return;
+    }
+
     // Check discard threshold (< 0.02 kWh and < 15s active charge)
     let is_negligible = final_energy_kwh < 0.02 && active_duration_secs < 15;
 
@@ -738,6 +781,8 @@ pub struct ActiveSessionSummary {
     pub phase: String,
     #[serde(default = "default_plug_type")]
     pub plug_type: String,
+    #[serde(default)]
+    pub has_csv: bool,
 }
 
 fn extract_seconds_in_parens(s: &str) -> u64 {
@@ -929,6 +974,9 @@ fn format_csv_timestamp_for_summary(raw_ts: &str, session_id: &str, fallback_off
 ///
 /// Returns the number of orphan sessions successfully recovered.
 pub fn reconcile_orphan_sessions() -> usize {
+    if !are_session_files_enabled() {
+        return 0;
+    }
     let sessions_dir = get_sessions_dir();
     if !sessions_dir.exists() {
         return 0;
@@ -1247,6 +1295,7 @@ pub fn get_active_session_summary_for_side(side: u8, tel: &Telemetry) -> Option<
                 }
             },
             plug_type: if s.plug_type.is_empty() { "Type 2".to_string() } else { s.plug_type.clone() },
+            has_csv: s.csv_writer.is_some(),
         }
     })
 }
