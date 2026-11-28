@@ -9,17 +9,14 @@ This document provides an exhaustive compatibility reference for the Legrand Gre
 | Level | Description |
 | :--- | :--- |
 | 🟢 **Full remote control** | Fully supported, tested, and validated on real hardware (Single-phase, 1x Type 2 socket, no domestic socket). |
-| 🟡 **Partial remote control** | Partial support. The Type 2 socket is controllable, but domestic Schuko sockets are unmanaged (physical contactor only, no software power metering or current modulation). |
-| 🧪 **Theoretical support (Untested)** | Architecture implemented in software based on reverse engineering of Legrand's official Java sources, but **not physically tested on real hardware** (dual-point charging stations). The author does not own this equipment. Real-world tester feedback is warmly welcome! |
-| 🔴 **None** | Not supported (Three-phase models). While in theory the ATmega might respond to common serial commands, three-phase power regulation, phase allocation, and safety parameters are completely unverified. |
+| 🟠 **Experimental** | Implemented in software based on reverse engineering of Legrand's official firmware and Java sources, but **not yet physically tested on real hardware** (models with domestic Schuko socket, three-phase 11–22 kW models, and dual-point charging stations). Real-world tester feedback is warmly welcome! |
 
 > [!WARNING]
-> **Real-World Validation vs Theoretical Support:**
-> - **Physically tested & fully validated:** Model **0 580 01** (Single-point, single-phase, 7.4 kW without domestic socket — author's hardware).
-> - **Theoretical implementation (Untested on real hardware):** Dual-point charging stations (2x Type 2) have been fully coded in software according to the decompiled Legrand Java sources and internal dual-USB architecture. However, **the author does not possess a dual-point wallbox and cannot physically test them**. This feature is therefore considered **theoretical and experimental until verified by a community tester**.
-> - **Unverified / Unsupported:** Three-phase stations (11–22 kW) and domestic Schuko contactors.
+> **Real-World Validation vs Experimental Support:**
+> - **Physically tested & fully validated:** Model **0 580 01** (Single-point, single-phase, 7.4 kW without domestic socket — author's hardware). Single-phase Type 2-only models share this validated architecture.
+> - **Experimental (Implemented in software, untested on real hardware):** Green'Up Link implements software support for **domestic Schuko sockets** (`2PCOK`/`2PCNOK`, `2PFOK`/`2PFNOK`, `DOM?`), **three-phase** power/current regulation (11–22 kW), and **dual-point** charging stations (2x Type 2 via dual serial workers and dynamic `Side?` discovery). However, **the author does not possess these hardware variants and cannot physically test them**. They are therefore marked as **Experimental** until verified by community testers.
 > 
-> If you own a dual-point station or an untested model, we would love your help to test and share serial logs! Please see the [Call for Testers](../README.md#call-for-testers--contributions) section.
+> If you own a domestic-socket, three-phase, dual-point, or otherwise untested model, we would love your help to test and share serial logs! Please see the [Call for Testers](../README.md#call-for-testers--contributions) section.
 
 ---
 
@@ -43,11 +40,11 @@ This document provides an exhaustive compatibility reference for the Legrand Gre
 | :--- | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :--- | :--- |
 | Green’up Premium 3.7–4.6 kW T2 | **0 580 00** | 3.7 kW | 4.6 kW | Single-phase | 1 | 0 | ✅ Yes | 🟢 **Full remote control** | Single T2 socket |
 | Green’up Premium 3.7–7.4 kW T2 | **0 580 01** | 3.7 kW | 7.4 kW | Single-phase | 1 | 0 | ✅ Yes | 🟢 **Full remote control** | **Tested & fully validated** (Author's hardware) |
-| Green’up Premium 11–22 kW T2 | **0 580 02** | 11 kW | 22 kW | Three-phase | 1 | 0 | ✅ Yes | 🔴 **None** | Three-phase (untested, uncertain behavior) |
-| Green’up Premium 3.7–4.6 kW T2 + schuko | **0 580 03** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ✅ Yes | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed |
-| Green’up Premium 3.7–7.4 kW T2 + schuko | **0 580 04** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ✅ Yes | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed |
-| Green’up Premium 3.7–4.6 kW T2 + schuko (Intl) | **0 580 30** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
-| Green’up Premium 3.7–7.4 kW T2 + schuko (Intl) | **0 580 35** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
+| Green’up Premium 11–22 kW T2 | **0 580 02** | 11 kW | 22 kW | Three-phase | 1 | 0 | ✅ Yes | 🟠 **Experimental** | Three-phase implemented (untested on real hardware) |
+| Green’up Premium 3.7–4.6 kW T2 + schuko | **0 580 03** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ✅ Yes | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware) |
+| Green’up Premium 3.7–7.4 kW T2 + schuko | **0 580 04** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ✅ Yes | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware) |
+| Green’up Premium 3.7–4.6 kW T2 + schuko (Intl) | **0 580 30** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium 3.7–7.4 kW T2 + schuko (Intl) | **0 580 35** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
 
 ### 2. Plastic Wallbox Range — Single Charge Point (Factory Bundled with IP Kit)
 
@@ -55,35 +52,35 @@ This document provides an exhaustive compatibility reference for the Legrand Gre
 | :--- | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :--- | :--- |
 | Green’up Premium 3.7–4.6 kW T2 with kit | **0 590 00** | 3.7 kW | 4.6 kW | Single-phase | 1 | 0 | ❌ No | 🟢 **Full remote control** | Factory bundled with KitCom 0 590 56; No TIC |
 | Green’up Premium 3.7–7.4 kW T2 with kit | **0 590 01** | 3.7 kW | 7.4 kW | Single-phase | 1 | 0 | ❌ No | 🟢 **Full remote control** | Factory bundled with KitCom 0 590 56; No TIC |
-| Green’up Premium 11–22 kW T2 with kit | **0 590 02** | 11 kW | 22 kW | Three-phase | 1 | 0 | ❌ No | 🔴 **None** | Three-phase (untested, uncertain behavior); No TIC |
-| Green’up Premium 3.7–4.6 kW T2 + schuko with kit | **0 590 03** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
-| Green’up Premium 3.7–7.4 kW T2 + schuko with kit | **0 590 04** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
+| Green’up Premium 11–22 kW T2 with kit | **0 590 02** | 11 kW | 22 kW | Three-phase | 1 | 0 | ❌ No | 🟠 **Experimental** | Three-phase implemented (untested on real hardware); No TIC |
+| Green’up Premium 3.7–4.6 kW T2 + schuko with kit | **0 590 03** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium 3.7–7.4 kW T2 + schuko with kit | **0 590 04** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
 | Green’up Premium 3.7–4.6 kW T2 with kit | **0 590 05** | 3.7 kW | 4.6 kW | Single-phase | 1 | 0 | ✅ Yes | 🟢 **Full remote control** | Single T2 socket |
 | Green’up Premium 3.7–7.4 kW T2 with kit | **0 590 06** | 3.7 kW | 7.4 kW | Single-phase | 1 | 0 | ✅ Yes | 🟢 **Full remote control** | Same as 0 580 01 + 0 590 56 |
-| Green’up Premium 11–22 kW T2 with kit | **0 590 07** | 11 kW | 22 kW | Three-phase | 1 | 0 | ✅ Yes | 🔴 **None** | Three-phase (untested, uncertain behavior) |
-| Green’up Premium 3.7–4.6 kW T2 + schuko with kit | **0 590 08** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ✅ Yes | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed |
-| Green’up Premium 3.7–7.4 kW T2 + schuko with kit | **0 590 09** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ✅ Yes | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed |
-| Green’up Premium 3.7–4.6 kW T2 + schuko with kit (Intl) | **0 590 30** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
-| Green’up Premium 3.7–7.4 kW T2 + schuko with kit (Intl) | **0 590 35** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
-| Green’up Premium 3.7–4.6 kW T2 + schuko (Without Breaker) | **0 590 70** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
-| Green’up Premium 3.7–7.4 kW T2 + schuko (Without Breaker) | **0 590 71** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
+| Green’up Premium 11–22 kW T2 with kit | **0 590 07** | 11 kW | 22 kW | Three-phase | 1 | 0 | ✅ Yes | 🟠 **Experimental** | Three-phase implemented (untested on real hardware) |
+| Green’up Premium 3.7–4.6 kW T2 + schuko with kit | **0 590 08** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ✅ Yes | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware) |
+| Green’up Premium 3.7–7.4 kW T2 + schuko with kit | **0 590 09** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ✅ Yes | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware) |
+| Green’up Premium 3.7–4.6 kW T2 + schuko with kit (Intl) | **0 590 30** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium 3.7–7.4 kW T2 + schuko with kit (Intl) | **0 590 35** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium 3.7–4.6 kW T2 + schuko (Without Breaker) | **0 590 70** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium 3.7–7.4 kW T2 + schuko (Without Breaker) | **0 590 71** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
 
 ### 3. Metal Pro Wallbox Range — Single Charge Point (1 Point)
 
 | Model Name | Legrand Reference | Min Power | Max Power | Electrical Grid | T2 Socket | Schuko Socket | TIC (Linky) | Green'Up Link Compatibility | Details / Limitations |
 | :--- | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :--- | :--- |
-| Green’up Premium metal 3.7–4.6 kW 1 pt T2 + schuko | **0 580 10** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ✅ Yes | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed |
-| Green’up Premium metal 3.7–7.4 kW 1 pt T2 + schuko | **0 580 12** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ✅ Yes | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed |
-| Green’up Premium metal 11–22 kW 1 pt T2 + schuko | **0 580 14** | 11 kW | 22 kW | Three-phase | 1 | 1 | ✅ Yes | 🔴 **None** | Three-phase (untested, uncertain behavior) |
-| Green’up Premium metal 3.7–4.6 kW 1 pt T2 + schuko EV | **0 580 41** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
-| Green’up Premium metal 3.7–7.4 kW 1 pt T2 + schuko EV | **0 580 43** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
-| Green’up Premium metal 11–22 kW 1 pt T2 + schuko EV | **0 580 48** | 11 kW | 22 kW | Three-phase | 1 | 1 | ❌ No | 🔴 **None** | Three-phase (untested, uncertain behavior); No TIC |
-| Green’up Premium metal 3.7–4.6 kW 1 pt T2 + schuko with kit | **0 590 10** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
-| Green’up Premium metal 3.7–7.4 kW 1 pt T2 + schuko with kit | **0 590 12** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
-| Green’up Premium metal 11–22 kW 1 pt T2 + schuko with kit | **0 590 14** | 11 kW | 22 kW | Three-phase | 1 | 1 | ❌ No | 🔴 **None** | Three-phase (untested, uncertain behavior); No TIC |
-| Green’up Premium metal 3.7–4.6 kW 1 pt T2 + schuko EV with kit | **0 590 41** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
-| Green’up Premium metal 3.7–7.4 kW 1 pt T2 + schuko EV with kit | **0 590 43** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟡 **Partial remote control** | Type 2 controllable; Schuko not managed; No TIC |
-| Green’up Premium metal 11–22 kW 1 pt T2 + schuko EV with kit | **0 590 48** | 11 kW | 22 kW | Three-phase | 1 | 1 | ❌ No | 🔴 **None** | Three-phase (untested, uncertain behavior); No TIC |
+| Green’up Premium metal 3.7–4.6 kW 1 pt T2 + schuko | **0 580 10** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ✅ Yes | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware) |
+| Green’up Premium metal 3.7–7.4 kW 1 pt T2 + schuko | **0 580 12** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ✅ Yes | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware) |
+| Green’up Premium metal 11–22 kW 1 pt T2 + schuko | **0 580 14** | 11 kW | 22 kW | Three-phase | 1 | 1 | ✅ Yes | 🟠 **Experimental** | Three-phase & Schuko implemented (untested on real hardware) |
+| Green’up Premium metal 3.7–4.6 kW 1 pt T2 + schuko EV | **0 580 41** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–7.4 kW 1 pt T2 + schuko EV | **0 580 43** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium metal 11–22 kW 1 pt T2 + schuko EV | **0 580 48** | 11 kW | 22 kW | Three-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Three-phase & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–4.6 kW 1 pt T2 + schuko with kit | **0 590 10** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–7.4 kW 1 pt T2 + schuko with kit | **0 590 12** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium metal 11–22 kW 1 pt T2 + schuko with kit | **0 590 14** | 11 kW | 22 kW | Three-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Three-phase & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–4.6 kW 1 pt T2 + schuko EV with kit | **0 590 41** | 3.7 kW | 4.6 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–7.4 kW 1 pt T2 + schuko EV with kit | **0 590 43** | 3.7 kW | 7.4 kW | Single-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Type 2 & Schuko implemented (untested on real hardware); No TIC |
+| Green’up Premium metal 11–22 kW 1 pt T2 + schuko EV with kit | **0 590 48** | 11 kW | 22 kW | Three-phase | 1 | 1 | ❌ No | 🟠 **Experimental** | Three-phase & Schuko implemented (untested on real hardware); No TIC |
 
 ### 4. Metal Pro Wallbox Range — Dual Charge Points (2 Points, Dual ATmega)
 
@@ -97,18 +94,18 @@ This document provides an exhaustive compatibility reference for the Legrand Gre
 
 | Model Name | Legrand Reference | Min Power | Max Power | Electrical Grid | T2 Sockets | Schuko Sockets | TIC (Linky) | Green'Up Link Compatibility | Details / Limitations |
 | :--- | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :--- | :--- |
-| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko | **0 580 11** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | ❌ No | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed; No TIC |
-| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko EV | **0 580 42** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | ❌ No | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed; No TIC |
-| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko with kit | **0 590 11** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | ❌ No | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed; No TIC |
-| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko EV with kit | **0 590 42** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | ❌ No | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed; No TIC |
-| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko | **0 580 13** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | ❌ No | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed; No TIC |
-| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko EV | **0 580 44** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | ❌ No | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed; No TIC |
-| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko with kit | **0 590 13** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | ❌ No | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed; No TIC |
-| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko EV with kit | **0 590 44** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | ❌ No | 🧪 **Theoretical (Untested)** | Dual-serial workers implemented from Legrand specs; unverified on real hardware; Schukos not managed; No TIC |
-| Green’up Premium metal 11–22 kW 2 pts T2 + schuko | **0 580 15** | 11 kW | 22 kW | Three-phase | 2 | 2 | ❌ No | 🔴 **None** | Three-phase (untested, uncertain behavior); No TIC |
-| Green’up Premium metal 11–22 kW 2 pts T2 + schuko EV | **0 580 49** | 11 kW | 22 kW | Three-phase | 2 | 2 | ❌ No | 🔴 **None** | Three-phase (untested, uncertain behavior); No TIC |
-| Green’up Premium metal 11–22 kW 2 pts T2 + schuko with kit | **0 590 15** | 11 kW | 22 kW | Three-phase | 2 | 2 | ❌ No | 🔴 **None** | Three-phase (untested, uncertain behavior); No TIC |
-| Green’up Premium metal 11–22 kW 2 pts T2 + schuko EV with kit | **0 590 49** | 11 kW | 22 kW | Three-phase | 2 | 2 | ❌ No | 🔴 **None** | Three-phase (untested, uncertain behavior); No TIC |
+| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko | **0 580 11** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers & Schukos implemented from Legrand specs (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko EV | **0 580 42** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers & Schukos implemented from Legrand specs (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko with kit | **0 590 11** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers & Schukos implemented from Legrand specs (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–4.6 kW 2 pts T2 + schuko EV with kit | **0 590 42** | 3.7 kW | 4.6 kW | Single-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers & Schukos implemented from Legrand specs (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko | **0 580 13** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers & Schukos implemented from Legrand specs (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko EV | **0 580 44** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers & Schukos implemented from Legrand specs (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko with kit | **0 590 13** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers & Schukos implemented from Legrand specs (untested on real hardware); No TIC |
+| Green’up Premium metal 3.7–7.4 kW 2 pts T2 + schuko EV with kit | **0 590 44** | 3.7 kW | 7.4 kW | Single-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers & Schukos implemented from Legrand specs (untested on real hardware); No TIC |
+| Green’up Premium metal 11–22 kW 2 pts T2 + schuko | **0 580 15** | 11 kW | 22 kW | Three-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers, three-phase & Schukos implemented (untested on real hardware); No TIC |
+| Green’up Premium metal 11–22 kW 2 pts T2 + schuko EV | **0 580 49** | 11 kW | 22 kW | Three-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers, three-phase & Schukos implemented (untested on real hardware); No TIC |
+| Green’up Premium metal 11–22 kW 2 pts T2 + schuko with kit | **0 590 15** | 11 kW | 22 kW | Three-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers, three-phase & Schukos implemented (untested on real hardware); No TIC |
+| Green’up Premium metal 11–22 kW 2 pts T2 + schuko EV with kit | **0 590 49** | 11 kW | 22 kW | Three-phase | 2 | 2 | ❌ No | 🟠 **Experimental** | Dual-serial workers, three-phase & Schukos implemented (untested on real hardware); No TIC |
 
 ---
 
